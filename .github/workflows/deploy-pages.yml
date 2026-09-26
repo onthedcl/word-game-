@@ -27,6 +27,8 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Leaderboard server (Netlify). The game hides leaderboard features if it isn't answering.
+          VITE_API_BASE: https://dpiyf-lettertown.netlify.app
       - name: Publish dist/ to gh-pages
         working-directory: dist
         env:

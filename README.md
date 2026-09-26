@@ -46,7 +46,7 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 ## Leaderboards
 
-**Currently switched off.** The game ships without a leaderboard server. To turn it on, deploy this repo to Netlify, which runs the API, and build the game with `VITE_API_BASE=https://<your-site>.netlify.app`. The trophy button, name prompt and rank badge appear only when that server answers.
+The GitHub Pages build points at `https://dpiyf-lettertown.netlify.app` (`VITE_API_BASE` in the deploy workflow). The Netlify project builds the API from this repo. The trophy button, name prompt and rank badge appear only when that server answers, so the game works either way.
 
 New players get a welcome screen that asks for a leaderboard name (they can skip it and add one later from the trophy). The trophy shows **Today's puzzle** and **Blitz best** rankings.
 
