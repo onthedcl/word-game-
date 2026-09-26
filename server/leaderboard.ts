@@ -202,8 +202,25 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
 
 // ---- presence -----------------------------------------------------------------
 
+/** Approximate location of a request, as worked out by the hosting platform (never the IP). */
+export interface Place {
+  city?: string;
+  region?: string;
+  country?: string;
+}
+
+/** "🇺🇸 Brooklyn, NY", or null when nothing is known. */
+export function describePlace(place: Place | null | undefined): string | null {
+  if (!place) return null;
+  const country = place.country && /^[A-Z]{2}$/.test(place.country) ? place.country : undefined;
+  const flag = country ? String.fromCodePoint(...[...country].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : '';
+  const parts = [place.city, place.region && place.region !== place.city ? place.region : undefined].filter(Boolean);
+  const text = parts.length ? parts.join(', ') : country ?? '';
+  return text ? `${flag} ${text}`.trim() : null;
+}
+
 /** Called when someone opens the game. Notifies the owner once per player per day. */
-export async function hello(deps: Deps, body: Record<string, unknown>) {
+export async function hello(deps: Deps, body: Record<string, unknown>, place?: Place | null) {
   const playerId = playerIdOf(body.playerId);
   const mode = body.mode === 'blitz' ? 'Blitz' : 'the daily puzzle';
   const day = new Date(deps.now()).toISOString().slice(0, 10);
@@ -215,9 +232,10 @@ export async function hello(deps: Deps, body: Record<string, unknown>) {
   if (!everSeen) await deps.kv.setJSON(`first-seen/${playerId}`, { at: deps.now() });
   const today = (await deps.kv.list({ prefix: `seen/${day}/` })).blobs.length;
   const who = player?.name ?? (everSeen ? 'A returning player (no name)' : 'A new player');
+  const where = describePlace(place);
   deps.notify?.({
     title: 'Someone is playing',
-    message: `${who} opened ${mode} · ${today} ${today === 1 ? 'player' : 'players'} today`,
+    message: `${who} opened ${mode}${where ? ` from ${where}` : ''} · ${today} ${today === 1 ? 'player' : 'players'} today`,
     tags: ['wave'],
   });
   return { ok: true };

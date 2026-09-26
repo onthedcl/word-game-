@@ -94,3 +94,8 @@ jobs:
           curl -fsS "$SCORES/daily/$today.json" | grep -q maxScore
           curl -fsS "$SCORES/blitz-pool.json" | grep -q pool-
           echo "Leaderboard OK: $(cat daily.json)"
+      - name: Send a test notification (manual runs only)
+        if: github.event_name == 'workflow_dispatch' && env.NTFY_TOPIC != ''
+        run: |
+          curl -fsS -H "Title: DPIYF Lettertown" -H "Tags: white_check_mark" \
+            -d "Notifications are on. You'll get a ping when people play." "https://ntfy.sh/$NTFY_TOPIC" > /dev/null

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { dict, seeds } from '../src/engine/node-dict';
 import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
-import { ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, describePlace, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -146,13 +146,13 @@ describe('notifications', () => {
     await hello(deps, { playerId: P1, mode: 'daily' });
     await hello(deps, { playerId: P1, mode: 'daily' });
     await saveName(deps, { playerId: P2, name: 'Bo' });
-    await hello(deps, { playerId: P2, mode: 'blitz' });
+    await hello(deps, { playerId: P2, mode: 'blitz' }, { city: 'Brooklyn', region: 'NY', country: 'US' });
     clock += 24 * 3600_000;
     await hello(deps, { playerId: P1, mode: 'daily' });
     expect(sent).toEqual([
       'Someone is playing: A new player opened the daily puzzle · 1 player today',
       'New player: Bo joined the leaderboard',
-      'Someone is playing: Bo opened Blitz · 2 players today',
+      'Someone is playing: Bo opened Blitz from 🇺🇸 Brooklyn, NY · 2 players today',
       'Someone is playing: A returning player (no name) opened the daily puzzle · 1 player today',
     ]);
   });
@@ -163,5 +163,15 @@ describe('notifications', () => {
     await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words });
     expect(sent[0]).toMatch(/^Blitz finished: Ann scored \d+ \(3 words\) · personal best, #1 of 1$/);
     expect(sent[1]).toBe(`Every word found!: Bo found all ${words.length} words today (${puzzle.maxScore} pts)`);
+  });
+});
+
+describe('describePlace', () => {
+  it('formats a rough location with a flag', () => {
+    expect(describePlace({ city: 'London', region: 'ENG', country: 'GB' })).toBe('🇬🇧 London, ENG');
+    expect(describePlace({ country: 'CA' })).toBe('🇨🇦 CA');
+    expect(describePlace({ city: 'Paris' })).toBe('Paris');
+    expect(describePlace({})).toBeNull();
+    expect(describePlace(null)).toBeNull();
   });
 });

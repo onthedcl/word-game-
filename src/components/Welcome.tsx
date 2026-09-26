@@ -21,6 +21,7 @@ export function Welcome({ onSave, onSkip, onRules }: Props) {
         Drag and let go to submit.
       </p>
       <p className="mb-4 text-sm text-muted">What should we call you on the leaderboard?</p>
+      <p className="mb-3 -mt-2 text-xs text-muted">The game's owner is notified when you play, with your leaderboard name and rough location (city).</p>
       <NameForm name="" cta="Play" onSave={onSave} />
       <div className="mt-4 flex justify-between text-sm text-muted">
         <button type="button" className="underline" onClick={onRules}>How to play</button>

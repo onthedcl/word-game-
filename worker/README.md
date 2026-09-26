@@ -26,7 +26,7 @@ The Pages build writes answer tables to `/scores/` on the game site, one per dai
 
 The Worker can ping your phone when people play, through [ntfy](https://ntfy.sh), a free app that needs no account:
 
-- someone opens the game (once per player per day, with today's player count)
+- someone opens the game (once per player per day, with their rough location from Cloudflare, e.g. "🇺🇸 Brooklyn, NY", and today's player count). IP addresses are never sent.
 - a new player picks a name
 - a Blitz round finishes
 - someone finds every word of the daily

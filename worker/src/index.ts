@@ -6,7 +6,7 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps,
+  ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type Place,
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 
@@ -19,6 +19,8 @@ interface Env {
 }
 
 const MISSING_RETRY_MS = 10 * 60 * 1000;
+/** Set by the Worker (never trusted from the client): Cloudflare's rough location for the player. */
+const PLACE_HEADER = 'X-Lettertown-Place';
 
 export class Leaderboard extends DurableObject<Env> {
   private tables = new Map<string, { table: AnswerTable | null; at: number }>();
@@ -88,8 +90,10 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await finishBlitz(deps, body));
         case 'POST /api/name':
           return json(await saveName(deps, body));
-        case 'POST /api/hello':
-          return json(await hello(deps, body));
+        case 'POST /api/hello': {
+          const place = req.headers.get(PLACE_HEADER);
+          return json(await hello(deps, body, place ? (JSON.parse(place) as Place) : null));
+        }
         default:
           return json({ error: 'Not found' }, 404);
       }
@@ -129,7 +133,15 @@ export default {
     if (!url.pathname.startsWith('/api/')) {
       return new Response('DPIYF Lettertown leaderboard is running.', { headers: cors });
     }
-    const res = await env.BOARD.get(env.BOARD.idFromName('global')).fetch(req);
+    // Pass Cloudflare's approximate location (city/region/country, not the IP) to the leaderboard.
+    const forwarded = new Request(req);
+    forwarded.headers.delete(PLACE_HEADER);
+    const cf = req.cf as { city?: string; regionCode?: string; region?: string; country?: string } | undefined;
+    if (cf) {
+      const place: Place = { city: cf.city, region: cf.regionCode ?? cf.region, country: cf.country };
+      forwarded.headers.set(PLACE_HEADER, JSON.stringify(place));
+    }
+    const res = await env.BOARD.get(env.BOARD.idFromName('global')).fetch(forwarded);
     const out = new Response(res.body, res);
     for (const [k, v] of Object.entries(cors)) out.headers.set(k, v);
     return out;

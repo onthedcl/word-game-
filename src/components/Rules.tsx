@@ -31,6 +31,10 @@ export function Rules() {
       <p className="mt-4 text-sm text-muted">
         <b>Daily</b>: a new board at midnight, progress saved. <b>Blitz</b>: a random board, three minutes, go.
       </p>
+      <p className="mt-2 text-xs text-muted">
+        Privacy: when the online leaderboard is on, the game's owner is notified when you play, with your leaderboard
+        name and rough location (city). Your IP address isn't shared.
+      </p>
     </div>
   );
 }
