@@ -1,6 +1,6 @@
-# Schmexicon
+# DPIYF Lettertown
 
-![Schmexicon](public/schmexicon.jpg)
+![DPIYF Lettertown](public/lettertown.jpg)
 
 A daily word puzzle that mixes three classics:
 
@@ -41,7 +41,7 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 - Rejections shake the board and give a reason: *Too short*, *Tiles not adjacent*, *Missing center*, *Not on board*, *Already found*, *Not a word*.
 - **Hints** shows a Bee-style grid of how many words are left, by first letter and length.
 - **Daily** is untimed and progress is saved in `localStorage` for each date. **Blitz** gives you a random board and 3 minutes, then shows every word you missed, and keeps your best score.
-- **Share** copies a spoiler-free result such as `Schmexicon 9/25 | Genius | 412 pts | 1 pangram` with a hex row (`⬢⬢⬢⬢⬢⬢⬡`) for the rank ladder.
+- **Share** copies a spoiler-free result such as `DPIYF Lettertown 9/25 | Genius | 412 pts | 1 pangram` with a hex row (`⬢⬢⬢⬢⬢⬢⬡`) for the rank ladder.
 - Supported phones buzz lightly when you add a tile, find a word or make a mistake.
 
 ## How boards are made

@@ -86,7 +86,7 @@ describe('hints', () => {
 describe('share', () => {
   it('formats the daily result without spoilers', () => {
     const text = shareText(puzzle, { rankName: 'Genius', rankIndex: 5, score: 412, words: 30, pangrams: 1 });
-    expect(text).toBe('Schmexicon 9/25 | Genius | 412 pts | 1 pangram\n⬢⬢⬢⬢⬢⬢⬡');
+    expect(text).toBe('DPIYF Lettertown 9/25 | Genius | 412 pts | 1 pangram\n⬢⬢⬢⬢⬢⬢⬡');
     expect(hexRow(0)).toBe('⬢⬡⬡⬡⬡⬡⬡');
   });
 });

@@ -159,7 +159,7 @@ export default function App() {
   return (
     <div className="mx-auto max-w-5xl px-4 pb-8">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line py-3">
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-end gap-3">
           <Wordmark />
           {mode === 'daily' && daily?.puzzle && <span className="text-sm text-muted">#{daily.puzzle.number}</span>}
         </div>
@@ -187,7 +187,7 @@ export default function App() {
           onClick={reload}
           className="mt-3 w-full rounded-lg bg-key px-3 py-2 text-sm font-semibold text-key-ink"
         >
-          A new version of Schmexicon is ready. Tap to update.
+          A new version of DPIYF Lettertown is ready. Tap to update.
         </button>
       )}
 
@@ -243,7 +243,7 @@ export default function App() {
 
       <Modal open={dialog === 'yesterday'} title="Yesterday's answers" onClose={closeDialog}>
         {yesterdayKey < EPOCH ? (
-          <p className="text-muted">Schmexicon #1 is today. Check back tomorrow.</p>
+          <p className="text-muted">DPIYF Lettertown #1 is today. Check back tomorrow.</p>
         ) : yesterday?.puzzle ? (
           <>
             <p className="mb-3 text-sm text-muted">

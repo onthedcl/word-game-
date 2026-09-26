@@ -4,8 +4,8 @@ export function Rules() {
   return (
     <div>
       <img
-        src={`${import.meta.env.BASE_URL}schmexicon.jpg`}
-        alt="Schmexicon: letter tiles spelling SCHMEXICON on a wooden game board"
+        src={`${import.meta.env.BASE_URL}lettertown.jpg`}
+        alt="DPIYF Lettertown: letter tiles spelling DPIYF TOWNE on a wooden game board"
         width={1408}
         height={768}
         className="mb-4 aspect-[1408/768] w-full rounded-xl object-cover"

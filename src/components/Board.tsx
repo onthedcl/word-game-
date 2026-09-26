@@ -62,7 +62,7 @@ export function Board({ board, path, flashPath, shakeKey, disabled, onPress, onD
       key={shakeKey}
       viewBox="-220 -200 440 400"
       role="grid"
-      aria-label="Schmexicon board"
+      aria-label="DPIYF Lettertown board"
       className={`w-full max-w-[440px] touch-none select-none overflow-visible ${shakeKey ? 'animate-shake' : ''} ${disabled ? 'opacity-50' : ''}`}
       onPointerDown={(e) => {
         if (disabled) return;

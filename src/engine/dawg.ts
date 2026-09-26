@@ -17,7 +17,7 @@ const code = (ch: string) => ch.charCodeAt(0) - 97;
 export function parseDawg(text: string): Dawg {
   const lines = text.split('\n');
   const [magic, nodes, words] = lines[0].split(' ');
-  if (magic !== 'HEXDAWG1') throw new Error('Not a Schmexicon dictionary');
+  if (magic !== 'HEXDAWG1') throw new Error('Not a Lettertown dictionary');
   const nodeCount = Number(nodes);
   const children = new Int32Array(nodeCount * 26).fill(-1);
   const terminal = new Uint8Array(nodeCount);

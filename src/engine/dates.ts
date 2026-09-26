@@ -1,6 +1,6 @@
 // Daily puzzle calendar. Puzzles are keyed by the player's local date (YYYY-MM-DD).
 
-export const EPOCH = '2026-09-25'; // Schmexicon #1
+export const EPOCH = '2026-09-25'; // DPIYF Lettertown #1
 
 export function dateKeyFor(date: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0');
