@@ -4,26 +4,30 @@ import { RankBar } from './RankBar';
 import { FoundWords } from './FoundWords';
 import { areAdjacent } from '../engine/hexgrid';
 import { findPaths } from '../engine/solver';
-import { answerIndex, checkWord, progress } from '../engine/game';
+import { answerIndex, checkWord, progress, wordScore, type Routes } from '../engine/game';
+import { TOP_RANK } from '../engine/scoring';
 import type { Puzzle } from '../engine/generator';
 import { haptics } from '../haptics';
 
 interface Props {
   puzzle: Puzzle;
   found: readonly string[];
-  onFound(word: string): void;
+  /** Route each found word was traced along (it scores along that route). */
+  routes: Routes;
+  onFound(word: string, route: number[]): void;
   disabled?: boolean;
   /** Keyboard input is ignored while a dialog is open. */
   keyboard: boolean;
   statusExtra?: React.ReactNode;
+  statusNote?: React.ReactNode;
 }
 
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
-export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusExtra }: Props) {
+export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
-  const { score, rank } = progress(puzzle, answers, found);
+  const { score, rank } = progress(puzzle, answers, found, routes);
 
   // Input: either a traced path or typed letters (with a route highlighted for them).
   const [path, setPathState] = useState<number[]>([]);
@@ -99,21 +103,22 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     // Every submission starts the next word fresh, right or wrong.
     clear();
     if (!result.ok) return reject(result.reason, attempted);
-    const { answer } = result;
+    const { answer, route, score: points } = result;
     const before = rank.index;
-    onFound(answer.word);
+    onFound(answer.word, route);
     setFlashPath(null);
-    setPulse({ id: Date.now(), ids: traced ? attempted : answer.path, kind: 'good' });
+    setPulse({ id: Date.now(), ids: route, kind: 'good' });
     setFresh(answer.word);
-    const after = progress(puzzle, answers, [...found, answer.word]);
+    const after = progress(puzzle, answers, [...found, answer.word], { ...routes, [answer.word]: route });
     if (after.complete && puzzle.kind === 'daily') {
-      setBanner({ id: Date.now(), text: 'Hexmaster!', sub: 'Every word found' });
+      setBanner({ id: Date.now(), text: 'Every word found!', sub: after.rank.name === TOP_RANK ? TOP_RANK : `+${points}` });
       haptics.pangram();
     } else if (answer.pangram) {
-      setBanner({ id: Date.now(), text: 'Pangram!', sub: `+${answer.score}` });
+      setBanner({ id: Date.now(), text: 'Pangram!', sub: `+${points}` });
       haptics.pangram();
     } else {
-      say(after.rank.index > before ? `${after.rank.name}! +${answer.score}` : `+${answer.score}`, 'good');
+      const bestNote = points < answer.score ? ` (best spot: ${answer.score})` : '';
+      say(after.rank.index > before ? `${after.rank.name}! +${points}` : `+${points}${bestNote}`, 'good');
       haptics.success();
     }
   }
@@ -190,10 +195,18 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     // Phones: a column that fills the screen, with the board taking whatever height is left.
     <div className="flex min-h-0 flex-1 flex-col gap-2 lg:grid lg:flex-none lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3">
       <div className="lg:col-start-1">
-        <RankBar score={score} maxScore={puzzle.maxScore} rank={rank} extra={statusExtra} />
+        <RankBar score={score} maxScore={puzzle.maxScore} rank={rank} extra={statusExtra} note={statusNote} />
       </div>
       <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-        <FoundWords found={found} answers={answers} total={puzzle.answers.length} fresh={fresh} onShow={setFlashPath} />
+        <FoundWords
+          found={found}
+          answers={answers}
+          scoreOf={(w) => wordScore(puzzle, answers, w, routes)}
+          routeOf={(w) => [...(routes[w] ?? answers.get(w)!.path)]}
+          total={puzzle.answers.length}
+          fresh={fresh}
+          onShow={setFlashPath}
+        />
       </div>
 
       {/* Phones: the section is a size container, so the board can scale to fit the space left on screen. */}
@@ -254,7 +267,7 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
           <button type="button" className={`${btn} border-ink bg-ink text-bg`} onClick={submit} disabled={disabled}>Enter</button>
         </div>
         <p className="mt-2 hidden max-w-[420px] text-center text-sm text-muted lg:block">
-          Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Every word goes through the <b>key</b>.
+          Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Each tile once per word, and every word must include the gold <b>key</b> tile.
         </p>
        </div>
       </section>

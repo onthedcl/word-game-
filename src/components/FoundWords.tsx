@@ -6,10 +6,12 @@ interface Props {
   answers: Map<string, Answer>;
   total: number;
   fresh: string | null;
+  scoreOf(word: string): number;
+  routeOf(word: string): number[];
   onShow(path: number[]): void;
 }
 
-export function FoundWords({ found, answers, total, fresh, onShow }: Props) {
+export function FoundWords({ found, answers, scoreOf, routeOf, total, fresh, onShow }: Props) {
   const [open, setOpen] = useState(false);
   const [alpha, setAlpha] = useState(false);
   const words = alpha ? [...found].sort() : [...found].reverse();
@@ -23,12 +25,12 @@ export function FoundWords({ found, answers, total, fresh, onShow }: Props) {
           <li key={w} className={`break-inside-avoid border-b border-line ${w === fresh ? 'animate-fresh' : ''}`}>
             <button
               type="button"
-              onClick={() => onShow(a.path)}
-              title="Show best route"
+              onClick={() => onShow(routeOf(w))}
+              title="Show your route"
               className="flex w-full justify-between gap-2 py-1 text-left capitalize"
             >
               <span className={a.pangram ? 'font-extrabold text-accent' : ''}>{w}</span>
-              <span className="text-sm tabular-nums text-muted">{a.score}</span>
+              <span className="text-sm tabular-nums text-muted">{scoreOf(w)}</span>
             </button>
           </li>
         );

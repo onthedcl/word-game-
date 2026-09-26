@@ -17,12 +17,25 @@ import { hintGrid } from './engine/hints';
 import { shareText } from './engine/share';
 import { useUpdateCheck } from './updates';
 import { Wordmark } from './components/Wordmark';
-import type { Puzzle } from './engine/generator';
+import { DIFFICULTY_NAMES, type Puzzle } from './engine/generator';
 
 const BLITZ_SECONDS = 180;
+const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
 type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
-type Posted = { status: 'pending' } | { status: 'done'; text: string } | { status: 'error'; text: string };
+/** Saved progress on a board: words found, and the route each was traced along. */
+interface Progress {
+  found: string[];
+  routes?: Record<string, number[]>;
+}
+
+/** What the leaderboard server scores: each word with its traced route (when known). */
+const submission = (p: Progress) => p.found.map((w) => (p.routes?.[w] ? { w, p: p.routes[w] } : w));
+
+type Posted =
+  | { status: 'pending' }
+  | { status: 'done'; text: string; standing: { position: number; total: number } | null }
+  | { status: 'error'; text: string };
 type Blitz =
   | { phase: 'intro' }
   | { phase: 'loading' }
@@ -30,6 +43,7 @@ type Blitz =
       phase: 'playing' | 'over';
       puzzle: Puzzle;
       found: string[];
+      routes: Record<string, number[]>;
       endsAt: number;
       /** Server-issued game id when the round counts for the leaderboard. */
       rankedGame: string | null;
@@ -113,7 +127,7 @@ export default function App() {
 
   // ---- daily ----------------------------------------------------------------
   const daily = usePuzzle(dateKey);
-  const [dailyFound, setDailyFound] = useStoredState<{ found: string[] }>(dailyKey(dailyBoardId(dateKey)), { found: [] });
+  const [dailyFound, setDailyFound] = useStoredState<Progress>(dailyKey(dailyBoardId(dateKey)), { found: [] });
   const boardId = dailyBoardId(dateKey);
   const isToday = dateKey === dateKeyFor();
 
@@ -143,7 +157,7 @@ export default function App() {
     const key = `${name}|${found.length}`;
     if (!online || !name || !isToday || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
-      api.submitDaily({ playerId: me, name, date: boardId, words: found }).then(
+      api.submitDaily({ playerId: me, name, date: boardId, words: submission(dailyFound) }).then(
         (b) => {
           posted.current = key;
           noteStanding(b);
@@ -152,7 +166,7 @@ export default function App() {
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [dailyFound.found, online, name, isToday, me, boardId, noteStanding]);
+  }, [dailyFound, online, name, isToday, me, boardId, noteStanding]);
 
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
@@ -177,7 +191,7 @@ export default function App() {
     try {
       const puzzle = await requestPuzzle({ type: 'blitz', seed });
       setNow(Date.now());
-      setBlitz({ phase: 'playing', puzzle, found: [], endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedGame: ranked?.game ?? null });
+      setBlitz({ phase: 'playing', puzzle, found: [], routes: {}, endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedGame: ranked?.game ?? null });
     } catch {
       setBlitz({ phase: 'intro' });
       setNotice('Could not build a board');
@@ -192,7 +206,7 @@ export default function App() {
 
   useEffect(() => {
     if (blitz.phase === 'playing' && now >= blitz.endsAt) {
-      const score = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found).score;
+      const score = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found, blitz.routes).score;
       if (score > best) setBest(score);
       const ranked = blitz.rankedGame && name;
       setBlitz({ ...blitz, phase: 'over', newBest: score > best, posted: ranked ? { status: 'pending' } : undefined });
@@ -200,13 +214,14 @@ export default function App() {
       if (ranked) {
         const update = (p: Posted) =>
           setBlitz((b) => (b.phase === 'over' && b.rankedGame === blitz.rankedGame ? { ...b, posted: p } : b));
-        api.finishBlitz({ playerId: me, name, game: blitz.rankedGame!, words: blitz.found }).then(
+        api.finishBlitz({ playerId: me, name, game: blitz.rankedGame!, words: submission(blitz) }).then(
           (r) =>
             update({
               status: 'done',
               text: r.personalBest
                 ? `Leaderboard: #${r.you?.position} of ${r.total} 🏆`
                 : `Your best Blitz score ranks #${r.you?.position} of ${r.total}`,
+              standing: r.you ? { position: r.you.position, total: r.total } : null,
             }),
           (e: Error) => update({ status: 'error', text: `Couldn't post to the leaderboard: ${e.message}` }),
         );
@@ -226,18 +241,20 @@ export default function App() {
 
   const active =
     mode === 'daily'
-      ? daily?.puzzle && { puzzle: daily.puzzle, found: dailyFound.found }
+      ? daily?.puzzle && { puzzle: daily.puzzle, found: dailyFound.found, routes: dailyFound.routes ?? {} }
       : blitz.phase === 'playing' || blitz.phase === 'over'
-        ? { puzzle: blitz.puzzle, found: blitz.found }
+        ? { puzzle: blitz.puzzle, found: blitz.found, routes: blitz.routes }
         : null;
 
   const activeAnswers = useMemo(() => (active ? answerIndex(active.puzzle) : null), [active?.puzzle]);
 
   async function onShare() {
     if (!active || !activeAnswers) return;
-    const p = progress(active.puzzle, activeAnswers, active.found);
+    const p = progress(active.puzzle, activeAnswers, active.found, active.routes);
+    const blitzStanding = blitz.phase === 'over' && blitz.posted?.status === 'done' ? blitz.posted.standing : null;
     const text = shareText(active.puzzle, {
       rankName: p.rank.name, rankIndex: p.rank.index, score: p.score, words: active.found.length, pangrams: p.pangramsFound,
+      standing: mode === 'daily' ? (isToday ? standing : null) : blitzStanding,
     });
     const msg = await share(text);
     if (msg) setNotice(msg);
@@ -264,6 +281,18 @@ export default function App() {
     </span>
   );
 
+  // Puzzle number and this day's difficulty (beside the title on desktop, in the button row on phones).
+  const puzzleMeta = mode === 'daily' && daily?.puzzle && (
+    <span className="flex items-center gap-1.5 pb-0.5 text-sm text-muted">
+      #{daily.puzzle.number}
+      {daily.puzzle.difficulty !== null && (
+        <span className={`rounded-full px-2 py-px text-xs font-bold text-white ${DIFFICULTY_COLORS[daily.puzzle.difficulty]}`}>
+          {DIFFICULTY_NAMES[daily.puzzle.difficulty]}
+        </span>
+      )}
+    </span>
+  );
+
   const headerBtn = 'rounded-full border border-line py-1 text-sm hover:border-muted disabled:opacity-40';
   const textBtn = `${headerBtn} px-2.5 sm:px-3`;
   const iconBtn = `${headerBtn} flex h-8 min-w-8 items-center justify-center gap-1.5 sm:px-3`;
@@ -274,19 +303,25 @@ export default function App() {
   return (
     // Phones: exactly one screen tall, no page scrolling. Desktop: normal page.
     <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 lg:block lg:h-auto lg:overflow-visible lg:pb-8">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
-        <div className="flex items-end gap-3">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
+        <div className="flex min-w-0 flex-1 items-end gap-2">
           <Wordmark />
-          {mode === 'daily' && daily?.puzzle && <span className="text-sm text-muted">#{daily.puzzle.number}</span>}
+          <span className="hidden lg:flex">{puzzleMeta}</span>
         </div>
-        <nav className="flex flex-wrap items-center gap-1.5">
+        {online && (
+          <button
+            type="button"
+            onClick={() => setDialog('leaderboard')}
+            className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3.5 py-1.5 text-sm font-extrabold text-[#3b2a00] shadow-md ring-2 ring-[#1f5fd6] active:scale-95 lg:order-last"
+          >
+            <TrophyIcon /> Leaderboard
+          </button>
+        )}
+        <nav className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto">
           <div className="flex rounded-full border border-line p-0.5 sm:mr-1" role="tablist" aria-label="Mode">
             <button type="button" role="tab" aria-selected={mode === 'daily'} className={tab('daily')} onClick={() => switchMode('daily')}>Daily</button>
             <button type="button" role="tab" aria-selected={mode === 'blitz'} className={tab('blitz')} onClick={() => switchMode('blitz')}>Blitz</button>
           </div>
-          {online && (
-            <button type="button" className={iconBtn} onClick={() => setDialog('leaderboard')} aria-label="Leaderboard"><TrophyIcon />{label('Leaders')}</button>
-          )}
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
           {mode === 'daily' && (
             <button type="button" className={iconBtn} onClick={() => setDialog('yesterday')} aria-label="Yesterday's answers"><CalendarIcon />{label('Yesterday')}</button>
@@ -316,7 +351,9 @@ export default function App() {
             <PuzzleView
               puzzle={daily.puzzle}
               found={dailyFound.found}
-              onFound={(w) => setDailyFound((s) => ({ found: [...s.found, w] }))}
+              routes={dailyFound.routes ?? {}}
+              statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
+              onFound={(w, r) => setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }))}
               keyboard={dialog === null}
               statusExtra={
                 standing && (
@@ -340,7 +377,10 @@ export default function App() {
             <PuzzleView
               puzzle={blitz.puzzle}
               found={blitz.found}
-              onFound={(w) => setBlitz((b) => (b.phase === 'playing' ? { ...b, found: [...b.found, w] } : b))}
+              routes={blitz.routes}
+              onFound={(w, r) =>
+                setBlitz((b) => (b.phase === 'playing' ? { ...b, found: [...b.found, w], routes: { ...b.routes, [w]: r } } : b))
+              }
               disabled={blitz.phase === 'over'}
               keyboard={dialog === null}
               statusExtra={timer || (
@@ -380,7 +420,7 @@ export default function App() {
           onName={async (n) => {
             await saveName(n);
             if (isToday && dailyFound.found.length) {
-              await api.submitDaily({ playerId: me, name: n, date: boardId, words: dailyFound.found }).catch(() => {});
+              await api.submitDaily({ playerId: me, name: n, date: boardId, words: submission(dailyFound) }).catch(() => {});
             }
           }}
           initialTab={mode}
@@ -431,7 +471,7 @@ export default function App() {
 
       <Modal open={dialog === 'blitz-over'} title="Time's up!" onClose={closeDialog}>
         {blitz.phase === 'over' && (() => {
-          const p = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found);
+          const p = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found, blitz.routes);
           return (
             <>
               <p className="mb-1 text-lg">

@@ -5,9 +5,11 @@ interface Props {
   maxScore: number;
   rank: { name: (typeof RANKS)[number]['name']; index: number; next: { name: string; points: number } | null };
   extra?: React.ReactNode;
+  /** Shown at the right end of the "points to next rank" line. */
+  note?: React.ReactNode;
 }
 
-export function RankBar({ score, maxScore, rank, extra }: Props) {
+export function RankBar({ score, maxScore, rank, extra, note }: Props) {
   const thresholds = rankThresholds(maxScore);
   const cur = thresholds[rank.index];
   const within = rank.next ? (score - cur.points) / Math.max(1, rank.next.points - cur.points) : 1;
@@ -35,9 +37,10 @@ export function RankBar({ score, maxScore, rank, extra }: Props) {
           />
         ))}
       </div>
-      <p className="text-sm text-muted">
-        {rank.next ? `${rank.next.points - score} points to ${rank.next.name}` : 'Every word found. All hail the Hexmaster!'}
-      </p>
+      <div className="flex items-center justify-between gap-2 text-sm text-muted">
+        <p>{rank.next ? `${rank.next.points - score} points to ${rank.next.name}` : 'You hold the Key to the City!'}</p>
+        {note}
+      </div>
     </section>
   );
 }

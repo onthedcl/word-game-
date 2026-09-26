@@ -10,7 +10,7 @@ export interface Answer {
   pangram: boolean;
 }
 
-export function solveBoard(board: Board, dict: Dawg, puzzleLetters: readonly string[]): Map<string, Answer> {
+export function solveBoard(board: Board, dict: Dawg): Map<string, Answer> {
   const results = new Map<string, Answer>();
   const path: number[] = [];
   const used = new Array<boolean>(TILE_COUNT).fill(false);
@@ -24,7 +24,7 @@ export function solveBoard(board: Board, dict: Dawg, puzzleLetters: readonly str
     word += board.letters[id];
     const center = hasCenter || id === CENTER;
     if (center && path.length >= MIN_WORD_LENGTH && dict.isWord(next)) {
-      const { score, pangram } = scorePath(path, board, puzzleLetters);
+      const { score, pangram } = scorePath(path, board);
       const prev = results.get(word);
       if (!prev || score > prev.score) results.set(word, { word, score, path: path.slice(), pangram });
     }

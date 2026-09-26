@@ -23,15 +23,19 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 | | |
 |---|---|
-| Board | Hex grid of radius 2 (19 tiles). Only the puzzle's 7 letters appear; repeats are allowed. |
-| Key tile | The centre tile. Every word must pass through it. It is never a premium tile. |
+| Board | Hex grid of radius 2 (19 tiles). Letters can repeat. Boards from 2026-09-27 aren't limited to 7 different letters; harder days add more. |
+| Key tile | The gold centre tile. Every word must include it (as any letter). It is never a premium tile. |
 | Premiums | 3–4 tiles per board: DL (double letter), TL (triple letter), DW (double word). |
-| Words | 4+ letters, a path of adjacent tiles, each tile used once, in the word list. Each word counts once. |
-| Pangram | Uses all 7 letters. Every board has at least one that can be traced through the key tile. |
+| Words | 4+ letters, a path of adjacent tiles, each tile used only once per word, in the word list. Each word counts once. |
+| Pangram | Any word with 7 or more different letters. Every board has at least one that can be traced through the key tile. |
 
 **Scoring:** `sum(letter value × letter multiplier) × word multipliers` (DWs stack), then +1 per letter beyond four. A pangram adds 25, then the total doubles. Each word is scored along its **best route** on the board however you entered it, so the maximum score is well defined and typing is never worse than tracing.
 
-**Ranks** (share of the day's maximum): Beginner 0% · Solid 10% · Nice 25% · Great 45% · Amazing 65% · Genius 80% · **Hexmaster** 100%.
+**Ranks** (share of the day's maximum): Tourist 0% · Newcomer 10% · Local 25% · Wordsmith 45% · Town Crier 65% · Mayor 80% · **Key to the City** 100%.
+
+## Weekly difficulty
+
+From 2026-09-27, daily boards follow a weekly curve from **Monday (Easy)** to **Sunday (Hardest)**: fewer words, more and rarer extra letters, and fewer vowels as the week goes on. Tuning lives in `TUNING` in `src/engine/generator.ts`. Older boards are unchanged.
 
 ## Playing
 
@@ -41,7 +45,7 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 - Rejections shake the board and give a reason: *Too short*, *Tiles not adjacent*, *Missing center*, *Not on board*, *Already found*, *Not a word*.
 - **Hints** shows a Bee-style grid of how many words are left, by first letter and length.
 - **Daily** is untimed and progress is saved in `localStorage` for each date. **Blitz** gives you a random board and 3 minutes, then shows every word you missed, and keeps your best score.
-- **Share** copies a spoiler-free result such as `DPIYF Lettertown 9/25 | Genius | 412 pts | 1 pangram` with a hex row (`⬢⬢⬢⬢⬢⬢⬡`) for the rank ladder.
+- **Share** sends a spoiler-free challenge with your score, rank and leaderboard place, plus the link. For example: `DPIYF Lettertown 9/28 (Easy)` / `🏆 #2 of 7 today · 412 pts · Mayor` / `⬢⬢⬢⬢⬢⬢⬡` / `Can you beat me? https://onthedcl.github.io/word-game-/`.
 - Supported phones buzz lightly when you add a tile, find a word or make a mistake.
 
 ## Leaderboards

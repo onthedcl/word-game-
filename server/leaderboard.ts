@@ -1,6 +1,7 @@
 // Leaderboard rules. Scores are never trusted from the client: the server looks
 // up the puzzle's answer table and scores the submitted words itself.
-import { rankFor } from '../src/engine/scoring';
+import { rankFor, scorePath, TOP_RANK } from '../src/engine/scoring';
+import { CENTER, isValidRoute } from '../src/engine/hexgrid';
 import { EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
@@ -58,19 +59,48 @@ function nameOf(value: unknown): string {
   return name;
 }
 
-function wordsOf(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > 500) throw new ApiError(400, 'Bad word list');
-  return [...new Set(value.filter((w): w is string => typeof w === 'string').map((w) => w.toLowerCase()))];
+/** A submitted word, with the route it was traced along when the client sent one. */
+interface Submitted {
+  word: string;
+  route: number[] | null;
 }
 
-function score(table: AnswerTable, submitted: string[], name: string, now: number): Entry {
+function wordsOf(value: unknown): Submitted[] {
+  if (!Array.isArray(value) || value.length > 500) throw new ApiError(400, 'Bad word list');
+  const out = new Map<string, Submitted>();
+  for (const item of value) {
+    if (typeof item === 'string') out.set(item.toLowerCase(), { word: item.toLowerCase(), route: null });
+    else if (item && typeof item === 'object' && typeof item.w === 'string') {
+      const route = Array.isArray(item.p) && item.p.length <= 19 && item.p.every((n: unknown) => Number.isInteger(n))
+        ? (item.p as number[])
+        : null;
+      out.set(item.w.toLowerCase(), { word: item.w.toLowerCase(), route });
+    }
+  }
+  return [...out.values()];
+}
+
+/** Points for one word: along its traced route if that route is genuine, else its best route. */
+function wordPoints(table: AnswerTable, { word, route }: Submitted, best: number): number {
+  if (!route || !table.board) return best;
+  const board = table.board;
+  const genuine =
+    route.every((id) => id >= 0 && id < board.letters.length) &&
+    isValidRoute(route) &&
+    route.includes(CENTER) &&
+    route.map((id) => board.letters[id]).join('') === word;
+  // A bogus route is scored as the lowest the word could be worth: never an advantage.
+  return genuine ? scorePath(route, board).score : 0;
+}
+
+function score(table: AnswerTable, submitted: Submitted[], name: string, now: number): Entry {
   let total = 0;
   let words = 0;
   let pangrams = 0;
-  for (const w of submitted) {
-    const hit = Object.hasOwn(table.words, w) ? table.words[w] : undefined;
+  for (const s of submitted) {
+    const hit = Object.hasOwn(table.words, s.word) ? table.words[s.word] : undefined;
     if (!hit) continue;
-    total += hit[0];
+    total += wordPoints(table, s, hit[0]);
     words += 1;
     pangrams += hit[1];
   }
@@ -118,15 +148,20 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = nameOf(body.name);
   const date = checkDailyDate(body.date, deps.now());
-  const entry = score(await tableFor(deps, `daily/${date}`), wordsOf(body.words), name, deps.now());
+  const table = await tableFor(deps, `daily/${date}`);
+  const entry = score(table, wordsOf(body.words), name, deps.now());
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
-  if (entry.rankName === 'Hexmaster' && prev?.rankName !== 'Hexmaster') {
-    deps.notify?.({ title: 'Every word found!', message: `${name} found all ${entry.words} words today (${entry.score} pts)`, tags: ['crown'] });
+  if (entry.words === Object.keys(table.words).length && (prev?.words ?? 0) < entry.words) {
+    deps.notify?.({
+      title: entry.rankName === TOP_RANK ? `${TOP_RANK}!` : 'Every word found!',
+      message: `${name} found all ${entry.words} words today (${entry.score} pts)`,
+      tags: ['crown'],
+    });
   }
   // Progress only moves forward; a stale device can't lower your score.
-  if (!prev || entry.score > prev.score || entry.name !== prev.name) {
+  if (!prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name) {
     await deps.kv.setJSON(key, !prev || entry.score >= prev.score ? entry : { ...prev, name });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });

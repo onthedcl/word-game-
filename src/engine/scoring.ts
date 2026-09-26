@@ -21,22 +21,27 @@ export const PREMIUMS: Record<Premium, { letter: number; word: number; name: str
 export const MIN_WORD_LENGTH = 4;
 export const PANGRAM_BONUS = 25;
 
+// A climb through Lettertown, from passing tourist to holding the key to the city.
 export const RANKS = [
-  { name: 'Beginner', pct: 0 },
-  { name: 'Solid', pct: 10 },
-  { name: 'Nice', pct: 25 },
-  { name: 'Great', pct: 45 },
-  { name: 'Amazing', pct: 65 },
-  { name: 'Genius', pct: 80 },
-  { name: 'Hexmaster', pct: 100 },
+  { name: 'Tourist', pct: 0 },
+  { name: 'Newcomer', pct: 10 },
+  { name: 'Local', pct: 25 },
+  { name: 'Wordsmith', pct: 45 },
+  { name: 'Town Crier', pct: 65 },
+  { name: 'Mayor', pct: 80 },
+  { name: 'Key to the City', pct: 100 },
 ] as const;
 
-export function isPangram(word: string, letters: readonly string[]): boolean {
-  const used = new Set(word);
-  return letters.every((l) => used.has(l));
+export const TOP_RANK = RANKS[RANKS.length - 1].name;
+
+/** A pangram is any word with this many different letters (or more). */
+export const PANGRAM_LETTERS = 7;
+
+export function isPangram(word: string): boolean {
+  return new Set(word).size >= PANGRAM_LETTERS;
 }
 
-export function scorePath(path: readonly number[], board: Board, puzzleLetters: readonly string[]) {
+export function scorePath(path: readonly number[], board: Board) {
   let sum = 0;
   let wordMult = 1;
   for (const id of path) {
@@ -45,7 +50,7 @@ export function scorePath(path: readonly number[], board: Board, puzzleLetters: 
     if (premium) wordMult *= PREMIUMS[premium].word;
   }
   let score = sum * wordMult + Math.max(0, path.length - 4);
-  const pangram = isPangram(path.map((id) => board.letters[id]).join(''), puzzleLetters);
+  const pangram = isPangram(path.map((id) => board.letters[id]).join(''));
   if (pangram) score = (score + PANGRAM_BONUS) * 2;
   return { score, pangram };
 }

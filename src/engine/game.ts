@@ -1,18 +1,23 @@
 // Word submission rules, independent of React and the DOM.
 import { CENTER, isValidRoute } from './hexgrid';
-import { MIN_WORD_LENGTH, rankFor } from './scoring';
+import { MIN_WORD_LENGTH, rankFor, scorePath } from './scoring';
 import { findPaths, type Answer } from './solver';
 import type { Puzzle } from './generator';
 
 export type Rejection =
   | 'Too short'
   | 'Tiles not adjacent'
-  | 'Missing center'
+  | 'Must use the gold tile'
   | 'Not on board'
   | 'Already found'
   | 'Not a word';
 
-export type SubmitResult = { ok: true; answer: Answer } | { ok: false; reason: Rejection };
+/** The route each found word was traced along (word -> tile ids). */
+export type Routes = Readonly<Record<string, readonly number[]>>;
+
+export type SubmitResult =
+  | { ok: true; answer: Answer; route: number[]; score: number }
+  | { ok: false; reason: Rejection };
 
 export function answerIndex(puzzle: Puzzle): Map<string, Answer> {
   return new Map(puzzle.answers.map((a) => [a.word, a]));
@@ -20,8 +25,9 @@ export function answerIndex(puzzle: Puzzle): Map<string, Answer> {
 
 /**
  * Check a word against the puzzle. `path` is the traced route; typed words pass
- * `null` and are accepted if any route through the key tile spells them.
- * Accepted words always score their best route (so the max score is well defined).
+ * `null` and use the route the board highlights for them.
+ * A word scores the route it was traced along, so where you trace it matters
+ * (the day's maximum assumes every word on its best route).
  */
 export function checkWord(
   puzzle: Puzzle,
@@ -36,26 +42,32 @@ export function checkWord(
     if (path.map((id) => puzzle.board.letters[id]).join('') !== word || !isValidRoute(path)) {
       return { ok: false, reason: 'Tiles not adjacent' };
     }
-    if (!path.includes(CENTER)) return { ok: false, reason: 'Missing center' };
+    if (!path.includes(CENTER)) return { ok: false, reason: 'Must use the gold tile' };
   } else {
     if (!findPaths(word, puzzle.board, { limit: 1 }).length) return { ok: false, reason: 'Not on board' };
-    if (!findPaths(word, puzzle.board, { requireCenter: true, limit: 1 }).length) {
-      return { ok: false, reason: 'Missing center' };
-    }
   }
+  const route = path ? [...path] : findPaths(word, puzzle.board, { requireCenter: true, limit: 1 })[0];
+  if (!route) return { ok: false, reason: 'Must use the gold tile' };
   if (found.has(word)) return { ok: false, reason: 'Already found' };
   const answer = answers.get(word);
-  return answer ? { ok: true, answer } : { ok: false, reason: 'Not a word' };
+  if (!answer) return { ok: false, reason: 'Not a word' };
+  return { ok: true, answer, route, score: scorePath(route, puzzle.board).score };
 }
 
-export function scoreOf(answers: Map<string, Answer>, found: Iterable<string>): number {
+/** A found word's score: along its traced route if known, else its best route. */
+export function wordScore(puzzle: Puzzle, answers: Map<string, Answer>, word: string, routes?: Routes): number {
+  const route = routes?.[word];
+  return route ? scorePath(route, puzzle.board).score : (answers.get(word)?.score ?? 0);
+}
+
+export function scoreOf(puzzle: Puzzle, answers: Map<string, Answer>, found: Iterable<string>, routes?: Routes): number {
   let total = 0;
-  for (const w of found) total += answers.get(w)?.score ?? 0;
+  for (const w of found) if (answers.has(w)) total += wordScore(puzzle, answers, w, routes);
   return total;
 }
 
-export function progress(puzzle: Puzzle, answers: Map<string, Answer>, found: readonly string[]) {
-  const score = scoreOf(answers, found);
+export function progress(puzzle: Puzzle, answers: Map<string, Answer>, found: readonly string[], routes?: Routes) {
+  const score = scoreOf(puzzle, answers, found, routes);
   return {
     score,
     rank: rankFor(score, puzzle.maxScore),

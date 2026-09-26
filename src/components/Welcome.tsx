@@ -17,8 +17,8 @@ export function Welcome({ onSave, onSkip, onRules }: Props) {
         className="mb-4 aspect-[1408/768] w-full rounded-xl object-cover"
       />
       <p className="mb-3">
-        Find words by linking neighbouring tiles. Every word must go through the gold <b>key</b> tile.
-        Drag and let go to submit.
+        Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the
+        gold <b>key</b> tile. Drag and let go to submit.
       </p>
       <p className="mb-4 text-sm text-muted">What should we call you on the leaderboard?</p>
       <NameForm name="" cta="Play" onSave={onSave} />

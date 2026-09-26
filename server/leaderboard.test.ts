@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { dict, seeds } from '../src/engine/node-dict';
 import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
+import { findPaths } from '../src/engine/solver';
+import { scorePath } from '../src/engine/scoring';
 import { ApiError, describePlace, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
@@ -80,7 +82,23 @@ describe('daily leaderboard', () => {
   it('matches the scores the game itself shows', async () => {
     const r = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words });
     expect(r.score).toBe(puzzle.maxScore);
-    expect(r.you!.rankName).toBe('Hexmaster');
+    expect(r.you!.rankName).toBe('Key to the City');
+  });
+
+  it('scores each word along the route it was traced, and never rewards a fake route', async () => {
+    const multi = puzzle.answers.find((a) => {
+      const scores = findPaths(a.word, puzzle.board, { requireCenter: true }).map((r) => scorePath(r, puzzle.board).score);
+      return Math.min(...scores) < a.score;
+    })!;
+    const weaker = findPaths(multi.word, puzzle.board, { requireCenter: true }).find(
+      (r) => scorePath(r, puzzle.board).score < multi.score,
+    )!;
+    const traced = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [{ w: multi.word, p: weaker }] });
+    expect(traced.score).toBe(scorePath(weaker, puzzle.board).score);
+    const best = await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words: [{ w: multi.word, p: multi.path }] });
+    expect(best.score).toBe(multi.score);
+    const fake = await submitDaily(deps, { playerId: 'player-three-cccccccccc', name: 'Cy', date: DATE, words: [{ w: multi.word, p: [0, 1, 2, 3] }] });
+    expect(fake.score).toBe(0);
   });
 
   it('rejects bad input and closed puzzles', async () => {
@@ -169,7 +187,7 @@ describe('notifications', () => {
     await finishBlitz(deps, { playerId: P1, name: 'Ann', game, words: boardWords(seed).slice(0, 3) });
     await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words });
     expect(sent[0]).toMatch(/^Blitz finished: Ann scored \d+ \(3 words\) · personal best, #1 of 1$/);
-    expect(sent[1]).toBe(`Every word found!: Bo found all ${words.length} words today (${puzzle.maxScore} pts)`);
+    expect(sent[1]).toBe(`Key to the City!: Bo found all ${words.length} words today (${puzzle.maxScore} pts)`);
   });
 });
 

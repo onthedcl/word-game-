@@ -12,6 +12,9 @@ export interface BoardRow {
   you: boolean;
 }
 
+/** A found word, with the route it was traced along when known (the server scores that route). */
+export type Submitted = string | { w: string; p: number[] };
+
 export interface Board {
   total: number;
   top: BoardRow[];
@@ -62,12 +65,12 @@ export async function leaderboardOnline(): Promise<boolean> {
 
 export const api = {
   daily: (date: string, player: string) => call<Board>('GET', `/api/daily?date=${date}&player=${encodeURIComponent(player)}`),
-  submitDaily: (b: { playerId: string; name: string; date: string; words: string[] }) =>
+  submitDaily: (b: { playerId: string; name: string; date: string; words: Submitted[] }) =>
     call<Board & { score: number }>('POST', '/api/daily', b),
   hello: (playerId: string, mode: 'daily' | 'blitz') => call<{ ok: true }>('POST', '/api/hello', { playerId, mode }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string }>('POST', '/api/name', { playerId, name }),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
   startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
-  finishBlitz: (b: { playerId: string; name: string; game: string; words: string[] }) =>
+  finishBlitz: (b: { playerId: string; name: string; game: string; words: Submitted[] }) =>
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
 };

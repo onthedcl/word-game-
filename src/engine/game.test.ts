@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { dict, seeds } from './node-dict';
 import { generateDaily } from './generator';
-import { answerIndex, checkWord, progress } from './game';
+import { answerIndex, checkWord, progress, wordScore } from './game';
+import { findPaths } from './solver';
+import { scorePath } from './scoring';
 import { hintGrid } from './hints';
 import { hexRow, shareText } from './share';
 import { CENTER, NEIGHBORS } from './hexgrid';
@@ -31,9 +33,26 @@ function findRoute(throughKey: boolean, pred: (w: string) => boolean = () => tru
 }
 
 describe('checkWord', () => {
-  it('accepts a traced answer and scores its best route', () => {
+  it('accepts a traced answer and scores the route it was traced along', () => {
     const res = checkWord(puzzle, answers, none, plain.word, plain.path);
-    expect(res).toEqual({ ok: true, answer: plain });
+    expect(res).toEqual({ ok: true, answer: plain, route: plain.path, score: plain.score });
+  });
+
+  it('scores a weaker spot lower than the best one', () => {
+    // A word that can be traced in more than one place, with different scores.
+    const multi = puzzle.answers.find((a) => {
+      const scores = findPaths(a.word, puzzle.board, { requireCenter: true }).map((r) => scorePath(r, puzzle.board).score);
+      return Math.min(...scores) < a.score;
+    })!;
+    const routes = findPaths(multi.word, puzzle.board, { requireCenter: true });
+    const weaker = routes.find((r) => scorePath(r, puzzle.board).score < multi.score)!;
+    const res = checkWord(puzzle, answers, none, multi.word, weaker);
+    expect(res.ok && res.score).toBe(scorePath(weaker, puzzle.board).score);
+    expect(res.ok && res.score).toBeLessThan(multi.score);
+    // Progress and the found-word list use the traced route too.
+    const tally = progress(puzzle, answers, [multi.word], { [multi.word]: weaker });
+    expect(tally.score).toBe(scorePath(weaker, puzzle.board).score);
+    expect(wordScore(puzzle, answers, multi.word, {})).toBe(multi.score);
   });
 
   it('accepts typed answers found anywhere on the board', () => {
@@ -49,7 +68,7 @@ describe('checkWord', () => {
     expect(reason(plain.word, plain.path, new Set([plain.word]))).toBe('Already found');
 
     const outer = findRoute(false);
-    expect(reason(spell(outer), outer)).toBe('Missing center');
+    expect(reason(spell(outer), outer)).toBe('Must use the gold tile');
 
     const far = NEIGHBORS.findIndex((n, id) => id !== CENTER && !n.includes(CENTER));
     const broken = [far, CENTER, ...NEIGHBORS[CENTER].filter((n) => n !== far).slice(0, 2)];
@@ -61,11 +80,11 @@ describe('checkWord', () => {
     expect(reason(spell(junk), junk)).toBe('Not a word');
   });
 
-  it('reaches Hexmaster when every word is found', () => {
+  it('reaches Key to the City when every word is found in its best spot', () => {
     const all = puzzle.answers.map((a) => a.word);
     const p = progress(puzzle, answers, all);
     expect(p.score).toBe(puzzle.maxScore);
-    expect(p.rank.name).toBe('Hexmaster');
+    expect(p.rank.name).toBe('Key to the City');
     expect(p.complete).toBe(true);
     expect(p.pangramsFound).toBe(puzzle.pangrams.length);
   });
@@ -84,9 +103,28 @@ describe('hints', () => {
 });
 
 describe('share', () => {
-  it('formats the daily result without spoilers', () => {
-    const text = shareText(puzzle, { rankName: 'Genius', rankIndex: 5, score: 412, words: 30, pangrams: 1 });
-    expect(text).toBe('DPIYF Lettertown 9/25 | Genius | 412 pts | 1 pangram\n⬢⬢⬢⬢⬢⬢⬡');
+  it('shares score and leaderboard place as a challenge, without spoilers', () => {
+    const text = shareText(puzzle, {
+      rankName: 'Mayor', rankIndex: 5, score: 412, words: 30, pangrams: 1, standing: { position: 2, total: 7 },
+    });
+    expect(text).toBe(
+      'DPIYF Lettertown 9/25\n🏆 #2 of 7 today · 412 pts · Mayor · 🌟\n⬢⬢⬢⬢⬢⬢⬡\nCan you beat me? https://onthedcl.github.io/word-game-/',
+    );
     expect(hexRow(0)).toBe('⬢⬡⬡⬡⬡⬡⬡');
+  });
+
+  it('shares without a place when not on the leaderboard, and shows the difficulty', () => {
+    const monday = generateDaily(dict, seeds, '2026-09-28');
+    const text = shareText(monday, { rankName: 'Local', rankIndex: 2, score: 90, words: 9, pangrams: 0 });
+    expect(text.split('\n').slice(0, 2)).toEqual(['DPIYF Lettertown 9/28 (Easy)', '90 pts · Local']);
+  });
+
+  it('shares Blitz results with the all-time place', () => {
+    const text = shareText({ ...puzzle, kind: 'blitz' }, {
+      rankName: 'Local', rankIndex: 2, score: 120, words: 14, pangrams: 0, standing: { position: 3, total: 9 },
+    });
+    expect(text).toBe(
+      "DPIYF Lettertown ⚡ Blitz\n120 pts in 3 minutes · 14 words · #3 of 9 all-time\nThink you're faster? https://onthedcl.github.io/word-game-/#blitz",
+    );
   });
 });
