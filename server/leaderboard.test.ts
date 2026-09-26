@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { dict, seeds } from '../src/engine/node-dict';
 import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
-import { ApiError, finishBlitz, getBlitz, getDaily, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -24,12 +24,15 @@ const POOL = [blitzPoolSeed(0), blitzPoolSeed(1)];
 const boardWords = (seed: string) => generateBlitz(dict, seeds, seed).answers.map((a) => a.word);
 
 let deps: Deps & { kv: ReturnType<typeof memoryKV> };
+let sent: string[];
 let clock: number;
 let ids: number;
 beforeEach(() => {
   clock = Date.parse(`${DATE}T15:00:00Z`);
   ids = 0;
+  sent = [];
   deps = {
+    notify: ({ title, message }) => void sent.push(`${title}: ${message}`),
     kv: memoryKV(),
     answers: async (key) => {
       const [kind, id] = key.split('/');
@@ -135,5 +138,30 @@ describe('names', () => {
     for (const n of ['a', 'x'.repeat(17), '<script>', '', 42, 'fuckface', 'sh1t head'.replace('1', 'i')]) {
       expect(cleanName(n)).toBeNull();
     }
+  });
+});
+
+describe('notifications', () => {
+  it('announce each player once a day when they open the game', async () => {
+    await hello(deps, { playerId: P1, mode: 'daily' });
+    await hello(deps, { playerId: P1, mode: 'daily' });
+    await saveName(deps, { playerId: P2, name: 'Bo' });
+    await hello(deps, { playerId: P2, mode: 'blitz' });
+    clock += 24 * 3600_000;
+    await hello(deps, { playerId: P1, mode: 'daily' });
+    expect(sent).toEqual([
+      'Someone is playing: A new player opened the daily puzzle · 1 player today',
+      'New player: Bo joined the leaderboard',
+      'Someone is playing: Bo opened Blitz · 2 players today',
+      'Someone is playing: A returning player (no name) opened the daily puzzle · 1 player today',
+    ]);
+  });
+
+  it('announce Blitz results and a perfect daily', async () => {
+    const { game, seed } = await startBlitz(deps, { playerId: P1 });
+    await finishBlitz(deps, { playerId: P1, name: 'Ann', game, words: boardWords(seed).slice(0, 3) });
+    await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words });
+    expect(sent[0]).toMatch(/^Blitz finished: Ann scored \d+ \(3 words\) · personal best, #1 of 1$/);
+    expect(sent[1]).toBe(`Every word found!: Bo found all ${words.length} words today (${puzzle.maxScore} pts)`);
   });
 });

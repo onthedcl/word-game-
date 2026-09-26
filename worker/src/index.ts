@@ -6,7 +6,7 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, finishBlitz, getBlitz, getDaily, saveName, startBlitz, submitDaily, type Deps,
+  ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps,
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 
@@ -14,6 +14,8 @@ interface Env {
   BOARD: DurableObjectNamespace<Leaderboard>;
   SCORES_BASE: string;
   ALLOWED_ORIGINS: string;
+  /** Private ntfy.sh topic for "someone is playing" notifications (a Worker secret). */
+  NTFY_TOPIC?: string;
 }
 
 const MISSING_RETRY_MS = 10 * 60 * 1000;
@@ -49,6 +51,20 @@ export class Leaderboard extends DurableObject<Env> {
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
+      notify: ({ title, message, tags }) => {
+        const topic = this.env.NTFY_TOPIC;
+        if (!topic) return;
+        this.ctx.waitUntil(
+          fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, title, message, tags, click: 'https://onthedcl.github.io/word-game-/' }),
+          }).then(
+            (res) => { if (!res.ok) console.error(`ntfy ${res.status}`); },
+            (err) => console.error('ntfy failed', err),
+          ),
+        );
+      },
     };
   }
 
@@ -72,6 +88,8 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await finishBlitz(deps, body));
         case 'POST /api/name':
           return json(await saveName(deps, body));
+        case 'POST /api/hello':
+          return json(await hello(deps, body));
         default:
           return json({ error: 'Not found' }, 404);
       }

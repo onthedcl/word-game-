@@ -11,6 +11,7 @@ import { AnswerList } from './components/AnswerList';
 import { requestPuzzle } from './worker/client';
 import { dailyKey, NAME_KEY, playerId, readStored, useStoredState, writeStored } from './storage';
 import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
+import { dailyBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { shareText } from './engine/share';
@@ -91,6 +92,10 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
+  // Let the leaderboard server know someone's playing (it notifies the owner once per player per day).
+  useEffect(() => {
+    if (online) api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily').catch(() => {});
+  }, [online, me]);
   const [name, setName] = useStoredState<string>(NAME_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
@@ -108,7 +113,8 @@ export default function App() {
 
   // ---- daily ----------------------------------------------------------------
   const daily = usePuzzle(dateKey);
-  const [dailyFound, setDailyFound] = useStoredState<{ found: string[] }>(dailyKey(dateKey), { found: [] });
+  const [dailyFound, setDailyFound] = useStoredState<{ found: string[] }>(dailyKey(dailyBoardId(dateKey)), { found: [] });
+  const boardId = dailyBoardId(dateKey);
   const isToday = dateKey === dateKeyFor();
 
   // Live standing on today's leaderboard, shown next to your rank.
@@ -121,14 +127,14 @@ export default function App() {
     let live = true;
     const poll = () =>
       document.visibilityState === 'visible' &&
-      api.daily(dateKey, me).then((b) => live && noteStanding(b), () => {});
+      api.daily(boardId, me).then((b) => live && noteStanding(b), () => {});
     poll();
     const t = setInterval(poll, 15000);
     return () => {
       live = false;
       clearInterval(t);
     };
-  }, [online, name, isToday, dateKey, me, noteStanding]);
+  }, [online, name, isToday, boardId, me, noteStanding]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
@@ -137,7 +143,7 @@ export default function App() {
     const key = `${name}|${found.length}`;
     if (!online || !name || !isToday || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
-      api.submitDaily({ playerId: me, name, date: dateKey, words: found }).then(
+      api.submitDaily({ playerId: me, name, date: boardId, words: found }).then(
         (b) => {
           posted.current = key;
           noteStanding(b);
@@ -146,7 +152,7 @@ export default function App() {
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [dailyFound.found, online, name, isToday, me, dateKey, noteStanding]);
+  }, [dailyFound.found, online, name, isToday, me, boardId, noteStanding]);
 
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
@@ -367,13 +373,13 @@ export default function App() {
 
       <Modal open={dialog === 'leaderboard'} title="Leaderboard" onClose={closeDialog}>
         <Leaderboard
-          dateKey={isToday ? dateKey : dateKeyFor()}
+          dateKey={isToday ? boardId : dailyBoardId(dateKeyFor())}
           playerId={me}
           name={name}
           onName={async (n) => {
             await saveName(n);
             if (isToday && dailyFound.found.length) {
-              await api.submitDaily({ playerId: me, name: n, date: dateKey, words: dailyFound.found }).catch(() => {});
+              await api.submitDaily({ playerId: me, name: n, date: boardId, words: dailyFound.found }).catch(() => {});
             }
           }}
           initialTab={mode}
@@ -414,7 +420,7 @@ export default function App() {
             </p>
             <AnswerList
               answers={yesterday.puzzle.answers}
-              found={new Set(readStored<{ found: string[] }>(dailyKey(yesterdayKey), { found: [] }).found)}
+              found={new Set(readStored<{ found: string[] }>(dailyKey(dailyBoardId(yesterdayKey)), { found: [] }).found)}
             />
           </>
         ) : (

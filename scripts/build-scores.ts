@@ -1,5 +1,5 @@
 // Writes the answer tables the leaderboard server scores against:
-//   dist/scores/daily/<YYYY-MM-DD>.json   (from launch day to ~13 months ahead)
+//   dist/scores/daily/<board id>.json     (from launch day to ~13 months ahead)
 //   dist/scores/blitz/<seed>.json         (the pool of ranked Blitz boards)
 //   dist/scores/blitz-pool.json           (list of pool seeds)
 // Usage: npx vite-node scripts/build-scores.ts [outDir]
@@ -18,7 +18,8 @@ mkdirSync(join(out, 'blitz'), { recursive: true });
 const last = shiftDateKey(dateKeyFor(), DAYS_AHEAD);
 let days = 0;
 for (let d = EPOCH; d <= last; d = shiftDateKey(d, 1), days++) {
-  writeFileSync(join(out, 'daily', `${d}.json`), JSON.stringify(answerTable(generateDaily(dict, seeds, d))));
+  const puzzle = generateDaily(dict, seeds, d);
+  writeFileSync(join(out, 'daily', `${puzzle.boardId}.json`), JSON.stringify(answerTable(puzzle)));
 }
 
 const pool = Array.from({ length: BLITZ_POOL_SIZE }, (_, i) => blitzPoolSeed(i));

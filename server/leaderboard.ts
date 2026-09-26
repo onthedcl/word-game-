@@ -4,6 +4,7 @@ import { rankFor } from '../src/engine/scoring';
 import { EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
+import { parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
 const BLITZ_GRACE_SECONDS = 20; // network latency and slow phones
@@ -25,6 +26,8 @@ export interface Deps {
   now(): number;
   randomId(): string;
   random(): number;
+  /** Send the owner a notification (fire and forget). */
+  notify?(n: { title: string; message: string; tags?: string[] }): void;
 }
 
 export interface Entry {
@@ -80,12 +83,19 @@ async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
   return table;
 }
 
+/** A daily board id ("2026-09-26" or "2026-09-26~v1" after a reroll). */
+function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
+  const parsed = typeof value === 'string' ? parseBoardId(value) : null;
+  if (!parsed || !isDateKey(parsed.dateKey) || parsed.dateKey < EPOCH) throw new ApiError(400, 'Bad date');
+  return { boardId: value as string, dateKey: parsed.dateKey };
+}
+
 /** Today's date could be yesterday or tomorrow somewhere, so allow one day either side of UTC. */
-function checkDailyDate(date: unknown, now: number): string {
-  if (typeof date !== 'string' || !isDateKey(date) || date < EPOCH) throw new ApiError(400, 'Bad date');
+function checkDailyDate(value: unknown, now: number): string {
+  const { boardId, dateKey } = boardIdOf(value);
   const today = new Date(now).toISOString().slice(0, 10);
-  if (date < shiftDateKey(today, -1) || date > shiftDateKey(today, 1)) throw new ApiError(400, 'That puzzle is closed');
-  return date;
+  if (dateKey < shiftDateKey(today, -1) || dateKey > shiftDateKey(today, 1)) throw new ApiError(400, 'That puzzle is closed');
+  return boardId;
 }
 
 async function readBoard(kv: KV, prefix: string, playerId: string | null) {
@@ -112,6 +122,9 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+  if (entry.rankName === 'Hexmaster' && prev?.rankName !== 'Hexmaster') {
+    deps.notify?.({ title: 'Every word found!', message: `${name} found all ${entry.words} words today (${entry.score} pts)`, tags: ['crown'] });
+  }
   // Progress only moves forward; a stale device can't lower your score.
   if (!prev || entry.score > prev.score || entry.name !== prev.name) {
     await deps.kv.setJSON(key, !prev || entry.score >= prev.score ? entry : { ...prev, name });
@@ -121,7 +134,7 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
 }
 
 export async function getDaily(deps: Deps, date: string | null, playerId: string | null) {
-  if (!isDateKey(date)) throw new ApiError(400, 'Bad date');
+  boardIdOf(date);
   return readBoard(deps.kv, `daily/${date}/`, playerId && PLAYER_ID.test(playerId) ? playerId : null);
 }
 
@@ -162,7 +175,13 @@ export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {
   if (best) await deps.kv.setJSON(key, entry);
   else if (prev.name !== name) await deps.kv.setJSON(key, { ...prev, name });
   await deps.kv.setJSON(`players/${playerId}`, { name });
-  return { ok: true, score: entry.score, personalBest: best, ...(await readBoard(deps.kv, 'blitz-best/', playerId)) };
+  const board = await readBoard(deps.kv, 'blitz-best/', playerId);
+  deps.notify?.({
+    title: 'Blitz finished',
+    message: `${name} scored ${entry.score} (${entry.words} words)${best ? ` · personal best, #${board.you?.position} of ${board.total}` : ''}`,
+    tags: ['zap'],
+  });
+  return { ok: true, score: entry.score, personalBest: best, ...board };
 }
 
 export async function getBlitz(deps: Deps, playerId: string | null) {
@@ -174,6 +193,32 @@ export async function getBlitz(deps: Deps, playerId: string | null) {
 export async function saveName(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = nameOf(body.name);
+  const prev = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
   await deps.kv.setJSON(`players/${playerId}`, { name });
+  if (!prev) deps.notify?.({ title: 'New player', message: `${name} joined the leaderboard`, tags: ['tada'] });
+  else if (prev.name !== name) deps.notify?.({ title: 'Name change', message: `${prev.name} is now ${name}`, tags: ['pencil2'] });
   return { ok: true, name };
+}
+
+// ---- presence -----------------------------------------------------------------
+
+/** Called when someone opens the game. Notifies the owner once per player per day. */
+export async function hello(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const mode = body.mode === 'blitz' ? 'Blitz' : 'the daily puzzle';
+  const day = new Date(deps.now()).toISOString().slice(0, 10);
+  const key = `seen/${day}/${playerId}`;
+  if (await deps.kv.get(key, { type: 'json' })) return { ok: true };
+  await deps.kv.setJSON(key, { at: deps.now() });
+  const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  const everSeen = await deps.kv.get(`first-seen/${playerId}`, { type: 'json' });
+  if (!everSeen) await deps.kv.setJSON(`first-seen/${playerId}`, { at: deps.now() });
+  const today = (await deps.kv.list({ prefix: `seen/${day}/` })).blobs.length;
+  const who = player?.name ?? (everSeen ? 'A returning player (no name)' : 'A new player');
+  deps.notify?.({
+    title: 'Someone is playing',
+    message: `${who} opened ${mode} · ${today} ${today === 1 ? 'player' : 'players'} today`,
+    tags: ['wave'],
+  });
+  return { ok: true };
 }

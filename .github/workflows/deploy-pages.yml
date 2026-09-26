@@ -52,6 +52,7 @@ jobs:
     needs: pages
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
     steps:
       - name: Skip without a Cloudflare token
         if: env.CLOUDFLARE_API_TOKEN == ''
@@ -68,6 +69,12 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx wrangler deploy
+      - name: Set the notification channel
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.NTFY_TOPIC != ''
+        working-directory: worker
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: printf '%s' "$NTFY_TOPIC" | npx wrangler secret put NTFY_TOPIC
       - name: Check the leaderboard answers the game
         if: env.CLOUDFLARE_API_TOKEN != ''
         env:

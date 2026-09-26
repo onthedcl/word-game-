@@ -4,6 +4,7 @@ import { NEIGHBORS, CENTER, TILE_COUNT } from './hexgrid';
 import { MIN_WORD_LENGTH, type Board, type Premium } from './scoring';
 import { solveBoard, type Answer } from './solver';
 import { puzzleNumber } from './dates';
+import { dailyBoardId, rerollsFor } from './rerolls';
 import type { Dawg } from './dawg';
 
 export interface Puzzle {
@@ -12,6 +13,8 @@ export interface Puzzle {
   /** Seed offset that produced an acceptable board. */
   offset: number;
   dateKey: string | null;
+  /** Daily board id: the date, plus "~vN" if the day was rerolled. */
+  boardId: string | null;
   number: number | null;
   letters: string[];
   centerLetter: string;
@@ -148,11 +151,12 @@ export function isAcceptable(p: Pick<Puzzle, 'answers' | 'pangrams' | 'maxScore'
 interface GenerateOptions {
   kind: Puzzle['kind'];
   seed: string;
+  dateKey?: string;
   /** Starting slot in the letter-set order. */
   slot: number;
 }
 
-export function generatePuzzle(dict: Dawg, seeds: readonly string[], { kind, seed, slot }: GenerateOptions): Puzzle {
+export function generatePuzzle(dict: Dawg, seeds: readonly string[], { kind, seed, slot, dateKey = undefined }: GenerateOptions): Puzzle {
   const order = letterSetOrder(seeds);
   const vocab = new Map<string, string[]>();
   let fallback: Puzzle | null = null;
@@ -178,13 +182,14 @@ export function generatePuzzle(dict: Dawg, seeds: readonly string[], { kind, see
       premiums: placePremiums(rng),
     };
     const answers = [...solveBoard(board, dict, letters).values()].sort((a, b) => a.word.localeCompare(b.word));
-    const dateKey = kind === 'daily' ? seed : null;
+    const day = kind === 'daily' ? (dateKey ?? seed) : null;
     const puzzle: Puzzle = {
       kind,
       seed,
       offset,
-      dateKey,
-      number: dateKey ? puzzleNumber(dateKey) : null,
+      dateKey: day,
+      boardId: day ? (dateKey ? seed : day) : null,
+      number: day ? puzzleNumber(day) : null,
       letters,
       centerLetter: pangram[centerPos],
       seedPangram: pangram,
@@ -200,8 +205,17 @@ export function generatePuzzle(dict: Dawg, seeds: readonly string[], { kind, see
   return fallback!;
 }
 
-export function generateDaily(dict: Dawg, seeds: readonly string[], dateKey: string): Puzzle {
-  return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot: puzzleNumber(dateKey) - 1 });
+const REROLL_SLOT_STRIDE = 1777; // a rerolled day draws its letters far from every other day's
+
+export function generateDaily(dict: Dawg, seeds: readonly string[], dateKey: string, version = rerollsFor(dateKey)): Puzzle {
+  const slot = puzzleNumber(dateKey) - 1;
+  if (!version) return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot });
+  return generatePuzzle(dict, seeds, {
+    kind: 'daily',
+    seed: dailyBoardId(dateKey, version),
+    dateKey,
+    slot: slot + version * REROLL_SLOT_STRIDE,
+  });
 }
 
 export function generateBlitz(dict: Dawg, seeds: readonly string[], seed: string): Puzzle {

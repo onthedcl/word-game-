@@ -56,6 +56,8 @@ New players get a welcome screen that asks for a leaderboard name (they can skip
 - **Scores can't be faked.** The client only sends the words it found. The server looks them up in the puzzle's answer table (the build publishes these to `/scores/`), throws out anything that isn't an answer, and computes the score itself.
 - **Daily:** progress posts a moment after each new word. Only today's puzzle (±1 day for time zones) is accepted, and a saved score never goes down.
 - **Blitz:** ranked rounds use a board the server picks from a pre-built pool of 365. Results must come back within 3 minutes plus a short grace period, and only once per round. The board keeps each player's best score.
+- **Notifications:** the owner can get a phone notification when people play (see `worker/README.md`).
+- **Rerolls:** `src/engine/rerolls.ts` lists days whose daily board was replaced. The game, the answer tables and the leaderboard all follow it.
 - Players are anonymous: a random id kept in the browser, plus a display name of 2–16 characters, checked against a profanity list.
 
 ## How boards are made

@@ -128,6 +128,24 @@ describe('solver correctness', () => {
   });
 });
 
+describe('rerolled days', () => {
+  it('replace the board deterministically and leave other days alone', () => {
+    const original = generateDaily(dict, seeds, '2026-09-26', 0);
+    const rerolled = generateDaily(dict, seeds, '2026-09-26', 1);
+    expect(rerolled.board).not.toEqual(original.board);
+    expect(rerolled.letters.join('')).not.toBe(original.letters.join(''));
+    expect(rerolled).toEqual(generateDaily(dict, seeds, '2026-09-26', 1));
+    expect(rerolled).toMatchObject({ dateKey: '2026-09-26', boardId: '2026-09-26~v1', number: 2 });
+    expect(original.boardId).toBe('2026-09-26');
+    expect(isAcceptable(rerolled)).toBe(true);
+  });
+
+  it('use the reroll list by default', () => {
+    expect(generateDaily(dict, seeds, '2026-09-26').boardId).toBe('2026-09-26~v1');
+    expect(generateDaily(dict, seeds, '2026-09-27').boardId).toBe('2026-09-27');
+  });
+});
+
 describe('variety', () => {
   it('does not repeat a letter set in the first year', () => {
     const sets = Array.from({ length: 365 }, (_, i) => generateDaily(dict, seeds, shiftDateKey(EPOCH, i)).letters.join(''));
