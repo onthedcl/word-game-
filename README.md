@@ -74,11 +74,7 @@ Generation takes about 50 ms per board on average.
 
 ## Deploying
 
-**GitHub Pages:** `.github/workflows/deploy-pages.yml` tests, builds and deploys on every push to `main` (or run it by hand from the Actions tab). Setup, once:
-1. Pages needs a public repo, or a paid GitHub plan for a private one.
-2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
-
-The site is served from `https://onthedcl.github.io/word-game-/`. The workflow sets `BASE_PATH` to match.
+**GitHub Pages:** `.github/workflows/deploy-pages.yml` tests and builds the site on every push to `main` (you can also run it by hand from the Actions tab), then publishes `dist/` to the `gh-pages` branch. Pages serves that branch at https://onthedcl.github.io/word-game-/. If Pages isn't on yet, go to **Settings → Pages** and set Source to **Deploy from a branch**, with branch `gh-pages` and folder `/ (root)`.
 
 **Firebase Hosting:** `firebase.json` serves `dist/`. Run `npx firebase-tools login` once, then `npm run deploy:firebase -- --project <your-project-id>`.
 
