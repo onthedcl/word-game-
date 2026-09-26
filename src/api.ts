@@ -67,8 +67,8 @@ export const api = {
   daily: (date: string, player: string) => call<Board>('GET', `/api/daily?date=${date}&player=${encodeURIComponent(player)}`),
   submitDaily: (b: { playerId: string; name: string; date: string; words: Submitted[] }) =>
     call<Board & { score: number }>('POST', '/api/daily', b),
-  hello: (playerId: string, mode: 'daily' | 'blitz', name: string) =>
-    call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined }),
+  hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
+    call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string }>('POST', '/api/name', { playerId, name }),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
   startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),

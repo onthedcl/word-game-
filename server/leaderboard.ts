@@ -230,7 +230,7 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const prev = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
   await deps.kv.setJSON(`players/${playerId}`, { name });
-  if (!prev) deps.notify?.({ title: 'New player', message: `${name} joined the leaderboard`, tags: ['tada'] });
+  if (!prev) deps.notify?.({ title: 'Joined the leaderboard', message: `${name} picked their leaderboard name`, tags: ['trophy'] });
   else if (prev.name !== name) deps.notify?.({ title: 'Name change', message: `${prev.name} is now ${name}`, tags: ['pencil2'] });
   return { ok: true, name };
 }
@@ -261,10 +261,14 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
   // as seen would swallow today's ping once notifications are switched on.
   if (!deps.notify) return { ok: true };
   const mode = body.mode === 'blitz' ? 'Blitz' : 'the daily puzzle';
-  const day = new Date(deps.now()).toISOString().slice(0, 10);
+  // "Today" is the player's own calendar day (sent by the game), within a day of UTC.
+  const utc = new Date(deps.now()).toISOString().slice(0, 10);
+  const local = typeof body.date === 'string' && isDateKey(body.date) ? body.date : null;
+  const day = local && local >= shiftDateKey(utc, -1) && local <= shiftDateKey(utc, 1) ? local : utc;
   const key = `seen-v2/${day}/${playerId}`;
   if (await deps.kv.get(key, { type: 'json' })) return { ok: true };
   await deps.kv.setJSON(key, { at: deps.now() });
+
   let player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
   // The game sends the nickname saved on the device; remember it if the server hadn't heard it yet.
   const sentName = cleanName(body.name);
@@ -272,15 +276,22 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
     player = { name: sentName };
     await deps.kv.setJSON(`players/${playerId}`, player);
   }
-  const everSeen = await deps.kv.get(`first-seen/${playerId}`, { type: 'json' });
-  if (!everSeen) await deps.kv.setJSON(`first-seen/${playerId}`, { at: deps.now() });
+
+  // Count the different days this player has shown up, so regulars stand out.
+  const history = ((await deps.kv.get(`player-days/${playerId}`, { type: 'json' })) as { days: number } | null) ??
+    ((await deps.kv.get(`first-seen/${playerId}`, { type: 'json' })) ? { days: 1 } : { days: 0 });
+  const days = history.days + 1;
+  await deps.kv.setJSON(`player-days/${playerId}`, { days, last: day });
+
   const today = (await deps.kv.list({ prefix: `seen-v2/${day}/` })).blobs.length;
-  const who = player?.name ?? (everSeen ? 'A returning player (no name)' : 'A new player');
   const where = describePlace(place);
-  deps.notify?.({
-    title: 'Someone is playing',
-    message: `${who} opened ${mode}${where ? ` from ${where}` : ''} · ${today} ${today === 1 ? 'player' : 'players'} today`,
-    tags: ['wave'],
-  });
+  const from = where ? ` from ${where}` : '';
+  const count = `${today} ${today === 1 ? 'player' : 'players'} today`;
+  const name = player?.name;
+  const message =
+    days === 1
+      ? `${name ?? 'A new player'} opened ${mode}${from} for the first time · ${count}`
+      : `${name ?? 'A returning player (no name)'} is back for day ${days} · opened ${mode}${from} · ${count}`;
+  deps.notify?.({ title: days === 1 ? 'New player!' : 'Someone is playing', message, tags: [days === 1 ? 'tada' : 'wave'] });
   return { ok: true };
 }

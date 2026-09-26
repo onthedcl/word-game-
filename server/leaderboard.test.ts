@@ -164,7 +164,7 @@ describe('notifications', () => {
     const quiet = { ...deps, notify: undefined };
     await hello(quiet, { playerId: P1, mode: 'daily' });
     await hello(deps, { playerId: P1, mode: 'daily' });
-    expect(sent).toEqual(['Someone is playing: A new player opened the daily puzzle · 1 player today']);
+    expect(sent).toEqual(['New player!: A new player opened the daily puzzle for the first time · 1 player today']);
   });
 
   it('announce each player once a day when they open the game', async () => {
@@ -175,16 +175,16 @@ describe('notifications', () => {
     clock += 24 * 3600_000;
     await hello(deps, { playerId: P1, mode: 'daily' });
     expect(sent).toEqual([
-      'Someone is playing: A new player opened the daily puzzle · 1 player today',
-      'New player: Bo joined the leaderboard',
-      'Someone is playing: Bo opened Blitz from 🇺🇸 Brooklyn, NY · 2 players today',
-      'Someone is playing: A returning player (no name) opened the daily puzzle · 1 player today',
+      'New player!: A new player opened the daily puzzle for the first time · 1 player today',
+      'Joined the leaderboard: Bo picked their leaderboard name',
+      'New player!: Bo opened Blitz from 🇺🇸 Brooklyn, NY for the first time · 2 players today',
+      'Someone is playing: A returning player (no name) is back for day 2 · opened the daily puzzle · 1 player today',
     ]);
   });
 
   it('use the nickname saved on the device when the server has not heard it yet', async () => {
     await hello(deps, { playerId: P1, mode: 'daily', name: 'Castle' });
-    expect(sent).toEqual(['Someone is playing: Castle opened the daily puzzle · 1 player today']);
+    expect(sent).toEqual(['New player!: Castle opened the daily puzzle for the first time · 1 player today']);
     expect(await deps.kv.get(`players/${P1}`, { type: 'json' })).toEqual({ name: 'Castle' });
   });
 
@@ -194,6 +194,30 @@ describe('notifications', () => {
     await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words });
     expect(sent[0]).toMatch(/^Blitz finished: Ann scored \d+ \(3 words\) · personal best, #1 of 1$/);
     expect(sent[1]).toBe(`Key to the City!: Bo found all ${words.length} words today (${puzzle.maxScore} pts)`);
+  });
+});
+
+describe('daily pings follow the player', () => {
+  it('ping again on each new local day, counting the days', async () => {
+    await hello(deps, { playerId: P1, name: 'Castle', date: '2026-09-26' });
+    await hello(deps, { playerId: P1, name: 'Castle', date: '2026-09-26' });
+    clock += 24 * 3600_000;
+    await hello(deps, { playerId: P1, name: 'Castle', date: '2026-09-27' });
+    clock += 24 * 3600_000;
+    await hello(deps, { playerId: P1, name: 'Castle', date: '2026-09-28' });
+    expect(sent).toEqual([
+      'New player!: Castle opened the daily puzzle for the first time · 1 player today',
+      'Someone is playing: Castle is back for day 2 · opened the daily puzzle · 1 player today',
+      'Someone is playing: Castle is back for day 3 · opened the daily puzzle · 1 player today',
+    ]);
+  });
+
+  it('use the local date when it is within a day of UTC, and ignore anything else', async () => {
+    // 9pm in New York is already tomorrow in UTC: the player's own date wins.
+    await hello(deps, { playerId: P1, date: '2026-09-26' });
+    await hello(deps, { playerId: P1, date: '2026-09-27' });
+    await hello(deps, { playerId: P1, date: '2030-01-01' });
+    expect(sent).toHaveLength(2);
   });
 });
 

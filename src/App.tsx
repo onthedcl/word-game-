@@ -112,7 +112,7 @@ export default function App() {
   useEffect(() => {
     if (!online || greeted.current) return;
     greeted.current = true;
-    api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name).catch(() => {});
+    api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name, dateKeyFor()).catch(() => {});
   }, [online, me, name]);
   const saveName = useCallback(
     async (n: string) => {
