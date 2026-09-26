@@ -101,8 +101,10 @@ jobs:
           done
           curl -fsS "$SCORES/blitz-pool.json" | grep -q pool-
           echo "Leaderboard OK for $board: $(cat daily.json)"
-      - name: Send a test notification (manual runs only)
+      - name: Send a test notification through the Worker (manual runs only)
         if: github.event_name == 'workflow_dispatch' && env.NTFY_TOPIC != ''
+        env:
+          API: https://word-game-leaderboard.danlagstein.workers.dev
         run: |
-          curl -fsS -H "Title: DPIYF Lettertown" -H "Tags: white_check_mark" \
-            -d "Notifications are on. You'll get a ping when people play." "https://ntfy.sh/$NTFY_TOPIC" > /dev/null
+          curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"topic\":\"$NTFY_TOPIC\"}" "$API/api/notify-test" > /dev/null
+          echo "Notification status: $(curl -fsS "$API/api/notify-status")"

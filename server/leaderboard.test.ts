@@ -142,6 +142,13 @@ describe('names', () => {
 });
 
 describe('notifications', () => {
+  it('do nothing (and remember nobody) while notifications are off', async () => {
+    const quiet = { ...deps, notify: undefined };
+    await hello(quiet, { playerId: P1, mode: 'daily' });
+    await hello(deps, { playerId: P1, mode: 'daily' });
+    expect(sent).toEqual(['Someone is playing: A new player opened the daily puzzle · 1 player today']);
+  });
+
   it('announce each player once a day when they open the game', async () => {
     await hello(deps, { playerId: P1, mode: 'daily' });
     await hello(deps, { playerId: P1, mode: 'daily' });

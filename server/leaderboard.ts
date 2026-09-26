@@ -222,15 +222,18 @@ export function describePlace(place: Place | null | undefined): string | null {
 /** Called when someone opens the game. Notifies the owner once per player per day. */
 export async function hello(deps: Deps, body: Record<string, unknown>, place?: Place | null) {
   const playerId = playerIdOf(body.playerId);
+  // Without a notification channel there's nothing to do, and marking the player
+  // as seen would swallow today's ping once notifications are switched on.
+  if (!deps.notify) return { ok: true };
   const mode = body.mode === 'blitz' ? 'Blitz' : 'the daily puzzle';
   const day = new Date(deps.now()).toISOString().slice(0, 10);
-  const key = `seen/${day}/${playerId}`;
+  const key = `seen-v2/${day}/${playerId}`;
   if (await deps.kv.get(key, { type: 'json' })) return { ok: true };
   await deps.kv.setJSON(key, { at: deps.now() });
   const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
   const everSeen = await deps.kv.get(`first-seen/${playerId}`, { type: 'json' });
   if (!everSeen) await deps.kv.setJSON(`first-seen/${playerId}`, { at: deps.now() });
-  const today = (await deps.kv.list({ prefix: `seen/${day}/` })).blobs.length;
+  const today = (await deps.kv.list({ prefix: `seen-v2/${day}/` })).blobs.length;
   const who = player?.name ?? (everSeen ? 'A returning player (no name)' : 'A new player');
   const where = describePlace(place);
   deps.notify?.({

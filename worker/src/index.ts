@@ -19,6 +19,14 @@ interface Env {
 }
 
 const MISSING_RETRY_MS = 10 * 60 * 1000;
+
+interface NotifyStatus {
+  sent: number;
+  failed: number;
+  lastStatus?: number;
+  lastError?: string;
+  lastAt?: string;
+}
 /** Set by the Worker (never trusted from the client): Cloudflare's rough location for the player. */
 const PLACE_HEADER = 'X-Lettertown-Place';
 
@@ -53,21 +61,31 @@ export class Leaderboard extends DurableObject<Env> {
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
-      notify: ({ title, message, tags }) => {
-        const topic = this.env.NTFY_TOPIC;
-        if (!topic) return;
-        this.ctx.waitUntil(
-          fetch('https://ntfy.sh/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic, title, message, tags, click: 'https://onthedcl.github.io/word-game-/' }),
-          }).then(
-            (res) => { if (!res.ok) console.error(`ntfy ${res.status}`); },
-            (err) => console.error('ntfy failed', err),
-          ),
-        );
-      },
+      notify: this.env.NTFY_TOPIC ? (n) => this.ctx.waitUntil(this.sendNotification(n)) : undefined,
     };
+  }
+
+  /** Push to ntfy.sh and keep a tally (no message contents) so delivery can be checked. */
+  private async sendNotification({ title, message, tags }: { title: string; message: string; tags?: string[] }) {
+    const status = ((await this.ctx.storage.get('notify-status')) as NotifyStatus | undefined) ?? { sent: 0, failed: 0 };
+    try {
+      const res = await fetch('https://ntfy.sh/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: this.env.NTFY_TOPIC, title, message, tags, click: 'https://onthedcl.github.io/word-game-/' }),
+      });
+      if (res.ok) status.sent += 1;
+      else {
+        status.failed += 1;
+        status.lastError = `ntfy answered ${res.status}`;
+      }
+      status.lastStatus = res.status;
+    } catch (err) {
+      status.failed += 1;
+      status.lastError = err instanceof Error ? err.message : String(err);
+    }
+    status.lastAt = new Date().toISOString();
+    await this.ctx.storage.put('notify-status', status);
   }
 
   async fetch(req: Request): Promise<Response> {
@@ -90,6 +108,16 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await finishBlitz(deps, body));
         case 'POST /api/name':
           return json(await saveName(deps, body));
+        case 'GET /api/notify-status': {
+          // Delivery health only: counts and the last error, never message contents.
+          const status = (await this.ctx.storage.get('notify-status')) ?? { sent: 0, failed: 0 };
+          return json({ configured: !!this.env.NTFY_TOPIC, ...(status as object) });
+        }
+        case 'POST /api/notify-test':
+          // Only someone who knows the private topic can trigger a test ping.
+          if (!this.env.NTFY_TOPIC || body.topic !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          await this.sendNotification({ title: 'DPIYF Lettertown', message: 'Test from the leaderboard server: notifications are on.', tags: ['white_check_mark'] });
+          return json({ ok: true, ...((await this.ctx.storage.get('notify-status')) as object) });
         case 'POST /api/hello': {
           const place = req.headers.get(PLACE_HEADER);
           return json(await hello(deps, body, place ? (JSON.parse(place) as Place) : null));
