@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { TILES, CENTER, tileCenter, hexCorners } from '../engine/hexgrid';
 import { LETTER_VALUES, PREMIUMS, type Board as BoardData } from '../engine/scoring';
 
@@ -40,6 +40,22 @@ const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse }:
 
 export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPress, onDrag, onRelease }: Props) {
   const svg = useRef<SVGSVGElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  // iOS Safari doesn't fully honour touch-action, so stop the page from
+  // scrolling or zooming while a finger is on the board. These listeners must
+  // be non-passive, which React's own touch handlers aren't.
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const stop = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener('touchstart', stop, { passive: false });
+    el.addEventListener('touchmove', stop, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', stop);
+      el.removeEventListener('touchmove', stop);
+    };
+  }, []);
   const dragging = useRef(false);
   const selected = useMemo(() => new Set(path), [path]);
   const flashing = useMemo(() => new Set(flashPath ?? []), [flashPath]);
@@ -58,13 +74,14 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
   }
 
   return (
+    <div ref={wrap} className="flex h-full w-full touch-none select-none items-center justify-center">
     <svg
       ref={svg}
       key={shakeKey}
       viewBox="-220 -200 440 400"
       role="grid"
       aria-label="DPIYF Lettertown board"
-      className={`w-full max-w-[440px] touch-none select-none overflow-visible ${shakeKey ? 'animate-shake' : ''} ${disabled ? 'opacity-50' : ''}`}
+      className={`h-full w-full touch-none select-none overflow-visible ${shakeKey ? 'animate-shake' : ''} ${disabled ? 'opacity-50' : ''}`}
       onPointerDown={(e) => {
         if (disabled) return;
         const id = tileAt(e, SIZE * 0.95);
@@ -104,5 +121,6 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
       <polyline className="trace" points={points(path)} />
       {flashPath && <polyline className="trace flash-line" points={points(flashPath)} />}
     </svg>
+    </div>
   );
 }

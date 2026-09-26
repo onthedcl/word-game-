@@ -187,7 +187,8 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
   const plainBtn = `${btn} border-line bg-surface`;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:gap-x-8">
+    // Phones: a column that fills the screen, with the board taking whatever height is left.
+    <div className="flex min-h-0 flex-1 flex-col gap-2 lg:grid lg:flex-none lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3">
       <div className="lg:col-start-1">
         <RankBar score={score} maxScore={puzzle.maxScore} rank={rank} extra={statusExtra} />
       </div>
@@ -195,7 +196,9 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
         <FoundWords found={found} answers={answers} total={puzzle.answers.length} fresh={fresh} onShow={setFlashPath} />
       </div>
 
-      <section className="relative flex flex-col items-center lg:col-start-1" aria-label="Board">
+      {/* Phones: the section is a size container, so the board can scale to fit the space left on screen. */}
+      <section className="min-h-0 w-full flex-1 max-lg:[container-type:size] lg:col-start-1" aria-label="Board">
+       <div className="relative flex h-full flex-col items-center justify-center lg:justify-start">
         {/* Fixed-height entry line so tracing never shifts the layout. */}
         <div
           className={`flex h-12 items-center justify-center text-[2rem] font-bold uppercase tracking-wider ${
@@ -222,7 +225,8 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
           </div>
         )}
 
-        <div className="relative flex w-full justify-center">
+        {/* As big as fits: full width, at most 480px, and short enough to leave room for the word line and buttons. */}
+        <div className="relative aspect-[440/400] w-[min(100cqw,480px,calc((100cqh-7.5rem)*1.1))] shrink-0 lg:aspect-auto lg:h-[400px] lg:w-full lg:max-w-[440px]">
           <Board
             board={puzzle.board}
             path={shownPath}
@@ -244,14 +248,15 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
           )}
         </div>
 
-        <div className="mt-2 flex gap-2.5">
+        <div className="mt-2 flex shrink-0 gap-2.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:pb-0">
           <button type="button" className={plainBtn} onClick={backspace} disabled={disabled}>Delete</button>
           <button type="button" className={plainBtn} onClick={clear} disabled={disabled}>Clear</button>
           <button type="button" className={`${btn} border-ink bg-ink text-bg`} onClick={submit} disabled={disabled}>Enter</button>
         </div>
-        <p className="mt-2 max-w-[420px] text-center text-sm text-muted">
+        <p className="mt-2 hidden max-w-[420px] text-center text-sm text-muted lg:block">
           Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Every word goes through the <b>key</b>.
         </p>
+       </div>
       </section>
     </div>
   );

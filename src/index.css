@@ -86,6 +86,10 @@
 }
 
 html, body, #root { min-height: 100%; }
+/* Phones and tablets: the game fits one screen, so the page itself never scrolls or bounces. */
+@media (max-width: 1023px) {
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+}
 body {
   background: var(--bg);
   color: var(--ink);

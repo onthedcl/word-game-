@@ -272,8 +272,9 @@ export default function App() {
     `rounded-full px-2.5 py-1 sm:px-3 text-sm font-semibold ${mode === m ? 'bg-ink text-bg' : 'text-muted hover:text-ink'}`;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-8">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line py-3">
+    // Phones: exactly one screen tall, no page scrolling. Desktop: normal page.
+    <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 lg:block lg:h-auto lg:overflow-visible lg:pb-8">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
         <div className="flex items-end gap-3">
           <Wordmark />
           {mode === 'daily' && daily?.puzzle && <span className="text-sm text-muted">#{daily.puzzle.number}</span>}
@@ -309,7 +310,7 @@ export default function App() {
         </button>
       )}
 
-      <main className="pt-4">
+      <main className="flex min-h-0 flex-1 flex-col pt-3 lg:block lg:pt-4">
         {mode === 'daily' &&
           (daily?.puzzle ? (
             <PuzzleView
@@ -347,7 +348,7 @@ export default function App() {
               )}
             />
           ) : (
-            <section className="mx-auto max-w-md py-16 text-center">
+            <section className="mx-auto max-w-md overflow-y-auto py-8 text-center lg:py-16">
               <h2 className="text-3xl font-black">Blitz</h2>
               <p className="mt-2 text-muted">A random board. Three minutes. Find as many words as you can.</p>
               {best > 0 && <p className="mt-1 text-sm text-muted">Your best: <b className="text-ink">{best}</b> points</p>}
