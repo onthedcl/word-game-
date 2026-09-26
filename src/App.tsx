@@ -106,11 +106,14 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
-  // Let the leaderboard server know someone's playing (it notifies the owner once per player per day).
-  useEffect(() => {
-    if (online) api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily').catch(() => {});
-  }, [online, me]);
   const [name, setName] = useStoredState<string>(NAME_KEY, '');
+  // Let the leaderboard server know someone's playing (it notifies the owner once per player per day).
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (!online || greeted.current) return;
+    greeted.current = true;
+    api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name).catch(() => {});
+  }, [online, me, name]);
   const saveName = useCallback(
     async (n: string) => {
       if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');

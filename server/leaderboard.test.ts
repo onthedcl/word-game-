@@ -182,6 +182,12 @@ describe('notifications', () => {
     ]);
   });
 
+  it('use the nickname saved on the device when the server has not heard it yet', async () => {
+    await hello(deps, { playerId: P1, mode: 'daily', name: 'Castle' });
+    expect(sent).toEqual(['Someone is playing: Castle opened the daily puzzle · 1 player today']);
+    expect(await deps.kv.get(`players/${P1}`, { type: 'json' })).toEqual({ name: 'Castle' });
+  });
+
   it('announce Blitz results and a perfect daily', async () => {
     const { game, seed } = await startBlitz(deps, { playerId: P1 });
     await finishBlitz(deps, { playerId: P1, name: 'Ann', game, words: boardWords(seed).slice(0, 3) });

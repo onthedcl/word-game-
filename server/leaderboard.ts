@@ -265,7 +265,13 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
   const key = `seen-v2/${day}/${playerId}`;
   if (await deps.kv.get(key, { type: 'json' })) return { ok: true };
   await deps.kv.setJSON(key, { at: deps.now() });
-  const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  let player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  // The game sends the nickname saved on the device; remember it if the server hadn't heard it yet.
+  const sentName = cleanName(body.name);
+  if (sentName && player?.name !== sentName) {
+    player = { name: sentName };
+    await deps.kv.setJSON(`players/${playerId}`, player);
+  }
   const everSeen = await deps.kv.get(`first-seen/${playerId}`, { type: 'json' });
   if (!everSeen) await deps.kv.setJSON(`first-seen/${playerId}`, { at: deps.now() });
   const today = (await deps.kv.list({ prefix: `seen-v2/${day}/` })).blobs.length;
