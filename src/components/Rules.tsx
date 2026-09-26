@@ -24,8 +24,8 @@ export function Rules() {
       </ul>
       <h3 className="mt-4 mb-1 font-bold">Controls</h3>
       <ul className="list-disc space-y-1 pl-5 text-sm">
-        <li>Tap tiles one by one, or drag across them. Drag back to undo a step.</li>
-        <li><b>Tap the last tile again</b> or press <b>Enter</b> to submit.</li>
+        <li><b>Drag</b> across tiles and <b>let go</b> to submit. Drag back to undo a step.</li>
+        <li>Or <b>tap</b> tiles one by one, then tap the last tile again or press <b>Enter</b>.</li>
         <li>On a keyboard you can just type; the board shows a matching route.</li>
       </ul>
       <p className="mt-4 text-sm text-muted">

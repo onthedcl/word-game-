@@ -137,7 +137,8 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
   }
 
   function onRelease() {
-    if (press.current.submitOnRelease && !press.current.moved) submit();
+    // Lifting your finger after a drag submits the word, like pressing Enter.
+    if (press.current.moved || press.current.submitOnRelease) submit();
   }
 
   // ---- keyboard -----------------------------------------------------------------
@@ -238,7 +239,7 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
           <button type="button" className={`${btn} border-ink bg-ink text-bg`} onClick={submit} disabled={disabled}>Enter</button>
         </div>
         <p className="mt-2 max-w-[420px] text-center text-sm text-muted">
-          Tap or drag across tiles. Tap the last tile again or hit Enter to submit. Every word goes through the <b>key</b>.
+          Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Every word goes through the <b>key</b>.
         </p>
       </section>
     </div>

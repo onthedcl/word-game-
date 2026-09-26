@@ -36,7 +36,7 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 ## Playing
 
 - **Tap** tiles one by one or **drag** across them; drag back onto the previous tile to undo a step. Tapping a tile already in the word cuts the word back to it.
-- **Tap the last tile again** or press **Enter** to submit. Delete and Clear are below the board. There is no shuffle, because tile positions are the game.
+- **Drag** and **let go** to submit, or after tapping, **tap the last tile again** or press **Enter**. Delete and Clear are below the board. There is no shuffle, because tile positions are the game.
 - On a keyboard you can just type. The board highlights a route for the letters, and Backspace, Enter and Esc work.
 - Rejections shake the board and give a reason: *Too short*, *Tiles not adjacent*, *Missing center*, *Not on board*, *Already found*, *Not a word*.
 - **Hints** shows a Bee-style grid of how many words are left, by first letter and length.
