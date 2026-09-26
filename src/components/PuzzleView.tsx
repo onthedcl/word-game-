@@ -87,11 +87,12 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     const w = traced ? pathRef.current.map((id) => puzzle.board.letters[id]).join('') : typedRef.current;
     if (!w) return;
     const result = checkWord(puzzle, answers, foundSet, w, traced ? pathRef.current : null);
+    // Every submission starts the next word fresh, right or wrong.
+    clear();
     if (!result.ok) return reject(result.reason);
     const { answer } = result;
     const before = rank.index;
     onFound(answer.word);
-    clear();
     setFlashPath(answer.path);
     setFresh(answer.word);
     const after = progress(puzzle, answers, [...found, answer.word]);
