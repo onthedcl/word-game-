@@ -14,7 +14,7 @@ export function shareText(
 ): string {
   const p = `${pangrams} pangram${pangrams === 1 ? '' : 's'}`;
   if (puzzle.kind === 'blitz') {
-    return `Hexicon Blitz | ${score} pts | ${words} words | ${p}\n${hexRow(rankIndex)}`;
+    return `Schmexicon Blitz | ${score} pts | ${words} words | ${p}\n${hexRow(rankIndex)}`;
   }
-  return `Hexicon ${shortDate(puzzle.dateKey!)} | ${rankName} | ${score} pts | ${p}\n${hexRow(rankIndex)}`;
+  return `Schmexicon ${shortDate(puzzle.dateKey!)} | ${rankName} | ${score} pts | ${p}\n${hexRow(rankIndex)}`;
 }

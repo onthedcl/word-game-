@@ -1,7 +1,7 @@
 {
-  "name": "hexicon",
+  "name": "schmexicon",
   "version": "2.0.0",
-  "description": "Hexicon: a daily word puzzle on a hex board. Spelling Bee meets Boggle meets Scrabble.",
+  "description": "Schmexicon: a daily word puzzle on a hex board. Spelling Bee meets Boggle meets Scrabble.",
   "type": "module",
   "private": true,
   "scripts": {

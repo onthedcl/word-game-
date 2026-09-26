@@ -3,6 +3,13 @@ const chip = 'inline-block rounded px-1.5 text-xs font-extrabold';
 export function Rules() {
   return (
     <div>
+      <img
+        src={`${import.meta.env.BASE_URL}schmexicon.jpg`}
+        alt="Schmexicon: letter tiles spelling SCHMEXICON on a wooden game board"
+        width={1408}
+        height={768}
+        className="mb-4 aspect-[1408/768] w-full rounded-xl object-cover"
+      />
       <ul className="list-disc space-y-2 pl-5">
         <li>Make words of <b>4+ letters</b> by linking <b>adjacent tiles</b>. Each tile once per word.</li>
         <li>Every word must pass through the gold <b>key tile</b> in the middle.</li>
