@@ -1,0 +1,88 @@
+// Builds public/dict/words.dawg (the answer dictionary as a minimized trie)
+// and public/dict/pangrams.txt (curated pangram seeds).
+//
+// Sources (downloaded at build time, not committed):
+//   - ENABLE word list (public domain) — the base of valid English words.
+//   - FrequencyWords en_50k (hermitdave, MIT/CC-BY-SA) — used to drop obscure
+//     words so the answer list feels fair, Spelling Bee style.
+//   - LDNOOBW English list — offensive words are removed.
+//
+// Usage: node scripts/build-dictionary.mjs
+import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SOURCES = {
+  enable: 'https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt',
+  freq: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt',
+  bad: 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en',
+};
+const FREQ_LIMIT = 50000;   // words accepted as answers
+const PANGRAM_LIMIT = 25000; // pangram seeds come from the more common words
+const MIN_LEN = 4;
+const MAX_PANGRAM_LEN = 10;
+
+async function fetchLines(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${res.status} fetching ${url}`);
+  return (await res.text()).split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean);
+}
+
+const [enable, freq, bad] = await Promise.all(Object.values(SOURCES).map(fetchLines));
+const enableSet = new Set(enable);
+const badSet = new Set(bad);
+const distinct = (w) => new Set(w).size;
+
+const words = new Set();
+const pangrams = new Set();
+freq.slice(0, FREQ_LIMIT).forEach((line, rank) => {
+  const w = line.split(' ')[0];
+  if (!/^[a-z]+$/.test(w) || w.length < MIN_LEN) return;
+  if (!enableSet.has(w) || badSet.has(w) || distinct(w) > 7) return;
+  words.add(w);
+  if (rank < PANGRAM_LIMIT && distinct(w) === 7 && w.length <= MAX_PANGRAM_LEN) pangrams.add(w);
+});
+
+// ---- DAWG ------------------------------------------------------------------
+// Build a trie, merge identical subtrees bottom-up, then serialize.
+// Format: header line, then one line per node (root first):
+//   optional "!" (node ends a word) followed by comma-separated edges
+//   "<letter><child index in base 36>".
+function buildDawg(list) {
+  const root = { end: false, kids: new Map() };
+  for (const w of list) {
+    let n = root;
+    for (const ch of w) {
+      if (!n.kids.has(ch)) n.kids.set(ch, { end: false, kids: new Map() });
+      n = n.kids.get(ch);
+    }
+    n.end = true;
+  }
+  const registry = new Map();
+  const canon = (n) => {
+    for (const [ch, kid] of n.kids) n.kids.set(ch, canon(kid));
+    const sig = (n.end ? '!' : '') + [...n.kids].map(([ch, k]) => ch + k.id).join(',');
+    if (!registry.has(sig)) registry.set(sig, Object.assign(n, { id: registry.size }));
+    return registry.get(sig);
+  };
+  const top = canon(root);
+  const order = [];
+  const index = new Map();
+  const visit = (n) => {
+    if (index.has(n)) return;
+    index.set(n, order.length);
+    order.push(n);
+    for (const kid of n.kids.values()) visit(kid);
+  };
+  visit(top);
+  const lines = order.map((n) =>
+    (n.end ? '!' : '') + [...n.kids].map(([ch, k]) => ch + index.get(k).toString(36)).join(','));
+  return { text: `HEXDAWG1 ${order.length} ${list.length}\n${lines.join('\n')}\n`, nodes: order.length };
+}
+
+const sorted = (s) => [...s].sort();
+const dawg = buildDawg(sorted(words));
+writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
+writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
+console.log(`words: ${words.size} (${dawg.nodes} DAWG nodes, ${dawg.text.length} bytes), pangram seeds: ${pangrams.size}`);

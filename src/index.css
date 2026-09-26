@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #fbf8f1;
+  --surface: #ffffff;
+  --ink: #1d1b16;
+  --muted: #6f6a5f;
+  --line: #e4ded0;
+  --tile: #efe9dc;
+  --key: #f5c33b;
+  --key-ink: #1d1b16;
+  --dl: #bfe0f2;
+  --tl: #3d8fcf;
+  --dw: #f4b6c2;
+  --accent: #d9901a;
+  --trace: rgb(217 144 26 / 0.55);
+  --good: #2f8f5b;
+  --bad: #c2413b;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16150f;
+    --surface: #211f18;
+    --ink: #f2eee3;
+    --muted: #a29c8d;
+    --line: #353127;
+    --tile: #312d23;
+    --key: #e8b52c;
+    --dl: #2d5670;
+    --tl: #3b82c4;
+    --dw: #8a3e52;
+    --trace: rgb(245 195 59 / 0.55);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-tile: var(--tile);
+  --color-key: var(--key);
+  --color-key-ink: var(--key-ink);
+  --color-dl: var(--dl);
+  --color-tl: var(--tl);
+  --color-dw: var(--dw);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+}
+
+@theme {
+  --animate-shake: shake 0.32s ease-in-out;
+  --animate-pop: pop 0.25s ease-out;
+  --animate-banner: banner 1.9s ease-in-out forwards;
+  --animate-fresh: fresh 1.2s ease;
+  --animate-blink: blink 1s steps(1) infinite;
+
+  @keyframes shake {
+    20% { transform: translateX(-7px); }
+    40% { transform: translateX(7px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+  }
+  @keyframes pop {
+    from { transform: translate(-50%, 4px) scale(0.9); opacity: 0; }
+    to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+  }
+  @keyframes banner {
+    0% { transform: scale(0.4) rotate(-6deg); opacity: 0; }
+    15% { transform: scale(1.12) rotate(2deg); opacity: 1; }
+    25% { transform: scale(1) rotate(0); }
+    80% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.1); opacity: 0; }
+  }
+  @keyframes fresh {
+    from { background-color: var(--key); }
+    to { background-color: transparent; }
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button { cursor: pointer; }
+
+/* SVG board tiles */
+.tile polygon { fill: var(--tile); stroke: var(--bg); stroke-width: 2; transition: fill .12s; }
+.tile text { pointer-events: none; text-anchor: middle; dominant-baseline: central; fill: var(--ink); }
+.tile .letter { font-size: 34px; font-weight: 750; }
+.tile .value { font-size: 12px; font-weight: 600; opacity: .7; }
+.tile .badge { font-size: 10px; font-weight: 800; letter-spacing: .08em; opacity: .85; }
+.tile.prem-DL polygon { fill: var(--dl); }
+.tile.prem-TL polygon { fill: var(--tl); }
+.tile.prem-TL text { fill: #fff; }
+.tile.prem-DW polygon { fill: var(--dw); }
+.tile.key polygon { fill: var(--key); }
+.tile.key text { fill: var(--key-ink); }
+.tile.selected polygon { stroke: var(--accent); stroke-width: 5; }
+.tile.flash polygon { stroke: var(--good); stroke-width: 5; }
+.trace { fill: none; stroke: var(--trace); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.trace.flash-line { stroke: var(--good); opacity: .55; }
