@@ -17,6 +17,15 @@ export interface Board {
   you: BoardRow | null;
 }
 
+/** The server answered with an error (as opposed to being unreachable). */
+export class ApiRejected extends Error {}
+
+/** Same rules the server applies, so names can be checked while offline. */
+export function looksLikeName(raw: string): boolean {
+  const name = raw.normalize('NFKC').replace(/\s+/g, ' ').trim();
+  return name.length >= 2 && name.length <= 16 && /^[\p{L}\p{N} _.'-]+$/u.test(name);
+}
+
 async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -28,7 +37,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
       signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+    if (!res.ok) throw new ApiRejected((data as { error?: string }).error ?? `Request failed (${res.status})`);
     return data as T;
   } finally {
     clearTimeout(timer);

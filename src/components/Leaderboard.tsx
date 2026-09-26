@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, type Board } from '../api';
 
+const LIVE_REFRESH_MS = 5000;
+
 type Tab = 'daily' | 'blitz';
 
 interface Props {
@@ -58,16 +60,29 @@ export function Leaderboard({ dateKey, playerId, name, onName, initialTab }: Pro
   const [editing, setEditing] = useState(!name);
   const [reload, setReload] = useState(0);
 
+  // Live: refetch every few seconds while open, keeping the current list on screen.
   useEffect(() => {
     let live = true;
+    let timer: ReturnType<typeof setTimeout>;
     setBoard(null);
     setError('');
-    (tab === 'daily' ? api.daily(dateKey, playerId) : api.blitz(playerId)).then(
-      (b) => live && setBoard(b),
-      (e: Error) => live && setError(e.message),
-    );
+    const load = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const b = await (tab === 'daily' ? api.daily(dateKey, playerId) : api.blitz(playerId));
+          if (!live) return;
+          setBoard(b);
+          setError('');
+        } catch (e) {
+          if (live) setError((e as Error).message);
+        }
+      }
+      if (live) timer = setTimeout(load, LIVE_REFRESH_MS);
+    };
+    load();
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   }, [tab, dateKey, playerId, reload]);
 
@@ -110,7 +125,13 @@ export function Leaderboard({ dateKey, playerId, name, onName, initialTab }: Pro
         {tabBtn('blitz', 'Blitz best')}
       </div>
 
-      {error ? (
+      {board && (
+        <p className="-mt-1 mb-2 flex items-center gap-1.5 text-xs text-muted">
+          <span className={`inline-block size-2 rounded-full ${error ? 'bg-bad' : 'animate-pulse bg-good'}`} />
+          {error ? 'Reconnecting…' : 'Live'}
+        </p>
+      )}
+      {error && !board ? (
         <p className="py-6 text-center text-sm text-muted">
           Couldn't reach the leaderboard. {error}{' '}
           <button type="button" className="underline" onClick={() => setReload((r) => r + 1)}>Retry</button>

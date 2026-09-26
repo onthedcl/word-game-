@@ -46,7 +46,9 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 ## Leaderboards
 
-Tap the trophy to pick a name and see **Today's puzzle** and **Blitz best** rankings. Everyone else's view updates as they play.
+New players get a welcome screen that asks for a leaderboard name (they can skip it and add one later from the trophy). The trophy shows **Today's puzzle** and **Blitz best** rankings.
+
+- **Live:** an open leaderboard refreshes every 5 seconds. While you play, a badge next to your rank (e.g. 🏆 #3 of 12) updates after each word and every 15 seconds.
 
 - A small API runs on Netlify Functions (`netlify/functions/api.mts`, logic in `server/`) and stores entries in Netlify Blobs. The game on GitHub Pages calls it at `https://dpiyf-lettertown.netlify.app/api/*`. Set `VITE_API_BASE` to point somewhere else.
 - **Scores can't be faked.** The client only sends the words it found. The server rebuilds the same puzzle from its seed, throws out anything that isn't an answer, and computes the score itself.

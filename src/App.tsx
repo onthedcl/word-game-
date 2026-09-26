@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api } from './api';
+import { api, ApiRejected, looksLikeName } from './api';
+import { Welcome } from './components/Welcome';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
@@ -19,7 +20,7 @@ import type { Puzzle } from './engine/generator';
 
 const BLITZ_SECONDS = 180;
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
+type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
 type Posted = { status: 'pending' } | { status: 'done'; text: string } | { status: 'error'; text: string };
 type Blitz =
   | { phase: 'intro' }
@@ -72,15 +73,26 @@ function usePuzzle(dateKey: string | null) {
 
 export default function App() {
   const [mode, setMode] = useState<Mode>(() => (location.hash === '#blitz' ? 'blitz' : 'daily'));
-  const [dialog, setDialog] = useState<Dialog>(() => (readStored('hexicon:seen-rules', false) ? null : 'rules'));
+  // First visit (or anyone who hasn't picked a name yet): ask for a leaderboard name.
+  const [dialog, setDialog] = useState<Dialog>(() =>
+    !readStored(NAME_KEY, '') && !readStored('hexicon:asked-name', false)
+      ? 'welcome'
+      : readStored('hexicon:seen-rules', false) ? null : 'rules',
+  );
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
   const [name, setName] = useStoredState<string>(NAME_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
-      const res = await api.saveName(me, n);
-      setName(res.name);
+      if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');
+      try {
+        setName((await api.saveName(me, n)).name);
+      } catch (err) {
+        // The server said no (e.g. a blocked word): show why. If it's just unreachable, keep the name for later.
+        if (err instanceof ApiRejected) throw err;
+        setName(n.trim());
+      }
     },
     [me, setName],
   );
@@ -90,6 +102,25 @@ export default function App() {
   const [dailyFound, setDailyFound] = useStoredState<{ found: string[] }>(dailyKey(dateKey), { found: [] });
   const isToday = dateKey === dateKeyFor();
 
+  // Live standing on today's leaderboard, shown next to your rank.
+  const [standing, setStanding] = useState<{ position: number; total: number } | null>(null);
+  const noteStanding = useCallback((b: { total: number; you: { position: number } | null }) => {
+    setStanding(b.you ? { position: b.you.position, total: b.total } : null);
+  }, []);
+  useEffect(() => {
+    if (!name || !isToday) return;
+    let live = true;
+    const poll = () =>
+      document.visibilityState === 'visible' &&
+      api.daily(dateKey, me).then((b) => live && noteStanding(b), () => {});
+    poll();
+    const t = setInterval(poll, 15000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [name, isToday, dateKey, me, noteStanding]);
+
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
   useEffect(() => {
@@ -98,12 +129,15 @@ export default function App() {
     if (!name || !isToday || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
       api.submitDaily({ playerId: me, name, date: dateKey, words: found }).then(
-        () => (posted.current = key),
+        (b) => {
+          posted.current = key;
+          noteStanding(b);
+        },
         () => {},
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [dailyFound.found, name, isToday, me, dateKey]);
+  }, [dailyFound.found, name, isToday, me, dateKey, noteStanding]);
 
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
@@ -196,6 +230,10 @@ export default function App() {
 
   function closeDialog() {
     if (dialog === 'rules') writeStored('hexicon:seen-rules', true);
+    if (dialog === 'welcome') {
+      writeStored('hexicon:asked-name', true);
+      writeStored('hexicon:seen-rules', true);
+    }
     setDialog(null);
   }
 
@@ -262,6 +300,18 @@ export default function App() {
               found={dailyFound.found}
               onFound={(w) => setDailyFound((s) => ({ found: [...s.found, w] }))}
               keyboard={dialog === null}
+              statusExtra={
+                standing && (
+                  <button
+                    type="button"
+                    onClick={() => setDialog('leaderboard')}
+                    className="rounded-full bg-key/25 px-2.5 py-0.5 text-sm font-bold tabular-nums"
+                    aria-label={`You are number ${standing.position} of ${standing.total} today. Open leaderboard`}
+                  >
+                    🏆 #{standing.position} <span className="font-normal text-muted">of {standing.total}</span>
+                  </button>
+                )
+              }
             />
           ) : (
             <p className="py-24 text-center text-muted">{daily?.error ? `Could not load the puzzle: ${daily.error}` : "Building today's board…"}</p>
@@ -316,6 +366,20 @@ export default function App() {
             }
           }}
           initialTab={mode}
+        />
+      </Modal>
+
+      <Modal open={dialog === 'welcome'} title="Welcome to DPIYF Lettertown" onClose={closeDialog}>
+        <Welcome
+          onSave={async (n) => {
+            await saveName(n);
+            closeDialog();
+          }}
+          onSkip={closeDialog}
+          onRules={() => {
+            writeStored('hexicon:asked-name', true);
+            setDialog('rules');
+          }}
         />
       </Modal>
 
