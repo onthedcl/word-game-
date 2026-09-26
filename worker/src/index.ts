@@ -21,7 +21,14 @@ interface Env {
    * and Cloudflare Workers share IPs, so anonymous pushes from here are refused with 429.
    */
   NTFY_TOKEN?: string;
+  /**
+   * GitHub token allowed to trigger this repo's workflows (a Worker secret). When set,
+   * pings go through GitHub Actions (.github/workflows/notify.yml), whose servers ntfy accepts.
+   */
+  GH_NOTIFY_TOKEN?: string;
 }
+
+const NOTIFY_REPO = 'onthedcl/word-game-';
 
 const MISSING_RETRY_MS = 10 * 60 * 1000;
 
@@ -31,6 +38,7 @@ interface NotifyStatus {
   lastStatus?: number;
   lastError?: string;
   lastAt?: string;
+  via?: 'github' | 'ntfy';
 }
 /** Set by the Worker (never trusted from the client): Cloudflare's rough location for the player. */
 const PLACE_HEADER = 'X-Lettertown-Place';
@@ -74,20 +82,35 @@ export class Leaderboard extends DurableObject<Env> {
   private async sendNotification({ title, message, tags }: { title: string; message: string; tags?: string[] }) {
     const status = ((await this.ctx.storage.get('notify-status')) as NotifyStatus | undefined) ?? { sent: 0, failed: 0 };
     try {
-      const res = await fetch('https://ntfy.sh/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.env.NTFY_TOKEN ? { Authorization: `Bearer ${this.env.NTFY_TOKEN}` } : {}),
-        },
-        body: JSON.stringify({ topic: this.env.NTFY_TOPIC, title, message, tags, click: 'https://onthedcl.github.io/word-game-/' }),
-      });
+      // ntfy.sh refuses free-plan pushes from Cloudflare's shared IPs (429), so when a
+      // GitHub token is set, ask GitHub Actions to send the ping instead.
+      const viaGitHub = !!this.env.GH_NOTIFY_TOKEN;
+      const res = viaGitHub
+        ? await fetch(`https://api.github.com/repos/${NOTIFY_REPO}/dispatches`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${this.env.GH_NOTIFY_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+              'User-Agent': 'dpiyf-lettertown-leaderboard',
+            },
+            body: JSON.stringify({ event_type: 'notify', client_payload: { title, message, tags: (tags ?? []).join(',') } }),
+          })
+        : await fetch('https://ntfy.sh/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(this.env.NTFY_TOKEN ? { Authorization: `Bearer ${this.env.NTFY_TOKEN}` } : {}),
+            },
+            body: JSON.stringify({ topic: this.env.NTFY_TOPIC, title, message, tags, click: 'https://onthedcl.github.io/word-game-/' }),
+          });
       if (res.ok) status.sent += 1;
       else {
         status.failed += 1;
-        status.lastError = `ntfy answered ${res.status}`;
+        status.lastError = `${viaGitHub ? 'GitHub' : 'ntfy'} answered ${res.status}`;
       }
       status.lastStatus = res.status;
+      status.via = viaGitHub ? 'github' : 'ntfy';
     } catch (err) {
       status.failed += 1;
       status.lastError = err instanceof Error ? err.message : String(err);
@@ -119,7 +142,12 @@ export class Leaderboard extends DurableObject<Env> {
         case 'GET /api/notify-status': {
           // Delivery health only: counts and the last error, never message contents.
           const status = (await this.ctx.storage.get('notify-status')) ?? { sent: 0, failed: 0 };
-          return json({ configured: !!this.env.NTFY_TOPIC, token: !!this.env.NTFY_TOKEN, ...(status as object) });
+          return json({
+            configured: !!this.env.NTFY_TOPIC,
+            token: !!this.env.NTFY_TOKEN,
+            github: !!this.env.GH_NOTIFY_TOKEN,
+            ...(status as object),
+          });
         }
         case 'POST /api/notify-test':
           // Only someone who knows the private topic can trigger a test ping.

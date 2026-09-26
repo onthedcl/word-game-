@@ -54,6 +54,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+      GH_NOTIFY_TOKEN: ${{ secrets.GH_NOTIFY_TOKEN }}
     steps:
       - name: Skip without a Cloudflare token
         if: env.CLOUDFLARE_API_TOKEN == ''
@@ -80,6 +81,10 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != '' && env.NTFY_TOKEN != ''
         working-directory: worker
         run: printf '%s' "$NTFY_TOKEN" | npx wrangler secret put NTFY_TOKEN
+      - name: Set the GitHub token for relaying pings
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.GH_NOTIFY_TOKEN != ''
+        working-directory: worker
+        run: printf '%s' "$GH_NOTIFY_TOKEN" | npx wrangler secret put GH_NOTIFY_TOKEN
       - name: Check the leaderboard answers the game
         if: env.CLOUDFLARE_API_TOKEN != ''
         env:

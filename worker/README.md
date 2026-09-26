@@ -31,6 +31,6 @@ The Worker can ping your phone when people play, through [ntfy](https://ntfy.sh)
 - a Blitz round finishes
 - someone finds every word of the daily
 
-ntfy.sh limits anonymous senders by IP address, and Cloudflare Workers share IP addresses, so pushes sent without logging in are refused with a 429 error. Create a free ntfy.sh account and an access token (Account → Access tokens), then save it as the repository secret `NTFY_TOKEN`. `GET /api/notify-status` shows delivery counts and the last error.
+ntfy.sh limits anonymous senders by IP address, and Cloudflare Workers share IP addresses, so pushes sent without logging in are refused with a 429 error. Create a free ntfy.sh account and an access token (Account → Access tokens), then save it as the repository secret `NTFY_TOKEN`. An ntfy login doesn't help: free accounts are still limited by IP address. The fix is to relay pings through GitHub Actions, whose servers ntfy accepts. Add a repository secret `GH_NOTIFY_TOKEN` holding a fine-grained GitHub token for this repo with **Contents: Read and write** permission. The Worker then triggers `.github/workflows/notify.yml`, which sends the ping, usually 20–40 seconds later. `GET /api/notify-status` shows delivery counts, the route used and the last error.
 
 To turn it on, add a repository secret named `NTFY_TOPIC` holding a hard-to-guess topic name, and subscribe to that same topic in the ntfy app. The next deploy passes it to the Worker as a secret. Anyone who knows the topic can read the notifications, so keep it private.
