@@ -11,6 +11,7 @@ import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { shareText } from './engine/share';
+import { useUpdateCheck } from './updates';
 import type { Puzzle } from './engine/generator';
 
 const BLITZ_SECONDS = 180;
@@ -102,6 +103,9 @@ export default function App() {
   }, [now, blitz, best, setBest]);
 
   // ---- shared ---------------------------------------------------------------
+  // Never reload out from under a Blitz round; daily progress is saved, so that's safe.
+  const { updateReady, reload } = useUpdateCheck(blitz.phase !== 'playing' && blitz.phase !== 'loading');
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 1800);
@@ -174,6 +178,16 @@ export default function App() {
 
       {notice && (
         <div role="status" className="fixed top-16 left-1/2 z-30 -translate-x-1/2 rounded-md bg-ink px-3 py-1 text-sm font-semibold text-bg">{notice}</div>
+      )}
+
+      {updateReady && (
+        <button
+          type="button"
+          onClick={reload}
+          className="mt-3 w-full rounded-lg bg-key px-3 py-2 text-sm font-semibold text-key-ink"
+        >
+          A new version of Hexicon is ready. Tap to update.
+        </button>
       )}
 
       <main className="pt-4">
