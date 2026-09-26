@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { dict, seeds } from '../src/engine/node-dict';
 import { generateBlitz, generateDaily } from '../src/engine/generator';
+import { answerTable, blitzPoolSeed } from './tables';
 import { ApiError, finishBlitz, getBlitz, getDaily, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
@@ -19,6 +20,8 @@ const puzzle = generateDaily(dict, seeds, DATE);
 const words = puzzle.answers.map((a) => a.word);
 const P1 = 'player-one-aaaaaaaaaaaa';
 const P2 = 'player-two-bbbbbbbbbbbb';
+const POOL = [blitzPoolSeed(0), blitzPoolSeed(1)];
+const boardWords = (seed: string) => generateBlitz(dict, seeds, seed).answers.map((a) => a.word);
 
 let deps: Deps & { kv: ReturnType<typeof memoryKV> };
 let clock: number;
@@ -28,9 +31,15 @@ beforeEach(() => {
   ids = 0;
   deps = {
     kv: memoryKV(),
-    loadDictionary: async () => ({ dict, seeds }),
+    answers: async (key) => {
+      const [kind, id] = key.split('/');
+      if (kind === 'daily') return id === DATE ? answerTable(puzzle) : null;
+      return POOL.includes(id) ? answerTable(generateBlitz(dict, seeds, id)) : null;
+    },
+    blitzSeeds: async () => POOL,
     now: () => clock,
-    randomId: () => `seed-${++ids}-xxxxxxxx`,
+    randomId: () => `game-${++ids}-xxxxxxxx`,
+    random: () => 0,
   };
 });
 
@@ -65,6 +74,12 @@ describe('daily leaderboard', () => {
     expect(r.you!.words).toBe(10);
   });
 
+  it('matches the scores the game itself shows', async () => {
+    const r = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words });
+    expect(r.score).toBe(puzzle.maxScore);
+    expect(r.you!.rankName).toBe('Hexmaster');
+  });
+
   it('rejects bad input and closed puzzles', async () => {
     await rejects(submitDaily(deps, { playerId: 'x', name: 'Ann', date: DATE, words }), 400);
     await rejects(submitDaily(deps, { playerId: P1, name: 'A', date: DATE, words }), 400);
@@ -75,32 +90,31 @@ describe('daily leaderboard', () => {
 
 describe('blitz leaderboard', () => {
   it('scores a finished game against the server-issued board', async () => {
-    const { seed } = await startBlitz(deps, { playerId: P1 });
-    const board = generateBlitz(dict, seeds, seed).answers.map((a) => a.word);
+    const { game, seed } = await startBlitz(deps, { playerId: P1 });
+    expect(POOL).toContain(seed);
     clock += 170_000;
-    const r = await finishBlitz(deps, { playerId: P1, name: 'Ann', seed, words: board.slice(0, 4) });
+    const r = await finishBlitz(deps, { playerId: P1, name: 'Ann', game, words: boardWords(seed).slice(0, 4) });
     expect(r.score).toBeGreaterThan(0);
     expect(r.personalBest).toBe(true);
     expect((await getBlitz(deps, P1)).you).toMatchObject({ name: 'Ann', position: 1 });
   });
 
   it('rejects late, repeated or someone else’s submissions', async () => {
-    const { seed } = await startBlitz(deps, { playerId: P1 });
-    await rejects(finishBlitz(deps, { playerId: P2, name: 'Bo', seed, words: [] }), 404);
+    const { game } = await startBlitz(deps, { playerId: P1 });
+    await rejects(finishBlitz(deps, { playerId: P2, name: 'Bo', game, words: [] }), 404);
     clock += 10 * 60_000;
-    await rejects(finishBlitz(deps, { playerId: P1, name: 'Ann', seed, words: [] }), 410);
+    await rejects(finishBlitz(deps, { playerId: P1, name: 'Ann', game, words: [] }), 410);
 
     const again = await startBlitz(deps, { playerId: P1 });
-    await finishBlitz(deps, { playerId: P1, name: 'Ann', seed: again.seed, words: [] });
-    await rejects(finishBlitz(deps, { playerId: P1, name: 'Ann', seed: again.seed, words: [] }), 409);
+    await finishBlitz(deps, { playerId: P1, name: 'Ann', game: again.game, words: [] });
+    await rejects(finishBlitz(deps, { playerId: P1, name: 'Ann', game: again.game, words: [] }), 409);
   });
 
   it('keeps each player’s best score', async () => {
     const g1 = await startBlitz(deps, { playerId: P1 });
-    const w1 = generateBlitz(dict, seeds, g1.seed).answers.map((a) => a.word);
-    await finishBlitz(deps, { playerId: P1, name: 'Ann', seed: g1.seed, words: w1.slice(0, 6) });
+    await finishBlitz(deps, { playerId: P1, name: 'Ann', game: g1.game, words: boardWords(g1.seed).slice(0, 6) });
     const g2 = await startBlitz(deps, { playerId: P1 });
-    const r = await finishBlitz(deps, { playerId: P1, name: 'Ann', seed: g2.seed, words: [] });
+    const r = await finishBlitz(deps, { playerId: P1, name: 'Ann', game: g2.game, words: [] });
     expect(r.personalBest).toBe(false);
     expect(r.total).toBe(1);
     expect(r.you!.score).toBeGreaterThan(0);

@@ -46,18 +46,17 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 ## Leaderboards
 
-The GitHub Pages build points at `https://dpiyf-lettertown.netlify.app` (`VITE_API_BASE` in the deploy workflow). The Netlify project builds the API from this repo. The trophy button, name prompt and rank badge appear only when that server answers, so the game works either way.
+The GitHub Pages build points at the leaderboard Worker (`VITE_API_BASE` in the deploy workflow). The trophy button, name prompt and rank badge appear only when that server answers, so the game works either way.
 
 New players get a welcome screen that asks for a leaderboard name (they can skip it and add one later from the trophy). The trophy shows **Today's puzzle** and **Blitz best** rankings.
 
 - **Live:** an open leaderboard refreshes every 5 seconds. While you play, a badge next to your rank (e.g. 🏆 #3 of 12) updates after each word and every 15 seconds.
 
-- A small API runs on Netlify Functions (`netlify/functions/api.mts`, logic in `server/`) and stores entries in Netlify Blobs. The game on GitHub Pages calls it at `https://dpiyf-lettertown.netlify.app/api/*`. Set `VITE_API_BASE` to point somewhere else.
-- **Scores can't be faked.** The client only sends the words it found. The server rebuilds the same puzzle from its seed, throws out anything that isn't an answer, and computes the score itself.
+- A small API runs as a Cloudflare Worker with a Durable Object (`worker/`, logic in `server/`), the same setup as the Streets of Fury relay. The game calls it at `https://word-game-leaderboard.danlagstein.workers.dev`. See `worker/README.md` to deploy it.
+- **Scores can't be faked.** The client only sends the words it found. The server looks them up in the puzzle's answer table (the build publishes these to `/scores/`), throws out anything that isn't an answer, and computes the score itself.
 - **Daily:** progress posts a moment after each new word. Only today's puzzle (±1 day for time zones) is accepted, and a saved score never goes down.
-- **Blitz:** ranked rounds use a board the server hands out. Results must come back within 3 minutes plus a short grace period, and only once per round. The board keeps each player's best score.
+- **Blitz:** ranked rounds use a board the server picks from a pre-built pool of 365. Results must come back within 3 minutes plus a short grace period, and only once per round. The board keeps each player's best score.
 - Players are anonymous: a random id kept in the browser, plus a display name of 2–16 characters, checked against a profanity list.
-- Preview and branch deploys write to separate stores, so testing never touches the real leaderboards.
 
 ## How boards are made
 
@@ -95,4 +94,4 @@ Generation takes about 50 ms per board on average.
 
 **Firebase Hosting:** `firebase.json` serves `dist/`. Run `npx firebase-tools login` once, then `npm run deploy:firebase -- --project <your-project-id>`.
 
-**Netlify:** `netlify.toml` is included, so connect the repo and it builds automatically.
+**Leaderboard:** a Cloudflare Worker. See `worker/README.md`.

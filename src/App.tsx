@@ -30,8 +30,8 @@ type Blitz =
       puzzle: Puzzle;
       found: string[];
       endsAt: number;
-      /** Server-issued seed when the round counts for the leaderboard. */
-      rankedSeed: string | null;
+      /** Server-issued game id when the round counts for the leaderboard. */
+      rankedGame: string | null;
       newBest?: boolean;
       posted?: Posted;
     };
@@ -159,19 +159,19 @@ export default function App() {
   const startBlitz = useCallback(async () => {
     setBlitz({ phase: 'loading' });
     // Ranked rounds use a board the server hands out, so it can check the result.
-    let rankedSeed: string | null = null;
+    let ranked: { game: string; seed: string } | null = null;
     if (online && name) {
       try {
-        rankedSeed = (await api.startBlitz(me)).seed;
+        ranked = await api.startBlitz(me);
       } catch {
         setNotice('Leaderboard offline: this round won’t be ranked');
       }
     }
-    const seed = rankedSeed ?? `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+    const seed = ranked?.seed ?? `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
     try {
       const puzzle = await requestPuzzle({ type: 'blitz', seed });
       setNow(Date.now());
-      setBlitz({ phase: 'playing', puzzle, found: [], endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedSeed });
+      setBlitz({ phase: 'playing', puzzle, found: [], endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedGame: ranked?.game ?? null });
     } catch {
       setBlitz({ phase: 'intro' });
       setNotice('Could not build a board');
@@ -188,13 +188,13 @@ export default function App() {
     if (blitz.phase === 'playing' && now >= blitz.endsAt) {
       const score = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found).score;
       if (score > best) setBest(score);
-      const ranked = blitz.rankedSeed && name;
+      const ranked = blitz.rankedGame && name;
       setBlitz({ ...blitz, phase: 'over', newBest: score > best, posted: ranked ? { status: 'pending' } : undefined });
       setDialog('blitz-over');
       if (ranked) {
         const update = (p: Posted) =>
-          setBlitz((b) => (b.phase === 'over' && b.rankedSeed === blitz.rankedSeed ? { ...b, posted: p } : b));
-        api.finishBlitz({ playerId: me, name, seed: blitz.rankedSeed!, words: blitz.found }).then(
+          setBlitz((b) => (b.phase === 'over' && b.rankedGame === blitz.rankedGame ? { ...b, posted: p } : b));
+        api.finishBlitz({ playerId: me, name, game: blitz.rankedGame!, words: blitz.found }).then(
           (r) =>
             update({
               status: 'done',

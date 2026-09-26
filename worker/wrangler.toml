@@ -1,0 +1,21 @@
+# DPIYF Lettertown leaderboard: a Cloudflare Worker + Durable Object
+# (same setup as the Streets of Fury relay).
+name = "word-game-leaderboard"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Where the build publishes the answer tables the server scores against.
+SCORES_BASE = "https://onthedcl.github.io/word-game-/scores"
+# Sites allowed to call the API (comma-separated).
+ALLOWED_ORIGINS = "https://onthedcl.github.io"
+
+# All leaderboard data lives in one Durable Object. Declaring it as a
+# SQLite-backed class keeps it eligible for the Workers Free plan.
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Leaderboard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Leaderboard"]

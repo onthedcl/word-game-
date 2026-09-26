@@ -1,10 +1,9 @@
-// Leaderboard rules. Scores are never trusted from the client: the server
-// rebuilds the same puzzle from its seed and scores the submitted words itself.
-import { generateBlitz, generateDaily, type Puzzle } from '../src/engine/generator';
-import { answerIndex, progress } from '../src/engine/game';
+// Leaderboard rules. Scores are never trusted from the client: the server looks
+// up the puzzle's answer table and scores the submitted words itself.
+import { rankFor } from '../src/engine/scoring';
 import { EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
-import type { Dawg } from '../src/engine/dawg';
 import { cleanName } from './names';
+import type { AnswerTable } from './tables';
 
 export const BLITZ_SECONDS = 180;
 const BLITZ_GRACE_SECONDS = 20; // network latency and slow phones
@@ -19,9 +18,13 @@ export interface KV {
 
 export interface Deps {
   kv: KV;
-  loadDictionary(): Promise<{ dict: Dawg; seeds: string[] }>;
+  /** Answer table for `daily/<date>` or `blitz/<seed>`, or null if there isn't one. */
+  answers(key: string): Promise<AnswerTable | null>;
+  /** Seeds of the pre-built Blitz boards the server hands out. */
+  blitzSeeds(): Promise<string[]>;
   now(): number;
   randomId(): string;
+  random(): number;
 }
 
 export interface Entry {
@@ -57,11 +60,24 @@ function wordsOf(value: unknown): string[] {
   return [...new Set(value.filter((w): w is string => typeof w === 'string').map((w) => w.toLowerCase()))];
 }
 
-function score(puzzle: Puzzle, submitted: string[], name: string, now: number): Entry {
-  const answers = answerIndex(puzzle);
-  const valid = submitted.filter((w) => answers.has(w));
-  const p = progress(puzzle, answers, valid);
-  return { name, score: p.score, words: valid.length, pangrams: p.pangramsFound, rankName: p.rank.name, updatedAt: now };
+function score(table: AnswerTable, submitted: string[], name: string, now: number): Entry {
+  let total = 0;
+  let words = 0;
+  let pangrams = 0;
+  for (const w of submitted) {
+    const hit = Object.hasOwn(table.words, w) ? table.words[w] : undefined;
+    if (!hit) continue;
+    total += hit[0];
+    words += 1;
+    pangrams += hit[1];
+  }
+  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore).name, updatedAt: now };
+}
+
+async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
+  const table = await deps.answers(key);
+  if (!table) throw new ApiError(404, 'Unknown puzzle');
+  return table;
 }
 
 /** Today's date could be yesterday or tomorrow somewhere, so allow one day either side of UTC. */
@@ -86,27 +102,13 @@ async function readBoard(kv: KV, prefix: string, playerId: string | null) {
   return { total: rows.length, top: all.slice(0, TOP_N), you: all.find((r) => r.you) ?? null };
 }
 
-// Puzzles are deterministic, so they can be cached for the life of the function instance.
-const puzzleCache = new Map<string, Puzzle>();
-async function puzzleFor(deps: Deps, key: string, make: (dict: Dawg, seeds: string[]) => Puzzle) {
-  let p = puzzleCache.get(key);
-  if (!p) {
-    const { dict, seeds } = await deps.loadDictionary();
-    p = make(dict, seeds);
-    if (puzzleCache.size > 50) puzzleCache.clear();
-    puzzleCache.set(key, p);
-  }
-  return p;
-}
-
 // ---- daily --------------------------------------------------------------------
 
 export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = nameOf(body.name);
   const date = checkDailyDate(body.date, deps.now());
-  const puzzle = await puzzleFor(deps, `daily:${date}`, (d, s) => generateDaily(d, s, date));
-  const entry = score(puzzle, wordsOf(body.words), name, deps.now());
+  const entry = score(await tableFor(deps, `daily/${date}`), wordsOf(body.words), name, deps.now());
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
@@ -127,31 +129,33 @@ export async function getDaily(deps: Deps, date: string | null, playerId: string
 
 interface BlitzGame {
   playerId: string;
+  seed: string;
   startedAt: number;
   finished: boolean;
 }
 
 export async function startBlitz(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
-  const seed = deps.randomId();
-  const game: BlitzGame = { playerId, startedAt: deps.now(), finished: false };
-  await deps.kv.setJSON(`blitz-games/${seed}`, game);
-  return { seed, seconds: BLITZ_SECONDS };
+  const pool = await deps.blitzSeeds();
+  if (!pool.length) throw new ApiError(503, 'No Blitz boards available');
+  const seed = pool[Math.floor(deps.random() * pool.length)];
+  const game = deps.randomId();
+  await deps.kv.setJSON(`blitz-games/${game}`, { playerId, seed, startedAt: deps.now(), finished: false } satisfies BlitzGame);
+  return { game, seed, seconds: BLITZ_SECONDS };
 }
 
 export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = nameOf(body.name);
-  if (typeof body.seed !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(body.seed)) throw new ApiError(400, 'Bad game');
-  const seed = body.seed;
-  const game = (await deps.kv.get(`blitz-games/${seed}`, { type: 'json' })) as BlitzGame | null;
+  if (typeof body.game !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(body.game)) throw new ApiError(400, 'Bad game');
+  const id = body.game;
+  const game = (await deps.kv.get(`blitz-games/${id}`, { type: 'json' })) as BlitzGame | null;
   if (!game || game.playerId !== playerId) throw new ApiError(404, 'Unknown game');
   if (game.finished) throw new ApiError(409, 'Game already submitted');
   if (deps.now() - game.startedAt > (BLITZ_SECONDS + BLITZ_GRACE_SECONDS) * 1000) throw new ApiError(410, 'Too late to submit');
-  await deps.kv.setJSON(`blitz-games/${seed}`, { ...game, finished: true });
+  await deps.kv.setJSON(`blitz-games/${id}`, { ...game, finished: true });
 
-  const puzzle = await puzzleFor(deps, `blitz:${seed}`, (d, s) => generateBlitz(d, s, seed));
-  const entry = score(puzzle, wordsOf(body.words), name, deps.now());
+  const entry = score(await tableFor(deps, `blitz/${game.seed}`), wordsOf(body.words), name, deps.now());
   const key = `blitz-best/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
   const best = !prev || entry.score > prev.score;

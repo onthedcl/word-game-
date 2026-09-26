@@ -1,5 +1,5 @@
-// Leaderboard API client (Netlify Functions; see netlify/functions/api.mts).
-// Off by default: build with VITE_API_BASE=https://your-site.netlify.app to turn the leaderboard on.
+// Leaderboard API client (Cloudflare Worker; see worker/src/index.ts).
+// Off unless the build sets VITE_API_BASE (the deploy workflow does).
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 
 export interface BoardRow {
@@ -66,7 +66,7 @@ export const api = {
     call<Board & { score: number }>('POST', '/api/daily', b),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string }>('POST', '/api/name', { playerId, name }),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
-  startBlitz: (playerId: string) => call<{ seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
-  finishBlitz: (b: { playerId: string; name: string; seed: string; words: string[] }) =>
+  startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
+  finishBlitz: (b: { playerId: string; name: string; game: string; words: string[] }) =>
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
 };
