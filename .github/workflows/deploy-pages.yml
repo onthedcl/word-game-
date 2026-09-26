@@ -68,3 +68,22 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx wrangler deploy
+      - name: Check the leaderboard answers the game
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        env:
+          API: https://word-game-leaderboard.danlagstein.workers.dev
+          GAME: https://onthedcl.github.io
+          SCORES: https://onthedcl.github.io/${{ github.event.repository.name }}/scores
+        run: |
+          set -e
+          today=$(date -u +%F)
+          curl -fsS "$API/" | grep -q "leaderboard is running"
+          # Read-only API calls, with the game's origin so CORS is checked too.
+          curl -fsS -D headers.txt -H "Origin: $GAME" "$API/api/daily?date=$today&player=ci-check" -o daily.json
+          grep -qi "access-control-allow-origin: $GAME" headers.txt
+          grep -q '"total"' daily.json
+          curl -fsS -H "Origin: $GAME" "$API/api/blitz?player=ci-check" | grep -q '"total"'
+          # The answer tables the Worker scores against must be published.
+          curl -fsS "$SCORES/daily/$today.json" | grep -q maxScore
+          curl -fsS "$SCORES/blitz-pool.json" | grep -q pool-
+          echo "Leaderboard OK: $(cat daily.json)"
