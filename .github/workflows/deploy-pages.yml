@@ -84,16 +84,23 @@ jobs:
         run: |
           set -e
           today=$(date -u +%F)
+          # Today's board id, e.g. 2026-09-26~v1 if the day was rerolled (see src/engine/rerolls.ts).
+          v=$(grep -oE "'$today': [0-9]+" src/engine/rerolls.ts | grep -oE '[0-9]+$' || true)
+          board=$today${v:+~v$v}
           curl -fsS "$API/" | grep -q "leaderboard is running"
           # Read-only API calls, with the game's origin so CORS is checked too.
-          curl -fsS -D headers.txt -H "Origin: $GAME" "$API/api/daily?date=$today&player=ci-check" -o daily.json
+          curl -fsS -D headers.txt -H "Origin: $GAME" "$API/api/daily?date=$board&player=ci-check" -o daily.json
           grep -qi "access-control-allow-origin: $GAME" headers.txt
           grep -q '"total"' daily.json
           curl -fsS -H "Origin: $GAME" "$API/api/blitz?player=ci-check" | grep -q '"total"'
-          # The answer tables the Worker scores against must be published.
-          curl -fsS "$SCORES/daily/$today.json" | grep -q maxScore
+          # The answer tables the Worker scores against must be published (GitHub Pages can take a minute).
+          for i in $(seq 1 20); do
+            curl -fsS "$SCORES/daily/$board.json" 2>/dev/null | grep -q maxScore && break
+            [ "$i" = 20 ] && { echo "No answer table for $board"; exit 1; }
+            sleep 15
+          done
           curl -fsS "$SCORES/blitz-pool.json" | grep -q pool-
-          echo "Leaderboard OK: $(cat daily.json)"
+          echo "Leaderboard OK for $board: $(cat daily.json)"
       - name: Send a test notification (manual runs only)
         if: github.event_name == 'workflow_dispatch' && env.NTFY_TOPIC != ''
         run: |
