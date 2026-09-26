@@ -10,6 +10,7 @@ interface Props {
   board: BoardData;
   path: readonly number[];
   flashPath: readonly number[] | null;
+  pulse?: { id: number; ids: readonly number[]; kind: 'good' | 'bad' } | null;
   shakeKey: number;
   disabled?: boolean;
   /** Pointer pressed on a tile. */
@@ -19,12 +20,12 @@ interface Props {
   onRelease(): void;
 }
 
-const Tile = memo(function Tile({ id, letter, premium, selected, flash }: {
-  id: number; letter: string; premium: keyof typeof PREMIUMS | null; selected: boolean; flash: boolean;
+const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse }: {
+  id: number; letter: string; premium: keyof typeof PREMIUMS | null; selected: boolean; flash: boolean; pulse: 'good' | 'bad' | null;
 }) {
   const { x, y } = CENTERS[id];
   const key = id === CENTER;
-  const cls = ['tile', key && 'key', premium && `prem-${premium}`, selected && 'selected', flash && 'flash']
+  const cls = ['tile', key && 'key', premium && `prem-${premium}`, selected && 'selected', flash && 'flash', pulse && `pulse-${pulse}`]
     .filter(Boolean).join(' ');
   const label = `${letter.toUpperCase()}${premium ? `, ${PREMIUMS[premium].name}` : ''}${key ? ', key tile' : ''}`;
   return (
@@ -37,7 +38,7 @@ const Tile = memo(function Tile({ id, letter, premium, selected, flash }: {
   );
 });
 
-export function Board({ board, path, flashPath, shakeKey, disabled, onPress, onDrag, onRelease }: Props) {
+export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPress, onDrag, onRelease }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const dragging = useRef(false);
   const selected = useMemo(() => new Set(path), [path]);
@@ -89,7 +90,9 @@ export function Board({ board, path, flashPath, shakeKey, disabled, onPress, onD
       <g>
         {TILES.map(({ id }) => (
           <Tile
-            key={id}
+            // Re-key pulsing tiles so the animation restarts on every submission.
+            key={pulse?.ids.includes(id) ? `${id}-${pulse.id}` : id}
+            pulse={pulse?.ids.includes(id) ? pulse.kind : null}
             id={id}
             letter={board.letters[id]}
             premium={board.premiums[id]}

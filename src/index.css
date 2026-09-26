@@ -109,5 +109,14 @@ button { cursor: pointer; }
 .tile.key text { fill: var(--key-ink); }
 .tile.selected polygon { stroke: var(--accent); stroke-width: 5; }
 .tile.flash polygon { stroke: var(--good); stroke-width: 5; }
+.tile.pulse-good, .tile.pulse-bad { transform-box: fill-box; transform-origin: center; }
+.tile.pulse-good { animation: tile-pop .42s ease-out; }
+.tile.pulse-good polygon { animation: tile-good .5s ease-out; }
+.tile.pulse-bad polygon { animation: tile-bad .5s ease-out; }
+@keyframes tile-pop { 40% { transform: scale(1.1); } }
+@keyframes tile-good { from { fill: var(--good); stroke: var(--good); } }
+@keyframes tile-bad { from { fill: var(--bad); stroke: var(--bad); } }
+.tile.pulse-good text, .tile.pulse-bad text { animation: tile-text .5s ease-out; }
+@keyframes tile-text { from { fill: #fff; } }
 .trace { fill: none; stroke: var(--trace); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .trace.flash-line { stroke: var(--good); opacity: .55; }

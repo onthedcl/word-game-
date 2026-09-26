@@ -35,6 +35,8 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
   const press = useRef({ moved: false, submitOnRelease: false });
 
   const [flashPath, setFlashPath] = useState<number[] | null>(null);
+  // Quick green/red flash on the tiles of the word just submitted.
+  const [pulse, setPulse] = useState<{ id: number; ids: number[]; kind: 'good' | 'bad' } | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const [banner, setBanner] = useState<{ id: number; text: string; sub: string } | null>(null);
@@ -59,6 +61,11 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     return () => clearTimeout(t);
   }, [flashPath]);
   useEffect(() => {
+    if (!pulse) return;
+    const t = setTimeout(() => setPulse(null), 500);
+    return () => clearTimeout(t);
+  }, [pulse]);
+  useEffect(() => {
     if (!banner) return;
     const t = setTimeout(() => setBanner(null), 1900);
     return () => clearTimeout(t);
@@ -71,8 +78,9 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
   function say(text: string, kind: Toast['kind']) {
     setToast({ id: Date.now(), text, kind });
   }
-  function reject(reason: string) {
+  function reject(reason: string, ids: number[] = []) {
     say(reason, 'error');
+    if (ids.length) setPulse({ id: Date.now(), ids, kind: 'bad' });
     setShakeKey((k) => k + 1);
     haptics.error();
   }
@@ -86,14 +94,16 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     const traced = !typedRef.current;
     const w = traced ? pathRef.current.map((id) => puzzle.board.letters[id]).join('') : typedRef.current;
     if (!w) return;
+    const attempted = traced ? pathRef.current : typedPath;
     const result = checkWord(puzzle, answers, foundSet, w, traced ? pathRef.current : null);
     // Every submission starts the next word fresh, right or wrong.
     clear();
-    if (!result.ok) return reject(result.reason);
+    if (!result.ok) return reject(result.reason, attempted);
     const { answer } = result;
     const before = rank.index;
     onFound(answer.word);
-    setFlashPath(answer.path);
+    setFlashPath(null);
+    setPulse({ id: Date.now(), ids: traced ? attempted : answer.path, kind: 'good' });
     setFresh(answer.word);
     const after = progress(puzzle, answers, [...found, answer.word]);
     if (after.complete && puzzle.kind === 'daily') {
@@ -121,7 +131,7 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
     } else if (p.includes(id)) setPath(p.slice(0, p.indexOf(id) + 1));
     else if (areAdjacent(last, id)) setPath([...p, id]);
     else if (p.length === 1) setPath([id]);
-    else return reject('Tiles not adjacent');
+    else return reject('Tiles not adjacent', [id]);
     haptics.tap();
   }
 
@@ -205,7 +215,7 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
             key={toast.id}
             role="status"
             className={`pointer-events-none absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-md px-3 py-1 text-sm font-semibold ${
-              toast.kind === 'good' ? 'bg-good text-white' : 'bg-ink text-bg'
+              toast.kind === 'good' ? 'bg-good text-white' : toast.kind === 'error' ? 'bg-bad text-white' : 'bg-ink text-bg'
             }`}
           >
             {toast.text}
@@ -217,6 +227,7 @@ export function PuzzleView({ puzzle, found, onFound, disabled, keyboard, statusE
             board={puzzle.board}
             path={shownPath}
             flashPath={flashPath}
+            pulse={pulse}
             shakeKey={shakeKey}
             disabled={disabled}
             onPress={onPress}
