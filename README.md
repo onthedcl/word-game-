@@ -46,6 +46,8 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 ## Leaderboards
 
+Leaderboard features (the trophy button, the name prompt and the rank badge) only appear when the leaderboard server answers. On GitHub Pages alone the game works fully, just without them.
+
 New players get a welcome screen that asks for a leaderboard name (they can skip it and add one later from the trophy). The trophy shows **Today's puzzle** and **Blitz best** rankings.
 
 - **Live:** an open leaderboard refreshes every 5 seconds. While you play, a badge next to your rank (e.g. 🏆 #3 of 12) updates after each word and every 15 seconds.

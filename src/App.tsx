@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api, ApiRejected, looksLikeName } from './api';
+import { api, ApiRejected, leaderboardOnline, looksLikeName } from './api';
 import { Welcome } from './components/Welcome';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
@@ -73,12 +73,21 @@ function usePuzzle(dateKey: string | null) {
 
 export default function App() {
   const [mode, setMode] = useState<Mode>(() => (location.hash === '#blitz' ? 'blitz' : 'daily'));
-  // First visit (or anyone who hasn't picked a name yet): ask for a leaderboard name.
-  const [dialog, setDialog] = useState<Dialog>(() =>
-    !readStored(NAME_KEY, '') && !readStored('hexicon:asked-name', false)
-      ? 'welcome'
-      : readStored('hexicon:seen-rules', false) ? null : 'rules',
-  );
+  // Leaderboard features only show up when a leaderboard server is reachable.
+  const [online, setOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    leaderboardOnline().then(setOnline);
+  }, []);
+
+  // First visit: ask for a leaderboard name (if there's a leaderboard), otherwise show the rules.
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const firstDialogShown = useRef(false);
+  useEffect(() => {
+    if (online === null || firstDialogShown.current) return;
+    firstDialogShown.current = true;
+    if (online && !readStored(NAME_KEY, '') && !readStored('hexicon:asked-name', false)) setDialog('welcome');
+    else if (!readStored('hexicon:seen-rules', false)) setDialog('rules');
+  }, [online]);
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
@@ -108,7 +117,7 @@ export default function App() {
     setStanding(b.you ? { position: b.you.position, total: b.total } : null);
   }, []);
   useEffect(() => {
-    if (!name || !isToday) return;
+    if (!online || !name || !isToday) return;
     let live = true;
     const poll = () =>
       document.visibilityState === 'visible' &&
@@ -119,14 +128,14 @@ export default function App() {
       live = false;
       clearInterval(t);
     };
-  }, [name, isToday, dateKey, me, noteStanding]);
+  }, [online, name, isToday, dateKey, me, noteStanding]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
   useEffect(() => {
     const found = dailyFound.found;
     const key = `${name}|${found.length}`;
-    if (!name || !isToday || !found.length || posted.current === key) return;
+    if (!online || !name || !isToday || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
       api.submitDaily({ playerId: me, name, date: dateKey, words: found }).then(
         (b) => {
@@ -137,7 +146,7 @@ export default function App() {
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [dailyFound.found, name, isToday, me, dateKey, noteStanding]);
+  }, [dailyFound.found, online, name, isToday, me, dateKey, noteStanding]);
 
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
@@ -151,7 +160,7 @@ export default function App() {
     setBlitz({ phase: 'loading' });
     // Ranked rounds use a board the server hands out, so it can check the result.
     let rankedSeed: string | null = null;
-    if (name) {
+    if (online && name) {
       try {
         rankedSeed = (await api.startBlitz(me)).seed;
       } catch {
@@ -167,7 +176,7 @@ export default function App() {
       setBlitz({ phase: 'intro' });
       setNotice('Could not build a board');
     }
-  }, [name, me]);
+  }, [online, name, me]);
 
   useEffect(() => {
     if (blitz.phase !== 'playing') return;
@@ -268,7 +277,9 @@ export default function App() {
             <button type="button" role="tab" aria-selected={mode === 'daily'} className={tab('daily')} onClick={() => switchMode('daily')}>Daily</button>
             <button type="button" role="tab" aria-selected={mode === 'blitz'} className={tab('blitz')} onClick={() => switchMode('blitz')}>Blitz</button>
           </div>
-          <button type="button" className={iconBtn} onClick={() => setDialog('leaderboard')} aria-label="Leaderboard"><TrophyIcon />{label('Leaders')}</button>
+          {online && (
+            <button type="button" className={iconBtn} onClick={() => setDialog('leaderboard')} aria-label="Leaderboard"><TrophyIcon />{label('Leaders')}</button>
+          )}
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
           {mode === 'daily' && (
             <button type="button" className={iconBtn} onClick={() => setDialog('yesterday')} aria-label="Yesterday's answers"><CalendarIcon />{label('Yesterday')}</button>
@@ -334,7 +345,7 @@ export default function App() {
               <h2 className="text-3xl font-black">Blitz</h2>
               <p className="mt-2 text-muted">A random board. Three minutes. Find as many words as you can.</p>
               {best > 0 && <p className="mt-1 text-sm text-muted">Your best: <b className="text-ink">{best}</b> points</p>}
-              {name ? (
+              {!online ? null : name ? (
                 <p className="mt-1 text-sm text-muted">Playing as <b className="text-ink">{name}</b>. Your score goes on the leaderboard.</p>
               ) : (
                 <div className="mx-auto mt-5 max-w-xs text-left">

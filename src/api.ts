@@ -44,6 +44,20 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
   }
 }
 
+/** Is a leaderboard server answering? The game works fully without one. */
+export async function leaderboardOnline(): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(`${API_BASE}/api/blitz?player=ping`, { signal: ctrl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const api = {
   daily: (date: string, player: string) => call<Board>('GET', `/api/daily?date=${date}&player=${encodeURIComponent(player)}`),
   submitDaily: (b: { playerId: string; name: string; date: string; words: string[] }) =>
