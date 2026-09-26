@@ -34,3 +34,17 @@ export function useStoredState<T>(key: string, fallback: T) {
 }
 
 export const dailyKey = (dateKey: string) => `hexicon:daily:${dateKey}`;
+
+/** Anonymous id for this browser, used to keep one leaderboard entry per player. */
+export function playerId(): string {
+  let id = readStored<string | null>('hexicon:player-id', null);
+  if (!id) {
+    id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+    writeStored('hexicon:player-id', id);
+  }
+  return id;
+}
+
+export const NAME_KEY = 'hexicon:player-name';

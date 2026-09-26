@@ -44,6 +44,17 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 - **Share** copies a spoiler-free result such as `DPIYF Lettertown 9/25 | Genius | 412 pts | 1 pangram` with a hex row (`⬢⬢⬢⬢⬢⬢⬡`) for the rank ladder.
 - Supported phones buzz lightly when you add a tile, find a word or make a mistake.
 
+## Leaderboards
+
+Tap the trophy to pick a name and see **Today's puzzle** and **Blitz best** rankings. Everyone else's view updates as they play.
+
+- A small API runs on Netlify Functions (`netlify/functions/api.mts`, logic in `server/`) and stores entries in Netlify Blobs. The game on GitHub Pages calls it at `https://dpiyf-lettertown.netlify.app/api/*`. Set `VITE_API_BASE` to point somewhere else.
+- **Scores can't be faked.** The client only sends the words it found. The server rebuilds the same puzzle from its seed, throws out anything that isn't an answer, and computes the score itself.
+- **Daily:** progress posts a moment after each new word. Only today's puzzle (±1 day for time zones) is accepted, and a saved score never goes down.
+- **Blitz:** ranked rounds use a board the server hands out. Results must come back within 3 minutes plus a short grace period, and only once per round. The board keeps each player's best score.
+- Players are anonymous: a random id kept in the browser, plus a display name of 2–16 characters, checked against a profanity list.
+- Preview and branch deploys write to separate stores, so testing never touches the real leaderboards.
+
 ## How boards are made
 
 `src/engine/generator.ts` runs inside a Web Worker (`src/worker/`), so the UI never blocks.

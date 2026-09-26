@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
-import { BulbIcon, CalendarIcon, ShareIcon } from './components/Icons';
+import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
+import { Leaderboard, NameForm } from './components/Leaderboard';
+import { api } from './api';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
 import { requestPuzzle } from './worker/client';
-import { dailyKey, readStored, useStoredState, writeStored } from './storage';
+import { dailyKey, NAME_KEY, playerId, readStored, useStoredState, writeStored } from './storage';
 import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
@@ -17,11 +19,21 @@ import type { Puzzle } from './engine/generator';
 
 const BLITZ_SECONDS = 180;
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'rules' | 'hints' | 'yesterday' | 'blitz-over';
+type Dialog = null | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
+type Posted = { status: 'pending' } | { status: 'done'; text: string } | { status: 'error'; text: string };
 type Blitz =
   | { phase: 'intro' }
   | { phase: 'loading' }
-  | { phase: 'playing' | 'over'; puzzle: Puzzle; found: string[]; endsAt: number; newBest?: boolean };
+  | {
+      phase: 'playing' | 'over';
+      puzzle: Puzzle;
+      found: string[];
+      endsAt: number;
+      /** Server-issued seed when the round counts for the leaderboard. */
+      rankedSeed: string | null;
+      newBest?: boolean;
+      posted?: Posted;
+    };
 
 function initialDateKey(): string {
   // ?date=YYYY-MM-DD replays (or previews) any day's board.
@@ -63,10 +75,36 @@ export default function App() {
   const [dialog, setDialog] = useState<Dialog>(() => (readStored('hexicon:seen-rules', false) ? null : 'rules'));
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
+  const [me] = useState(playerId);
+  const [name, setName] = useStoredState<string>(NAME_KEY, '');
+  const saveName = useCallback(
+    async (n: string) => {
+      const res = await api.saveName(me, n);
+      setName(res.name);
+    },
+    [me, setName],
+  );
 
   // ---- daily ----------------------------------------------------------------
   const daily = usePuzzle(dateKey);
   const [dailyFound, setDailyFound] = useStoredState<{ found: string[] }>(dailyKey(dateKey), { found: [] });
+  const isToday = dateKey === dateKeyFor();
+
+  // Post daily progress to the leaderboard (a moment after each new word).
+  const posted = useRef('');
+  useEffect(() => {
+    const found = dailyFound.found;
+    const key = `${name}|${found.length}`;
+    if (!name || !isToday || !found.length || posted.current === key) return;
+    const t = setTimeout(() => {
+      api.submitDaily({ playerId: me, name, date: dateKey, words: found }).then(
+        () => (posted.current = key),
+        () => {},
+      );
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [dailyFound.found, name, isToday, me, dateKey]);
+
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
 
@@ -77,16 +115,25 @@ export default function App() {
 
   const startBlitz = useCallback(async () => {
     setBlitz({ phase: 'loading' });
-    const seed = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+    // Ranked rounds use a board the server hands out, so it can check the result.
+    let rankedSeed: string | null = null;
+    if (name) {
+      try {
+        rankedSeed = (await api.startBlitz(me)).seed;
+      } catch {
+        setNotice('Leaderboard offline: this round won’t be ranked');
+      }
+    }
+    const seed = rankedSeed ?? `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
     try {
       const puzzle = await requestPuzzle({ type: 'blitz', seed });
       setNow(Date.now());
-      setBlitz({ phase: 'playing', puzzle, found: [], endsAt: Date.now() + BLITZ_SECONDS * 1000 });
+      setBlitz({ phase: 'playing', puzzle, found: [], endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedSeed });
     } catch {
       setBlitz({ phase: 'intro' });
       setNotice('Could not build a board');
     }
-  }, []);
+  }, [name, me]);
 
   useEffect(() => {
     if (blitz.phase !== 'playing') return;
@@ -98,10 +145,25 @@ export default function App() {
     if (blitz.phase === 'playing' && now >= blitz.endsAt) {
       const score = progress(blitz.puzzle, answerIndex(blitz.puzzle), blitz.found).score;
       if (score > best) setBest(score);
-      setBlitz({ ...blitz, phase: 'over', newBest: score > best });
+      const ranked = blitz.rankedSeed && name;
+      setBlitz({ ...blitz, phase: 'over', newBest: score > best, posted: ranked ? { status: 'pending' } : undefined });
       setDialog('blitz-over');
+      if (ranked) {
+        const update = (p: Posted) =>
+          setBlitz((b) => (b.phase === 'over' && b.rankedSeed === blitz.rankedSeed ? { ...b, posted: p } : b));
+        api.finishBlitz({ playerId: me, name, seed: blitz.rankedSeed!, words: blitz.found }).then(
+          (r) =>
+            update({
+              status: 'done',
+              text: r.personalBest
+                ? `Leaderboard: #${r.you?.position} of ${r.total} 🏆`
+                : `Your best Blitz score ranks #${r.you?.position} of ${r.total}`,
+            }),
+          (e: Error) => update({ status: 'error', text: `Couldn't post to the leaderboard: ${e.message}` }),
+        );
+      }
     }
-  }, [now, blitz, best, setBest]);
+  }, [now, blitz, best, setBest, name, me]);
 
   // ---- shared ---------------------------------------------------------------
   // Never reload out from under a Blitz round; daily progress is saved, so that's safe.
@@ -168,6 +230,7 @@ export default function App() {
             <button type="button" role="tab" aria-selected={mode === 'daily'} className={tab('daily')} onClick={() => switchMode('daily')}>Daily</button>
             <button type="button" role="tab" aria-selected={mode === 'blitz'} className={tab('blitz')} onClick={() => switchMode('blitz')}>Blitz</button>
           </div>
+          <button type="button" className={iconBtn} onClick={() => setDialog('leaderboard')} aria-label="Leaderboard"><TrophyIcon />{label('Leaders')}</button>
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
           {mode === 'daily' && (
             <button type="button" className={iconBtn} onClick={() => setDialog('yesterday')} aria-label="Yesterday's answers"><CalendarIcon />{label('Yesterday')}</button>
@@ -221,6 +284,14 @@ export default function App() {
               <h2 className="text-3xl font-black">Blitz</h2>
               <p className="mt-2 text-muted">A random board. Three minutes. Find as many words as you can.</p>
               {best > 0 && <p className="mt-1 text-sm text-muted">Your best: <b className="text-ink">{best}</b> points</p>}
+              {name ? (
+                <p className="mt-1 text-sm text-muted">Playing as <b className="text-ink">{name}</b>. Your score goes on the leaderboard.</p>
+              ) : (
+                <div className="mx-auto mt-5 max-w-xs text-left">
+                  <NameForm name="" cta="Save" onSave={saveName} />
+                  <p className="mt-1 text-xs text-muted">Add a name to get on the leaderboard, or just press Start.</p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={startBlitz}
@@ -232,6 +303,21 @@ export default function App() {
             </section>
           ))}
       </main>
+
+      <Modal open={dialog === 'leaderboard'} title="Leaderboard" onClose={closeDialog}>
+        <Leaderboard
+          dateKey={isToday ? dateKey : dateKeyFor()}
+          playerId={me}
+          name={name}
+          onName={async (n) => {
+            await saveName(n);
+            if (isToday && dailyFound.found.length) {
+              await api.submitDaily({ playerId: me, name: n, date: dateKey, words: dailyFound.found }).catch(() => {});
+            }
+          }}
+          initialTab={mode}
+        />
+      </Modal>
 
       <Modal open={dialog === 'rules'} title="How to play" onClose={closeDialog}>
         <Rules />
@@ -272,6 +358,11 @@ export default function App() {
               <p className="mb-3 text-sm text-muted">
                 {blitz.newBest ? 'New personal best!' : `Your best: ${best}`}
               </p>
+              {blitz.posted && (
+                <p className={`mb-3 text-sm font-semibold ${blitz.posted.status === 'error' ? 'text-bad' : ''}`}>
+                  {blitz.posted.status === 'pending' ? 'Posting to the leaderboard…' : blitz.posted.text}
+                </p>
+              )}
               <AnswerList answers={blitz.puzzle.answers} found={new Set(blitz.found)} />
               <div className="mt-4 flex justify-end gap-2">
                 <button type="button" className={textBtn} onClick={onShare}>Share</button>

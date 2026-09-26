@@ -10,3 +10,6 @@ export const CalendarIcon = () => (
 export const ShareIcon = () => (
   <svg {...base}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13" /></svg>
 );
+export const TrophyIcon = () => (
+  <svg {...base}><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4a3 3 0 0 0 3 5M17 6h3a3 3 0 0 1-3 5" /></svg>
+);
