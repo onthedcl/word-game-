@@ -1,5 +1,6 @@
 // Leaderboard API client (Netlify Functions; see netlify/functions/api.mts).
-export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://dpiyf-lettertown.netlify.app';
+// Off by default: build with VITE_API_BASE=https://your-site.netlify.app to turn the leaderboard on.
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 
 export interface BoardRow {
   position: number;
@@ -46,6 +47,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
 
 /** Is a leaderboard server answering? The game works fully without one. */
 export async function leaderboardOnline(): Promise<boolean> {
+  if (!API_BASE) return false;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 4000);
   try {

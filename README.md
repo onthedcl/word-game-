@@ -46,7 +46,7 @@ It's a static site, so it can be hosted anywhere (see [Deploying](#deploying)). 
 
 ## Leaderboards
 
-Leaderboard features (the trophy button, the name prompt and the rank badge) only appear when the leaderboard server answers. On GitHub Pages alone the game works fully, just without them.
+**Currently switched off.** The game ships without a leaderboard server. To turn it on, deploy this repo to Netlify, which runs the API, and build the game with `VITE_API_BASE=https://<your-site>.netlify.app`. The trophy button, name prompt and rank badge appear only when that server answers.
 
 New players get a welcome screen that asks for a leaderboard name (they can skip it and add one later from the trophy). The trophy shows **Today's puzzle** and **Blitz best** rankings.
 
