@@ -224,6 +224,15 @@ interface GenerateOptions {
   slot: number;
   /** Weekly difficulty (0–6). Omitted = the original 7-letter boards. */
   difficulty?: number;
+  /** Require two different vowels next to the key tile. */
+  keyVowels?: boolean;
+}
+
+/** Daily boards after this date put at least two different vowels next to the key tile. */
+export const KEY_VOWELS_FROM = '2026-09-28';
+
+function vowelsNearKey(letters: readonly string[]): number {
+  return new Set(NEIGHBORS[CENTER].map((id) => letters[id]).filter((ch) => VOWELS.has(ch))).size;
 }
 
 function extraLetters(rng: Rng, have: readonly string[], count: number, commonness: number): string[] {
@@ -236,7 +245,7 @@ function extraLetters(rng: Rng, have: readonly string[], count: number, commonne
 }
 
 export function generatePuzzle(
-  dict: Dawg, seeds: readonly string[], { kind, seed, slot, dateKey = undefined, difficulty }: GenerateOptions,
+  dict: Dawg, seeds: readonly string[], { kind, seed, slot, dateKey = undefined, difficulty, keyVowels }: GenerateOptions,
 ): Puzzle {
   const tuning = difficulty === undefined ? null : TUNING[difficulty];
   const range = acceptableRange(difficulty ?? null);
@@ -266,6 +275,7 @@ export function generatePuzzle(
       letters: enrichTiles(rng, tiles, route, pool, weights, dict, tuning?.targetWords),
       premiums: placePremiums(rng),
     };
+    if (keyVowels && vowelsNearKey(board.letters) < 2) continue;
     const letters = [...new Set(board.letters)].sort();
     const answers = [...solveBoard(board, dict).values()].sort((a, b) => a.word.localeCompare(b.word));
     const day = kind === 'daily' ? (dateKey ?? seed) : null;
@@ -297,16 +307,33 @@ const REROLL_SLOT_STRIDE = 1777; // a rerolled day draws its letters far from ev
 export function generateDaily(dict: Dawg, seeds: readonly string[], dateKey: string, version = rerollsFor(dateKey)): Puzzle {
   const slot = puzzleNumber(dateKey) - 1;
   const difficulty = dateKey >= OPEN_LETTERS_FROM ? weekdayIndex(dateKey) : undefined;
-  if (!version) return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot, difficulty });
+  const keyVowels = dateKey >= KEY_VOWELS_FROM;
+  if (!version) return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot, difficulty, keyVowels });
   return generatePuzzle(dict, seeds, {
     kind: 'daily',
     seed: dailyBoardId(dateKey, version),
     dateKey,
     slot: slot + version * REROLL_SLOT_STRIDE,
     difficulty,
+    keyVowels,
   });
 }
 
 export function generateBlitz(dict: Dawg, seeds: readonly string[], seed: string): Puzzle {
   return generatePuzzle(dict, seeds, { kind: 'blitz', seed: `blitz:${seed}`, slot: hashString(seed), difficulty: BLITZ_DIFFICULTY });
+}
+
+/**
+ * The same board with its answers taken from a wider dictionary. Boards are
+ * built from common words only (so they stay fair and stable), but any real
+ * word the player can trace on them counts.
+ */
+export function withAnswers(puzzle: Puzzle, dict: Dawg): Puzzle {
+  const answers = [...solveBoard(puzzle.board, dict).values()].sort((a, b) => a.word.localeCompare(b.word));
+  return {
+    ...puzzle,
+    answers,
+    pangrams: answers.filter((a) => a.pangram).map((a) => a.word),
+    maxScore: answers.reduce((s, a) => s + a.score, 0),
+  };
 }

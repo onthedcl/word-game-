@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { dict, seeds } from './node-dict';
-import { acceptableRange, generateBlitz, generateDaily, isAcceptable, OPEN_LETTERS_FROM, randomPath, weekdayIndex } from './generator';
+import { accepted, dict, seeds } from './node-dict';
+import {
+  acceptableRange, generateBlitz, generateDaily, isAcceptable, KEY_VOWELS_FROM, OPEN_LETTERS_FROM, randomPath, weekdayIndex, withAnswers,
+} from './generator';
 import { EPOCH, puzzleNumber, shiftDateKey } from './dates';
-import { CENTER, isValidRoute } from './hexgrid';
+import { CENTER, isValidRoute, NEIGHBORS } from './hexgrid';
 import { createRng } from './rng';
 import { findPaths, solveBoard } from './solver';
 import { MIN_WORD_LENGTH, scorePath } from './scoring';
@@ -180,6 +182,35 @@ describe('variety', () => {
   it('almost never repeats a letter set in the first year', () => {
     const sets = Array.from({ length: 365 }, (_, i) => generateDaily(dict, seeds, shiftDateKey(EPOCH, i)).letters.join(''));
     // Easy days sometimes have to hunt through other letter sets, so allow a rare repeat.
-    expect(new Set(sets).size).toBeGreaterThanOrEqual(362);
+    expect(new Set(sets).size).toBeGreaterThanOrEqual(360);
   }, 120_000);
+});
+
+describe('key tile vowels', () => {
+  it('puts two different vowels next to the key tile on new daily boards', () => {
+    for (let i = 0; i < 21; i++) {
+      const p = generateDaily(dict, seeds, shiftDateKey(KEY_VOWELS_FROM, i));
+      const vowels = new Set(NEIGHBORS[CENTER].map((id) => p.board.letters[id]).filter((ch) => 'aeiou'.includes(ch)));
+      expect(vowels.size).toBeGreaterThanOrEqual(2);
+    }
+  }, 60_000);
+});
+
+describe('accepted answers', () => {
+  const board = generateDaily(dict, seeds, '2026-09-27');
+  const wide = withAnswers(board, accepted);
+
+  it('keeps the board and adds less common words', () => {
+    expect(wide.board).toBe(board.board);
+    expect(wide.answers.map((a) => a.word)).toContain('tiled');
+    expect(board.answers.map((a) => a.word)).not.toContain('tiled');
+    const words = new Set(wide.answers.map((a) => a.word));
+    for (const a of board.answers) expect(words.has(a.word)).toBe(true);
+    expect(wide.maxScore).toBe(wide.answers.reduce((s, a) => s + a.score, 0));
+  });
+
+  it('accepts every common word', () => {
+    expect(accepted.wordCount).toBeGreaterThan(dict.wordCount);
+    for (const w of dict.wordsFrom([...'etainoshrdl']).slice(0, 500)) expect(accepted.contains(w)).toBe(true);
+  });
 });

@@ -1,10 +1,13 @@
-// Builds public/dict/words.dawg (the answer dictionary as a minimized trie)
+// Builds public/dict/words.dawg (the common words boards are built from, as a
+// minimized trie), public/dict/words-all.dawg (every word accepted as an answer)
 // and public/dict/pangrams.txt (curated pangram seeds).
 //
 // Sources (downloaded at build time, not committed):
 //   - ENABLE word list (public domain) — the base of valid English words.
 //   - FrequencyWords en_50k (hermitdave, MIT/CC-BY-SA) — used to drop obscure
 //     words so the answer list feels fair, Spelling Bee style.
+//   - FrequencyWords en_full — any ENABLE word seen at least ALL_MIN_COUNT times
+//     is accepted as an answer too, so real words like "tiled" aren't rejected.
 //   - LDNOOBW English list — offensive words are removed.
 //
 // Usage: node scripts/build-dictionary.mjs
@@ -16,10 +19,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCES = {
   enable: 'https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt',
   freq: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt',
+  full: 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt',
   bad: 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en',
 };
 const FREQ_LIMIT = 50000;   // words accepted as answers
 const PANGRAM_LIMIT = 25000; // pangram seeds come from the more common words
+const ALL_MIN_COUNT = 30;   // uses in the full corpus for the accepted list
 const MIN_LEN = 4;
 const MAX_PANGRAM_LEN = 10;
 
@@ -29,7 +34,7 @@ async function fetchLines(url) {
   return (await res.text()).split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean);
 }
 
-const [enable, freq, bad] = await Promise.all(Object.values(SOURCES).map(fetchLines));
+const [enable, freq, full, bad] = await Promise.all(Object.values(SOURCES).map(fetchLines));
 const enableSet = new Set(enable);
 const badSet = new Set(bad);
 const distinct = (w) => new Set(w).size;
@@ -43,6 +48,14 @@ freq.slice(0, FREQ_LIMIT).forEach((line, rank) => {
   words.add(w);
   if (rank < PANGRAM_LIMIT && distinct(w) === 7 && w.length <= MAX_PANGRAM_LEN) pangrams.add(w);
 });
+
+// Accepted answers: the common words plus any ENABLE word that is used enough.
+const allWords = new Set(words);
+for (const line of full) {
+  const [w, n] = line.split(' ');
+  if (Number(n) < ALL_MIN_COUNT) break; // the list is sorted by count
+  if (/^[a-z]+$/.test(w) && w.length >= MIN_LEN && enableSet.has(w) && !badSet.has(w)) allWords.add(w);
+}
 
 // ---- DAWG ------------------------------------------------------------------
 // Build a trie, merge identical subtrees bottom-up, then serialize.
@@ -84,5 +97,8 @@ function buildDawg(list) {
 const sorted = (s) => [...s].sort();
 const dawg = buildDawg(sorted(words));
 writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
+const all = buildDawg(sorted(allWords));
+writeFileSync(join(ROOT, 'public/dict/words-all.dawg'), all.text);
 writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
+console.log(`accepted words: ${allWords.size} (${all.text.length} bytes)`);
 console.log(`words: ${words.size} (${dawg.nodes} DAWG nodes, ${dawg.text.length} bytes), pangram seeds: ${pangrams.size}`);

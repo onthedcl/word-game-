@@ -1,12 +1,12 @@
 /// <reference lib="webworker" />
 // Loads the dictionary once and builds puzzles off the main thread.
 import { parseDawg, type Dawg } from '../engine/dawg';
-import { generateBlitz, generateDaily } from '../engine/generator';
+import { generateBlitz, generateDaily, withAnswers } from '../engine/generator';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-let loaded: Promise<{ dict: Dawg; seeds: string[] }> | null = null;
+let loaded: Promise<{ dict: Dawg; accepted: Dawg; seeds: string[] }> | null = null;
 
 async function fetchText(file: string): Promise<string> {
   const res = await fetch(new URL(`${import.meta.env.BASE_URL}dict/${file}`, self.location.origin));
@@ -15,8 +15,9 @@ async function fetchText(file: string): Promise<string> {
 }
 
 function load() {
-  loaded ??= Promise.all([fetchText('words.dawg'), fetchText('pangrams.txt')]).then(([dawg, pangrams]) => ({
+  loaded ??= Promise.all([fetchText('words.dawg'), fetchText('words-all.dawg'), fetchText('pangrams.txt')]).then(([dawg, all, pangrams]) => ({
     dict: parseDawg(dawg),
+    accepted: parseDawg(all),
     seeds: pangrams.split('\n').filter(Boolean),
   }));
   return loaded;
@@ -25,10 +26,13 @@ function load() {
 self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
   let reply: WorkerResponse;
   try {
-    const { dict, seeds } = await load();
+    const { dict, accepted, seeds } = await load();
     const { request } = data;
-    const puzzle =
-      request.type === 'daily' ? generateDaily(dict, seeds, request.dateKey) : generateBlitz(dict, seeds, request.seed);
+    // Boards come from common words; answers include every accepted word.
+    const puzzle = withAnswers(
+      request.type === 'daily' ? generateDaily(dict, seeds, request.dateKey) : generateBlitz(dict, seeds, request.seed),
+      accepted,
+    );
     reply = { id: data.id, puzzle };
   } catch (err) {
     loaded = null;
