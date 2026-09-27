@@ -242,16 +242,28 @@ const newPin = (deps: Deps) => String(Math.floor(deps.random() * 10000)).padStar
 const PIN_TRIES = 5;
 const PIN_LOCK_MS = 60 * 60 * 1000;
 
-/** Who owns a name. Names picked before PINs existed are found by scanning players. */
+/**
+ * Who owns a name. Names picked before PINs existed are found by scanning players;
+ * back then two players could share a name, so the one with the most points wins.
+ */
 async function ownerOf(deps: Deps, name: string): Promise<NameOwner | null> {
   const owner = (await deps.kv.get(nameKey(name), { type: 'json' })) as NameOwner | null;
   if (owner) return owner;
-  const { blobs } = await deps.kv.list({ prefix: 'players/' });
-  for (const { key } of blobs) {
+  const matches: string[] = [];
+  for (const { key } of (await deps.kv.list({ prefix: 'players/' })).blobs) {
     const p = (await deps.kv.get(key, { type: 'json' })) as { name?: string } | null;
-    if (p?.name?.toLowerCase() === name.toLowerCase()) return { playerId: key.slice('players/'.length), pin: null };
+    if (p?.name?.toLowerCase() === name.toLowerCase()) matches.push(key.slice('players/'.length));
   }
-  return null;
+  if (matches.length <= 1) return matches.length ? { playerId: matches[0], pin: null } : null;
+  const points = new Map(matches.map((id) => [id, 0]));
+  for (const { key } of (await deps.kv.list({ prefix: 'daily/' })).blobs) {
+    const id = key.slice(key.lastIndexOf('/') + 1);
+    if (!points.has(id)) continue;
+    const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+    points.set(id, points.get(id)! + (entry?.score ?? 0));
+  }
+  const best = matches.reduce((a, b) => (points.get(b)! > points.get(a)! ? b : a));
+  return { playerId: best, pin: null };
 }
 
 export async function saveName(deps: Deps, body: Record<string, unknown>) {

@@ -268,4 +268,13 @@ describe('names as logins', () => {
     expect(first.pin).toMatch(/^\d{4}$/);
     await rejects(claimName(deps, { name: 'Dcl' }), 403);
   });
+
+  it('pick the real player when two pre-PIN players share a name', async () => {
+    // The original Dcl played; later a fresh browser picked "Dcl" again with nothing found.
+    await submitDaily(deps, { playerId: P1, name: 'Dcl', date: DATE, words: words.slice(0, 5) });
+    await deps.kv.setJSON(`players/${P2}`, { name: 'Dcl' });
+    const claimed = await claimName(deps, { name: 'dcl' });
+    expect(claimed.playerId).toBe(P1);
+    expect((await progressOf(deps, DATE, P1)).found).toHaveLength(5);
+  });
 });
