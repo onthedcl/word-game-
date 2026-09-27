@@ -1,4 +1,5 @@
 import { NameForm } from './Leaderboard';
+import { isHomeScreenApp } from '../storage';
 
 interface Props {
   onSave(name: string): Promise<void>;
@@ -21,7 +22,11 @@ export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
         Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the
         gold <b>key</b> tile. Drag and let go to submit.
       </p>
-      <p className="mb-4 text-sm text-muted">What should we call you on the leaderboard?</p>
+      <p className="mb-4 text-sm text-muted">
+        {isHomeScreenApp()
+          ? 'Played before in your browser? Type the same name and your PIN (it’s on the leaderboard there) to keep your progress. New here? Pick a leaderboard name.'
+          : 'What should we call you on the leaderboard?'}
+      </p>
       <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} />
       <div className="mt-4 flex justify-between text-sm text-muted">
         <button type="button" className="underline" onClick={onRules}>How to play</button>

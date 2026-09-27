@@ -9,7 +9,9 @@ import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
 import { requestPuzzle } from './worker/client';
-import { dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, useStoredState, writeStored } from './storage';
+import {
+  adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
+} from './storage';
 import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
 import { dailyBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
@@ -189,6 +191,17 @@ export default function App() {
       live = false;
     };
   }, [online, name, isToday, boardId, me, setDailyFound]);
+  // A home-screen app that took its player from the address: fetch their name and PIN.
+  useEffect(() => {
+    if (!online || name || !adoptedPlayer()) return;
+    api.me(me).then((r) => {
+      if (!r.name) return;
+      setName(r.name);
+      if (r.pin) setPin(r.pin);
+    }, () => {});
+  }, [online, name, me, setName, setPin]);
+  // Keep the address carrying this player, so "Add to Home Screen" keeps their progress.
+  useEffect(() => syncCarryParam(me, !!name), [me, name]);
   // Players who picked a name before PINs existed: fetch theirs so the leaderboard can show it.
   useEffect(() => {
     if (online && name && !pin) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
