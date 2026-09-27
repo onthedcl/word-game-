@@ -6,16 +6,18 @@ export function HintGrid({ grid }: { grid: Grid }) {
   return (
     <div>
       <p className="mb-3 text-sm text-muted">
-        Words still to find, by first letter and length. {grid.total} left
+        {grid.total} word{grid.total > 1 ? 's' : ''} still to find
         {grid.pangramsLeft ? `, including ${grid.pangramsLeft} pangram${grid.pangramsLeft > 1 ? 's' : ''}` : ''}.
+        Each row is the first letter, each column the word length: a 2 in row <b>S</b>, column <b>5</b> means two
+        5-letter words starting with S are left.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-muted">
-              <th className={cell} />
+              <th className={`${cell} text-left text-xs font-normal`}>Starts with</th>
               {grid.lengths.map((n) => <th key={n} className={cell}>{n}</th>)}
-              <th className={cell}>Σ</th>
+              <th className={cell}>Total</th>
             </tr>
           </thead>
           <tbody>
@@ -29,7 +31,7 @@ export function HintGrid({ grid }: { grid: Grid }) {
               </tr>
             ))}
             <tr className="font-bold">
-              <th className={cell}>Σ</th>
+              <th className={`${cell} text-left`}>Total</th>
               {grid.lengths.map((n) => <td key={n} className={cell}>{grid.colTotals[n] || '–'}</td>)}
               <td className={cell}>{grid.total}</td>
             </tr>
