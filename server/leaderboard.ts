@@ -229,18 +229,15 @@ export async function getBlitz(deps: Deps, playerId: string | null) {
 
 // ---- names --------------------------------------------------------------------
 
-// Names work like a login: each belongs to one player and is protected by a
-// 4-digit PIN, so a player can pick up where they left off on another device.
+// Names work like a login: each belongs to one player, and typing it on another
+// device picks up where they left off. (The PIN is still stored but not checked.)
 interface NameOwner {
   playerId: string;
   pin: string | null;
-  failed?: { count: number; since: number };
 }
 
 const nameKey = (name: string) => `names/${name.toLowerCase()}`;
 const newPin = (deps: Deps) => String(Math.floor(deps.random() * 10000)).padStart(4, '0');
-const PIN_TRIES = 5;
-const PIN_LOCK_MS = 60 * 60 * 1000;
 
 /**
  * Who owns a name. Names picked before PINs existed are found by scanning players;
@@ -281,22 +278,18 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
   return { ok: true, name, pin };
 }
 
-/** Continue as an existing player on this device: their name plus PIN. */
+/**
+ * Continue as an existing player on this device: typing their name is enough.
+ * (PINs turned out to lock real players out, so they're no longer checked.)
+ */
 export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (!owner) throw new ApiError(404, 'No player has that name yet');
-  const now = deps.now();
-  const failed = owner.failed && now - owner.failed.since < PIN_LOCK_MS ? owner.failed : { count: 0, since: now };
-  if (failed.count >= PIN_TRIES) throw new ApiError(429, 'Too many wrong PINs. Try again in an hour');
-  // Names from before PINs existed can be claimed once without one; they get a PIN now.
-  if (owner.pin && body.pin !== owner.pin) {
-    await deps.kv.setJSON(nameKey(name), { ...owner, failed: { count: failed.count + 1, since: failed.since } });
-    throw new ApiError(403, 'Wrong PIN');
-  }
   const pin = owner.pin ?? newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
   const player = (await deps.kv.get(`players/${owner.playerId}`, { type: 'json' })) as { name: string } | null;
+  deps.notify?.({ title: 'Back on another device', message: `${player?.name ?? name} picked up their game on another device`, tags: ['iphone'] });
   return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin };
 }
 

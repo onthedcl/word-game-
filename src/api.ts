@@ -28,7 +28,7 @@ export class ApiRejected extends Error {
   }
 }
 
-/** The name belongs to another player; they can take it over with its PIN. */
+/** The name already belongs to a player; if it is you, you can continue as them. */
 export class NameTaken extends Error {
   constructor(public name: string) {
     super(`“${name}” is taken`);
@@ -81,8 +81,7 @@ export const api = {
   hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string; pin: string }>('POST', '/api/name', { playerId, name }),
-  claim: (name: string, pin: string) =>
-    call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name, pin: pin || undefined }),
+  claim: (name: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name }),
   me: (player: string) => call<{ name: string | null; pin: string | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),

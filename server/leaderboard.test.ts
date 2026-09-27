@@ -239,34 +239,24 @@ describe('names as logins', () => {
     expect(await me(deps, P1)).toEqual({ name: 'Castle', pin: r.pin });
   });
 
-  it('let a player continue on another device with name and PIN, and restore their words', async () => {
-    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
+  it('let a player continue on another device with just their name, and restore their words', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
     const [a, b] = puzzle.answers;
     await submitDaily(deps, { playerId: P1, name: 'Castle', date: DATE, words: [{ w: a.word, p: a.path }, b.word] });
-    await rejects(claimName(deps, { name: 'Castle', pin: '0000' === pin ? '1111' : '0000' }), 403);
-    const claimed = await claimName(deps, { name: 'castle', pin });
-    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle', pin });
+    const claimed = await claimName(deps, { name: 'castle' });
+    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle' });
+    // Any number of times, from any device, with or without an old PIN.
+    expect((await claimName(deps, { name: 'Castle', pin: '0000' })).playerId).toBe(P1);
     const { found } = await progressOf(deps, DATE, claimed.playerId);
     expect(found).toEqual([{ w: a.word, p: a.path }, b.word]);
+    await rejects(claimName(deps, { name: 'Nobody' }), 404);
   });
 
-  it('lock a name after too many wrong PINs', async () => {
-    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
-    const wrong = pin === '9999' ? '8888' : '9999';
-    for (let i = 0; i < 5; i++) await rejects(claimName(deps, { name: 'Castle', pin: wrong }), 403);
-    await rejects(claimName(deps, { name: 'Castle', pin }), 429);
-    clock += 61 * 60_000;
-    expect((await claimName(deps, { name: 'Castle', pin })).playerId).toBe(P1);
-  });
-
-  it('let names from before PINs be claimed once, then protect them', async () => {
-    // A player named before this feature: only players/<id>, no name record or PIN.
+  it('let names from before PINs be claimed too', async () => {
     await deps.kv.setJSON(`players/${P1}`, { name: 'Dcl' });
     await rejects(saveName(deps, { playerId: P2, name: 'DCL' }), 409);
-    const first = await claimName(deps, { name: 'Dcl' });
-    expect(first.playerId).toBe(P1);
-    expect(first.pin).toMatch(/^\d{4}$/);
-    await rejects(claimName(deps, { name: 'Dcl' }), 403);
+    expect((await claimName(deps, { name: 'Dcl' })).playerId).toBe(P1);
+    expect((await claimName(deps, { name: 'dcl' })).playerId).toBe(P1);
   });
 
   it('pick the real player when two pre-PIN players share a name', async () => {

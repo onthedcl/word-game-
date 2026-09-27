@@ -3,7 +3,7 @@ import { isHomeScreenApp } from '../storage';
 
 interface Props {
   onSave(name: string): Promise<void>;
-  onClaim(name: string, pin: string): Promise<void>;
+  onClaim(name: string): Promise<void>;
   onSkip(): void;
   onRules(): void;
 }
@@ -24,7 +24,7 @@ export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
       </p>
       <p className="mb-4 text-sm text-muted">
         {isHomeScreenApp()
-          ? 'Played before in your browser? Type the same name and your PIN (it’s on the leaderboard there) to keep your progress. New here? Pick a leaderboard name.'
+          ? 'Played before in your browser? Type the same name to keep your progress. New here? Pick a leaderboard name.'
           : 'What should we call you on the leaderboard?'}
       </p>
       <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} />

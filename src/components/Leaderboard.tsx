@@ -10,8 +10,7 @@ interface Props {
   playerId: string;
   name: string;
   onName(name: string): Promise<void>;
-  onClaim(name: string, pin: string): Promise<void>;
-  pin: string;
+  onClaim(name: string): Promise<void>;
   initialTab: Tab;
 }
 
@@ -19,13 +18,12 @@ interface NameFormProps {
   name: string;
   cta: string;
   onSave(name: string): Promise<void>;
-  /** Take over a name that belongs to another device, using its PIN. */
-  onClaim?(name: string, pin: string): Promise<void>;
+  /** Continue as the player who already has this name (e.g. on a new device). */
+  onClaim?(name: string): Promise<void>;
 }
 
 export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   const [value, setValue] = useState(name);
-  const [pin, setPin] = useState('');
   const [taken, setTaken] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,28 +43,16 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
 
   if (taken) {
     return (
-      <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, pin)); }}>
+      <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken)); }}>
         <p className="text-sm">
-          <b>“{taken}”</b> is already playing. If that's you, enter your 4-digit PIN to continue on this device.
+          <b>“{taken}”</b> is already on the leaderboard. Is that you?
         </p>
-        <div className="flex gap-2">
-          <input
-            aria-label="PIN"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="PIN"
-            className="w-24 rounded-lg border border-line bg-bg px-3 py-2 text-center text-base tracking-widest"
-          />
-          <button type="submit" disabled={busy} className="flex-1 rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
-            {busy ? '…' : `Continue as ${taken}`}
-          </button>
-        </div>
-        <p className="text-xs text-muted">No PIN yet? Leave it empty; names from before PINs existed can be claimed once.</p>
+        <button type="submit" disabled={busy} className="rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
+          {busy ? '…' : `Yes, continue as ${taken}`}
+        </button>
         {error && <p className="text-sm text-bad">{error}</p>}
-        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setPin(''); setError(''); }}>
-          Pick a different name
+        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); }}>
+          No, pick a different name
         </button>
       </form>
     );
@@ -94,7 +80,7 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   );
 }
 
-export function Leaderboard({ dateKey, playerId, name, onName, onClaim, pin, initialTab }: Props) {
+export function Leaderboard({ dateKey, playerId, name, onName, onClaim, initialTab }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -159,12 +145,6 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, pin, ini
         <p className="mb-3 text-sm text-muted">
           Playing as <b className="text-ink">{name}</b>{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
-          {pin && (
-            <span className="mt-1 block">
-              Your PIN: <b className="font-mono text-ink tracking-widest">{pin}</b>. Use it with your name to keep playing on
-              another phone or browser.
-            </span>
-          )}
         </p>
       )}
 

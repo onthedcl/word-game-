@@ -62,7 +62,7 @@ New players get a welcome screen that asks for a leaderboard name (they can skip
 - **Blitz:** ranked rounds use a board the server picks from a pre-built pool of 365. Results must come back within 3 minutes plus a short grace period, and only once per round. The board keeps each player's best score.
 - **Notifications:** the owner can get a phone notification when people play (see `worker/README.md`).
 - **Rerolls:** `src/engine/rerolls.ts` lists days whose daily board was replaced. The game, the answer tables and the leaderboard all follow it.
-- **Names work like a login.** Each name belongs to one player and gets a 4-digit PIN, which is shown in the leaderboard. Typing your name on another phone or browser asks for the PIN, then brings back your player and today's words (the server keeps each player's found words and routes). Five wrong PINs lock the name for an hour. Names picked before PINs existed can be claimed once without one.
+- **Names work like a login.** Each name belongs to one player. Typing your name on another phone or browser asks "Is that you?", then brings back your player and today's words (the server keeps each player's found words and routes). There's no password, so it relies on friends playing fair; the owner gets a ping whenever a name is picked up on another device.
 - Players are anonymous: a random id kept in the browser, plus a display name of 2–16 characters, checked against a profanity list.
 
 ## How boards are made

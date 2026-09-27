@@ -136,9 +136,9 @@ export default function App() {
     },
     [me, setName, setPin],
   );
-  /** Sign in as an existing player: their name + PIN. The page reloads as that player. */
-  const claimName = useCallback(async (n: string, p: string) => {
-    const r = await api.claim(n, p);
+  /** Continue as an existing player (by name). The page reloads as that player. */
+  const claimName = useCallback(async (n: string) => {
+    const r = await api.claim(n);
     setPlayerId(r.playerId);
     writeStored(NAME_KEY, r.name);
     writeStored(PIN_KEY, r.pin);
@@ -544,7 +544,6 @@ export default function App() {
             }
           }}
           onClaim={claimName}
-          pin={pin}
           initialTab={mode}
         />
       </Modal>
