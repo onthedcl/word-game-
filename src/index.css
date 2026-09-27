@@ -109,8 +109,17 @@ button { cursor: pointer; }
 .tile.prem-TL polygon { fill: var(--tl); }
 .tile.prem-TL text { fill: #fff; }
 .tile.prem-DW polygon { fill: var(--dw); }
-.tile.key polygon { fill: var(--key); }
+.tile.key polygon { fill: url(#key-gold); stroke: #d69a0c; stroke-width: 2.5; animation: key-glow 2.8s ease-in-out infinite; }
+.tile.key .letter { font-size: 37px; font-weight: 850; }
+.tile.key .key-shine { fill: none; stroke: rgb(255 255 255 / 0.55); stroke-width: 1.5; animation: none; filter: none; pointer-events: none; }
 .tile.key text { fill: var(--key-ink); }
+@keyframes key-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgb(245 190 40 / 0.55)); }
+  50% { filter: drop-shadow(0 0 10px rgb(245 190 40 / 0.85)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile.key polygon { animation: none; filter: drop-shadow(0 0 6px rgb(245 190 40 / 0.7)); }
+}
 .tile.selected polygon { stroke: var(--accent); stroke-width: 5; }
 .tile.flash polygon { stroke: var(--good); stroke-width: 5; }
 .tile.pulse-good, .tile.pulse-bad { transform-box: fill-box; transform-origin: center; }

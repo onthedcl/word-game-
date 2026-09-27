@@ -31,6 +31,7 @@ const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse }:
   return (
     <g className={cls} role="gridcell" aria-label={label} aria-selected={selected}>
       <polygon points={hexCorners(x, y, SIZE - 3).map((p) => p.join(',')).join(' ')} />
+      {key && <polygon className="key-shine" points={hexCorners(x, y, SIZE - 8).map((p) => p.join(',')).join(' ')} />}
       <text x={x} y={y + 2} className="letter">{letter.toUpperCase()}</text>
       <text x={x + 19} y={y + 25} className="value">{LETTER_VALUES[letter]}</text>
       {(premium || key) && <text x={x} y={y - 26} className="badge">{key ? 'KEY' : premium}</text>}
@@ -104,8 +105,16 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
       }}
       onPointerCancel={() => (dragging.current = false)}
     >
+      <defs>
+        <linearGradient id="key-gold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffe27a" />
+          <stop offset="55%" stopColor="#f7c233" />
+          <stop offset="100%" stopColor="#e9a912" />
+        </linearGradient>
+      </defs>
       <g>
-        {TILES.map(({ id }) => (
+        {/* The key tile is drawn last so its glow sits on top of its neighbours. */}
+        {[...TILES].sort((a, b) => Number(a.id === CENTER) - Number(b.id === CENTER)).map(({ id }) => (
           <Tile
             // Re-key pulsing tiles so the animation restarts on every submission.
             key={pulse?.ids.includes(id) ? `${id}-${pulse.id}` : id}
