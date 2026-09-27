@@ -58,6 +58,8 @@
   --animate-banner: banner 1.9s ease-in-out forwards;
   --animate-fresh: fresh 1.2s ease;
   --animate-blink: blink 1s steps(1) infinite;
+  --animate-nudge: nudge 0.9s ease-in-out 3;
+  --animate-rise: rise 0.3s ease-out;
 
   @keyframes shake {
     20% { transform: translateX(-7px); }
@@ -79,6 +81,14 @@
   @keyframes fresh {
     from { background-color: var(--key); }
     to { background-color: transparent; }
+  }
+  @keyframes rise {
+    from { transform: translateY(4px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes nudge {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(245 190 40 / 0); }
+    50% { transform: scale(1.14); box-shadow: 0 0 0 6px rgb(245 190 40 / 0.45); }
   }
   @keyframes blink {
     50% { opacity: 0; }

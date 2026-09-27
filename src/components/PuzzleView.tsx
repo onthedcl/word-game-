@@ -20,11 +20,13 @@ interface Props {
   keyboard: boolean;
   statusExtra?: React.ReactNode;
   statusNote?: React.ReactNode;
+  /** Called after every submitted word, right or wrong. */
+  onAttempt?(ok: boolean): void;
 }
 
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
-export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote }: Props) {
+export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
   const { score, rank } = progress(puzzle, answers, found, routes);
@@ -102,6 +104,7 @@ export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard,
     const result = checkWord(puzzle, answers, foundSet, w, traced ? pathRef.current : null);
     // Every submission starts the next word fresh, right or wrong.
     clear();
+    onAttempt?.(result.ok);
     if (!result.ok) return reject(result.reason, attempted);
     const { answer, route, score: points } = result;
     const before = rank.index;

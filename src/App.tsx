@@ -16,10 +16,13 @@ import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { shareText } from './engine/share';
 import { useUpdateCheck } from './updates';
+import { haptics } from './haptics';
 import { Wordmark } from './components/Wordmark';
 import { DIFFICULTY_NAMES, type Puzzle } from './engine/generator';
 
 const BLITZ_SECONDS = 180;
+const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
+const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
 type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
@@ -179,7 +182,48 @@ export default function App() {
   const [best, setBest] = useStoredState('hexicon:blitz-best', 0);
   const [now, setNow] = useState(() => Date.now());
 
+  // ---- stuck nudge ------------------------------------------------------------
+  // Once per player: if they seem stuck on the daily, pulse the Blitz tab so they
+  // know there's another way to play. Skipped for anyone who's tried Blitz already.
+  const [nudgeBlitz, setNudgeBlitz] = useState(false);
+  const stuck = useRef({ lastFound: Date.now(), lastAttempt: 0, wrongStreak: 0 });
+  const nudgeUsed = () => readStored('hexicon:blitz-nudged', false) || readStored('hexicon:played-blitz', false);
+  const triggerNudge = useCallback(() => {
+    if (nudgeUsed()) return;
+    writeStored('hexicon:blitz-nudged', true);
+    setNudgeBlitz(true);
+    haptics.tap();
+  }, []);
+  const onDailyAttempt = useCallback(
+    (ok: boolean) => {
+      const s = stuck.current;
+      s.lastAttempt = Date.now();
+      if (ok) {
+        s.lastFound = Date.now();
+        s.wrongStreak = 0;
+      } else if (++s.wrongStreak >= STUCK_WRONG_STREAK) triggerNudge();
+    },
+    [triggerNudge],
+  );
+  useEffect(() => {
+    if (mode !== 'daily' || nudgeUsed()) return;
+    const t = setInterval(() => {
+      const s = stuck.current;
+      const trying = s.lastAttempt > s.lastFound; // still making attempts, not just idle
+      if (trying && dialog === null && document.visibilityState === 'visible' && Date.now() - s.lastFound >= STUCK_MS) {
+        triggerNudge();
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [mode, dialog, triggerNudge]);
+  useEffect(() => {
+    if (!nudgeBlitz) return;
+    const t = setTimeout(() => setNudgeBlitz(false), 7000);
+    return () => clearTimeout(t);
+  }, [nudgeBlitz]);
+
   const startBlitz = useCallback(async () => {
+    writeStored('hexicon:played-blitz', true);
     setBlitz({ phase: 'loading' });
     // Ranked rounds use a board the server hands out, so it can check the result.
     let ranked: { game: string; seed: string } | null = null;
@@ -321,9 +365,30 @@ export default function App() {
           </button>
         )}
         <nav className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto">
-          <div className="flex rounded-full border border-line p-0.5 sm:mr-1" role="tablist" aria-label="Mode">
+          <div className="relative sm:mr-1">
+          <div className="flex rounded-full border border-line p-0.5" role="tablist" aria-label="Mode">
             <button type="button" role="tab" aria-selected={mode === 'daily'} className={tab('daily')} onClick={() => switchMode('daily')}>Daily</button>
-            <button type="button" role="tab" aria-selected={mode === 'blitz'} className={tab('blitz')} onClick={() => switchMode('blitz')}>Blitz</button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'blitz'}
+              className={`${tab('blitz')} ${nudgeBlitz ? 'animate-nudge relative z-10 bg-key text-key-ink' : ''}`}
+              onClick={() => {
+                setNudgeBlitz(false);
+                switchMode('blitz');
+              }}
+            >
+              Blitz
+            </button>
+          </div>
+          {nudgeBlitz && (
+            <div
+              role="status"
+              className="pointer-events-none absolute top-full left-0 z-30 mt-2 w-max animate-rise rounded-lg bg-ink px-3 py-1.5 text-sm font-semibold text-bg shadow-lg"
+            >
+              Stuck? Try a quick game of <b>Blitz</b> ⚡
+            </div>
+          )}
           </div>
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
           {mode === 'daily' && (
@@ -356,6 +421,7 @@ export default function App() {
               found={dailyFound.found}
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
+              onAttempt={onDailyAttempt}
               onFound={(w, r) => setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }))}
               keyboard={dialog === null}
               statusExtra={
