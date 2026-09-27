@@ -38,6 +38,8 @@ export interface Entry {
   pangrams: number;
   rankName: string;
   updatedAt: number;
+  /** The words found (with traced routes), so progress can follow the player to another device. */
+  found?: Submitted[];
 }
 
 export class ApiError extends Error {
@@ -149,7 +151,8 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const date = checkDailyDate(body.date, deps.now());
   const table = await tableFor(deps, `daily/${date}`);
-  const entry = score(table, wordsOf(body.words), name, deps.now());
+  const submitted = wordsOf(body.words);
+  const entry = score(table, submitted, name, deps.now());
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
@@ -161,8 +164,9 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
     });
   }
   // Progress only moves forward; a stale device can't lower your score.
-  if (!prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name) {
-    await deps.kv.setJSON(key, !prev || entry.score >= prev.score ? entry : { ...prev, name });
+  const found = mergeFound(prev?.found, submitted.filter((s) => Object.hasOwn(table.words, s.word)));
+  if (!prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name || found.length > (prev.found?.length ?? 0)) {
+    await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });
   return { ok: true, score: entry.score, ...(await readBoard(deps.kv, `daily/${date}/`, playerId)) };
@@ -225,14 +229,86 @@ export async function getBlitz(deps: Deps, playerId: string | null) {
 
 // ---- names --------------------------------------------------------------------
 
+// Names work like a login: each belongs to one player and is protected by a
+// 4-digit PIN, so a player can pick up where they left off on another device.
+interface NameOwner {
+  playerId: string;
+  pin: string | null;
+  failed?: { count: number; since: number };
+}
+
+const nameKey = (name: string) => `names/${name.toLowerCase()}`;
+const newPin = (deps: Deps) => String(Math.floor(deps.random() * 10000)).padStart(4, '0');
+const PIN_TRIES = 5;
+const PIN_LOCK_MS = 60 * 60 * 1000;
+
+/** Who owns a name. Names picked before PINs existed are found by scanning players. */
+async function ownerOf(deps: Deps, name: string): Promise<NameOwner | null> {
+  const owner = (await deps.kv.get(nameKey(name), { type: 'json' })) as NameOwner | null;
+  if (owner) return owner;
+  const { blobs } = await deps.kv.list({ prefix: 'players/' });
+  for (const { key } of blobs) {
+    const p = (await deps.kv.get(key, { type: 'json' })) as { name?: string } | null;
+    if (p?.name?.toLowerCase() === name.toLowerCase()) return { playerId: key.slice('players/'.length), pin: null };
+  }
+  return null;
+}
+
 export async function saveName(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = nameOf(body.name);
+  const owner = await ownerOf(deps, name);
+  if (owner && owner.playerId !== playerId) throw new ApiError(409, 'That name is taken');
   const prev = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  const pin = owner?.pin ?? newPin(deps);
+  await deps.kv.setJSON(nameKey(name), { playerId, pin } satisfies NameOwner);
+  if (prev && prev.name.toLowerCase() !== name.toLowerCase()) await deps.kv.setJSON(nameKey(prev.name), null);
   await deps.kv.setJSON(`players/${playerId}`, { name });
   if (!prev) deps.notify?.({ title: 'Joined the leaderboard', message: `${name} picked their leaderboard name`, tags: ['trophy'] });
   else if (prev.name !== name) deps.notify?.({ title: 'Name change', message: `${prev.name} is now ${name}`, tags: ['pencil2'] });
-  return { ok: true, name };
+  return { ok: true, name, pin };
+}
+
+/** Continue as an existing player on this device: their name plus PIN. */
+export async function claimName(deps: Deps, body: Record<string, unknown>) {
+  const name = nameOf(body.name);
+  const owner = await ownerOf(deps, name);
+  if (!owner) throw new ApiError(404, 'No player has that name yet');
+  const now = deps.now();
+  const failed = owner.failed && now - owner.failed.since < PIN_LOCK_MS ? owner.failed : { count: 0, since: now };
+  if (failed.count >= PIN_TRIES) throw new ApiError(429, 'Too many wrong PINs. Try again in an hour');
+  // Names from before PINs existed can be claimed once without one; they get a PIN now.
+  if (owner.pin && body.pin !== owner.pin) {
+    await deps.kv.setJSON(nameKey(name), { ...owner, failed: { count: failed.count + 1, since: failed.since } });
+    throw new ApiError(403, 'Wrong PIN');
+  }
+  const pin = owner.pin ?? newPin(deps);
+  await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
+  const player = (await deps.kv.get(`players/${owner.playerId}`, { type: 'json' })) as { name: string } | null;
+  return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin };
+}
+
+/** The player's own details (only their device knows the player id). */
+export async function me(deps: Deps, playerId: string | null) {
+  const id = playerIdOf(playerId);
+  const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
+  if (!player) return { name: null, pin: null };
+  const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
+  return { name: player.name, pin: owner?.playerId === id ? owner.pin : null };
+}
+
+/** Words this player has found on a daily board (to restore progress on another device). */
+export async function progressOf(deps: Deps, date: string | null, playerId: string | null) {
+  const id = playerIdOf(playerId);
+  const { boardId } = boardIdOf(date);
+  const entry = (await deps.kv.get(`daily/${boardId}/${id}`, { type: 'json' })) as Entry | null;
+  return { found: (entry?.found ?? []).map((s) => (s.route ? { w: s.word, p: s.route } : s.word)) };
+}
+
+function mergeFound(prev: Submitted[] | undefined, next: Submitted[]): Submitted[] {
+  const out = new Map((prev ?? []).map((s) => [s.word, s]));
+  for (const s of next) if (!out.has(s.word)) out.set(s.word, s);
+  return [...out.values()];
 }
 
 // ---- presence -----------------------------------------------------------------
@@ -272,7 +348,8 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
   let player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
   // The game sends the nickname saved on the device; remember it if the server hadn't heard it yet.
   const sentName = cleanName(body.name);
-  if (sentName && player?.name !== sentName) {
+  const sentOwner = sentName ? await deps.kv.get(nameKey(sentName), { type: 'json' }) as NameOwner | null : null;
+  if (sentName && player?.name !== sentName && (!sentOwner || sentOwner.playerId === playerId)) {
     player = { name: sentName };
     await deps.kv.setJSON(`players/${playerId}`, player);
   }

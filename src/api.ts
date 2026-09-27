@@ -22,7 +22,18 @@ export interface Board {
 }
 
 /** The server answered with an error (as opposed to being unreachable). */
-export class ApiRejected extends Error {}
+export class ApiRejected extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+/** The name belongs to another player; they can take it over with its PIN. */
+export class NameTaken extends Error {
+  constructor(public name: string) {
+    super(`“${name}” is taken`);
+  }
+}
 
 /** Same rules the server applies, so names can be checked while offline. */
 export function looksLikeName(raw: string): boolean {
@@ -41,7 +52,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
       signal: ctrl.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiRejected((data as { error?: string }).error ?? `Request failed (${res.status})`);
+    if (!res.ok) throw new ApiRejected((data as { error?: string }).error ?? `Request failed (${res.status})`, res.status);
     return data as T;
   } finally {
     clearTimeout(timer);
@@ -69,7 +80,12 @@ export const api = {
     call<Board & { score: number }>('POST', '/api/daily', b),
   hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
-  saveName: (playerId: string, name: string) => call<{ ok: true; name: string }>('POST', '/api/name', { playerId, name }),
+  saveName: (playerId: string, name: string) => call<{ ok: true; name: string; pin: string }>('POST', '/api/name', { playerId, name }),
+  claim: (name: string, pin: string) =>
+    call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name, pin: pin || undefined }),
+  me: (player: string) => call<{ name: string | null; pin: string | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
+  progress: (date: string, player: string) =>
+    call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
   startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
   finishBlitz: (b: { playerId: string; name: string; game: string; words: Submitted[] }) =>

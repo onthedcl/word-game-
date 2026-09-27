@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api, ApiRejected, leaderboardOnline, looksLikeName } from './api';
+import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken } from './api';
 import { Welcome } from './components/Welcome';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
 import { requestPuzzle } from './worker/client';
-import { dailyKey, NAME_KEY, playerId, readStored, useStoredState, writeStored } from './storage';
+import { dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, useStoredState, writeStored } from './storage';
 import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
 import { dailyBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
@@ -117,19 +117,33 @@ export default function App() {
     greeted.current = true;
     api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name, dateKeyFor()).catch(() => {});
   }, [online, me, name]);
+  const [pin, setPin] = useStoredState<string>(PIN_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
       if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');
       try {
-        setName((await api.saveName(me, n)).name);
+        const r = await api.saveName(me, n);
+        setName(r.name);
+        setPin(r.pin);
       } catch (err) {
+        if (err instanceof ApiRejected && err.status === 409) throw new NameTaken(n.trim());
         // The server said no (e.g. a blocked word): show why. If it's just unreachable, keep the name for later.
         if (err instanceof ApiRejected) throw err;
         setName(n.trim());
       }
     },
-    [me, setName],
+    [me, setName, setPin],
   );
+  /** Sign in as an existing player: their name + PIN. The page reloads as that player. */
+  const claimName = useCallback(async (n: string, p: string) => {
+    const r = await api.claim(n, p);
+    setPlayerId(r.playerId);
+    writeStored(NAME_KEY, r.name);
+    writeStored(PIN_KEY, r.pin);
+    writeStored('hexicon:asked-name', true);
+    writeStored('hexicon:seen-rules', true); // a returning player: skip the intro
+    location.reload();
+  }, []);
 
   // ---- daily ----------------------------------------------------------------
   const daily = usePuzzle(dateKey);
@@ -155,6 +169,30 @@ export default function App() {
       clearInterval(t);
     };
   }, [online, name, isToday, boardId, me, noteStanding]);
+
+  // Bring back words this player found on another device or browser today.
+  useEffect(() => {
+    if (!online || !name || !isToday) return;
+    let live = true;
+    api.progress(boardId, me).then(({ found }) => {
+      if (!live || !found.length) return;
+      setDailyFound((s) => {
+        const have = new Set(s.found);
+        const extra = found.map((f) => (typeof f === 'string' ? { w: f, p: null } : f)).filter((f) => !have.has(f.w));
+        if (!extra.length) return s;
+        const routes = { ...s.routes };
+        for (const f of extra) if (f.p) routes[f.w] = f.p;
+        return { found: [...s.found, ...extra.map((f) => f.w)], routes };
+      });
+    }, () => {});
+    return () => {
+      live = false;
+    };
+  }, [online, name, isToday, boardId, me, setDailyFound]);
+  // Players who picked a name before PINs existed: fetch theirs so the leaderboard can show it.
+  useEffect(() => {
+    if (online && name && !pin) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
+  }, [online, name, pin, me, setPin]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
@@ -465,7 +503,7 @@ export default function App() {
                 <p className="mt-1 text-sm text-muted">Playing as <b className="text-ink">{name}</b>. Your score goes on the leaderboard.</p>
               ) : (
                 <div className="mx-auto mt-5 max-w-xs text-left">
-                  <NameForm name="" cta="Save" onSave={saveName} />
+                  <NameForm name="" cta="Save" onSave={saveName} onClaim={claimName} />
                   <p className="mt-1 text-xs text-muted">Add a name to get on the leaderboard, or just press Start.</p>
                 </div>
               )}
@@ -492,6 +530,8 @@ export default function App() {
               await api.submitDaily({ playerId: me, name: n, date: boardId, words: submission(dailyFound) }).catch(() => {});
             }
           }}
+          onClaim={claimName}
+          pin={pin}
           initialTab={mode}
         />
       </Modal>
@@ -502,6 +542,7 @@ export default function App() {
             await saveName(n);
             closeDialog();
           }}
+          onClaim={claimName}
           onSkip={closeDialog}
           onRules={() => {
             writeStored('hexicon:asked-name', true);

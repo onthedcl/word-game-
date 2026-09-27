@@ -2,11 +2,12 @@ import { NameForm } from './Leaderboard';
 
 interface Props {
   onSave(name: string): Promise<void>;
+  onClaim(name: string, pin: string): Promise<void>;
   onSkip(): void;
   onRules(): void;
 }
 
-export function Welcome({ onSave, onSkip, onRules }: Props) {
+export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
   return (
     <div>
       <img
@@ -21,7 +22,7 @@ export function Welcome({ onSave, onSkip, onRules }: Props) {
         gold <b>key</b> tile. Drag and let go to submit.
       </p>
       <p className="mb-4 text-sm text-muted">What should we call you on the leaderboard?</p>
-      <NameForm name="" cta="Play" onSave={onSave} />
+      <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} />
       <div className="mt-4 flex justify-between text-sm text-muted">
         <button type="button" className="underline" onClick={onRules}>How to play</button>
         <button type="button" className="underline" onClick={onSkip}>Skip for now</button>

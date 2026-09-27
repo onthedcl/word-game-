@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type Board } from '../api';
+import { api, NameTaken, type Board } from '../api';
 
 const LIVE_REFRESH_MS = 5000;
 
@@ -10,29 +10,70 @@ interface Props {
   playerId: string;
   name: string;
   onName(name: string): Promise<void>;
+  onClaim(name: string, pin: string): Promise<void>;
+  pin: string;
   initialTab: Tab;
 }
 
-export function NameForm({ name, onSave, cta }: { name: string; onSave(name: string): Promise<void>; cta: string }) {
+interface NameFormProps {
+  name: string;
+  cta: string;
+  onSave(name: string): Promise<void>;
+  /** Take over a name that belongs to another device, using its PIN. */
+  onClaim?(name: string, pin: string): Promise<void>;
+}
+
+export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   const [value, setValue] = useState(name);
+  const [pin, setPin] = useState('');
+  const [taken, setTaken] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+    } catch (err) {
+      if (err instanceof NameTaken && onClaim) setTaken(err.name);
+      else setError(err instanceof Error ? err.message : 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (taken) {
+    return (
+      <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, pin)); }}>
+        <p className="text-sm">
+          <b>“{taken}”</b> is already playing. If that's you, enter your 4-digit PIN to continue on this device.
+        </p>
+        <div className="flex gap-2">
+          <input
+            aria-label="PIN"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="PIN"
+            className="w-24 rounded-lg border border-line bg-bg px-3 py-2 text-center text-base tracking-widest"
+          />
+          <button type="submit" disabled={busy} className="flex-1 rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
+            {busy ? '…' : `Continue as ${taken}`}
+          </button>
+        </div>
+        <p className="text-xs text-muted">No PIN yet? Leave it empty; names from before PINs existed can be claimed once.</p>
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setPin(''); setError(''); }}>
+          Pick a different name
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError('');
-        try {
-          await onSave(value.trim());
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Could not save');
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
+    <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onSave(value.trim())); }}>
       <label className="text-sm font-semibold" htmlFor="lb-name">Your leaderboard name</label>
       <div className="flex gap-2">
         <input
@@ -53,7 +94,7 @@ export function NameForm({ name, onSave, cta }: { name: string; onSave(name: str
   );
 }
 
-export function Leaderboard({ dateKey, playerId, name, onName, initialTab }: Props) {
+export function Leaderboard({ dateKey, playerId, name, onName, onClaim, pin, initialTab }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -110,6 +151,7 @@ export function Leaderboard({ dateKey, playerId, name, onName, initialTab }: Pro
               setEditing(false);
               setReload((r) => r + 1);
             }}
+            onClaim={onClaim}
           />
           <p className="mt-2 text-xs text-muted">Shown to everyone. Your daily score is posted as you play; Blitz scores post when time runs out.</p>
         </div>
@@ -117,6 +159,12 @@ export function Leaderboard({ dateKey, playerId, name, onName, initialTab }: Pro
         <p className="mb-3 text-sm text-muted">
           Playing as <b className="text-ink">{name}</b>{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
+          {pin && (
+            <span className="mt-1 block">
+              Your PIN: <b className="font-mono text-ink tracking-widest">{pin}</b>. Use it with your name to keep playing on
+              another phone or browser.
+            </span>
+          )}
         </p>
       )}
 

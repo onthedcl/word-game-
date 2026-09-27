@@ -6,7 +6,8 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, finishBlitz, getBlitz, getDaily, hello, saveName, startBlitz, submitDaily, type Deps, type Place,
+  ApiError, claimName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily,
+  type Deps, type Place,
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 
@@ -139,6 +140,12 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await finishBlitz(deps, body));
         case 'POST /api/name':
           return json(await saveName(deps, body));
+        case 'POST /api/claim':
+          return json(await claimName(deps, body));
+        case 'GET /api/me':
+          return json(await me(deps, url.searchParams.get('player')));
+        case 'GET /api/progress':
+          return json(await progressOf(deps, url.searchParams.get('date'), url.searchParams.get('player')));
         case 'GET /api/notify-status': {
           // Delivery health only: counts and the last error, never message contents.
           const status = (await this.ctx.storage.get('notify-status')) ?? { sent: 0, failed: 0 };

@@ -48,3 +48,9 @@ export function playerId(): string {
 }
 
 export const NAME_KEY = 'hexicon:player-name';
+export const PIN_KEY = 'hexicon:player-pin';
+
+/** Switch this device to another player (after signing in with name + PIN). */
+export function setPlayerId(id: string): void {
+  writeStored('hexicon:player-id', id);
+}
