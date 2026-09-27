@@ -203,6 +203,7 @@ describe('accepted answers', () => {
   it('keeps the board and adds less common words', () => {
     expect(wide.board).toBe(board.board);
     expect(wide.answers.map((a) => a.word)).toContain('tiled');
+    expect(wide.answers.map((a) => a.word)).toContain('sifts');
     expect(board.answers.map((a) => a.word)).not.toContain('tiled');
     const words = new Set(wide.answers.map((a) => a.word));
     for (const a of board.answers) expect(words.has(a.word)).toBe(true);

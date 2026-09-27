@@ -91,7 +91,7 @@ Generation takes about 50 ms per board on average.
 
 ## Dictionary
 
-`npm run build:dict` rebuilds `public/dict/` from the public-domain [ENABLE](https://github.com/dolph/dictionary) list. The list is limited to the 50k most frequent English words ([FrequencyWords](https://github.com/hermitdave/FrequencyWords)) so answers stay fair, and a blocklist removes profanity and slurs ([LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)). Boards are built from the resulting ~24k common words (`words.dawg`), so they stay fair. Answers also include any ENABLE word seen at least 30 times in the full frequency list (`words-all.dawg`, ~52k words), so real but less common words like *tiled* count. Pangram seeds come from the 25k most common words. Daily boards from 2026-09-28 also put two different vowels next to the key tile.
+`npm run build:dict` rebuilds `public/dict/` from the public-domain [ENABLE](https://github.com/dolph/dictionary) list. The list is limited to the 50k most frequent English words ([FrequencyWords](https://github.com/hermitdave/FrequencyWords)) so answers stay fair, and a blocklist removes profanity and slurs ([LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)). Boards are built from the resulting ~24k common words (`words.dawg`), so they stay fair. Answers also include any ENABLE word seen at least 30 times in the full frequency list (`words-all.dawg`, ~70k words), plus their -s/-ed/-ing forms, so real but less common words like *tiled* and *sifts* count. Pangram seeds come from the 25k most common words. Daily boards from 2026-09-28 also put two different vowels next to the key tile.
 
 `npm run sample -- 365` prints stats for the next year of boards.
 

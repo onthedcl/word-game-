@@ -7,7 +7,8 @@
 //   - FrequencyWords en_50k (hermitdave, MIT/CC-BY-SA) — used to drop obscure
 //     words so the answer list feels fair, Spelling Bee style.
 //   - FrequencyWords en_full — any ENABLE word seen at least ALL_MIN_COUNT times
-//     is accepted as an answer too, so real words like "tiled" aren't rejected.
+//     is accepted as an answer too, with its -s/-ed/-ing forms, so real words
+//     like "tiled" and "sifts" aren't rejected.
 //   - LDNOOBW English list — offensive words are removed.
 //
 // Usage: node scripts/build-dictionary.mjs
@@ -49,12 +50,33 @@ freq.slice(0, FREQ_LIMIT).forEach((line, rank) => {
   if (rank < PANGRAM_LIMIT && distinct(w) === 7 && w.length <= MAX_PANGRAM_LEN) pangrams.add(w);
 });
 
-// Accepted answers: the common words plus any ENABLE word that is used enough.
+// Accepted answers: the common words plus any ENABLE word that is used enough...
 const allWords = new Set(words);
+const used = new Set(); // includes 3-letter words, as stems for the forms below
 for (const line of full) {
   const [w, n] = line.split(' ');
   if (Number(n) < ALL_MIN_COUNT) break; // the list is sorted by count
-  if (/^[a-z]+$/.test(w) && w.length >= MIN_LEN && enableSet.has(w) && !badSet.has(w)) allWords.add(w);
+  if (!/^[a-z]+$/.test(w) || !enableSet.has(w) || badSet.has(w)) continue;
+  used.add(w);
+  if (w.length >= MIN_LEN) allWords.add(w);
+}
+// ...and every -s/-es/-ed/-ing form of those, since subtitles rarely use some
+// forms of everyday words ("sift" is common, "sifts" isn't).
+function stems(w) {
+  const out = [];
+  if (w.endsWith('s') && !w.endsWith('ss')) out.push(w.slice(0, -1));
+  if (w.endsWith('es')) out.push(w.slice(0, -2));
+  if (w.endsWith('ies') || w.endsWith('ied')) out.push(w.slice(0, -3) + 'y');
+  if (w.endsWith('ed')) out.push(w.slice(0, -2), w.slice(0, -1));
+  if (w.endsWith('ing')) out.push(w.slice(0, -3), w.slice(0, -3) + 'e');
+  for (const suffix of ['ed', 'ing']) {
+    const s = w.slice(0, -suffix.length);
+    if (w.endsWith(suffix) && s.length > 2 && s.at(-1) === s.at(-2)) out.push(s.slice(0, -1)); // "fitted" -> "fit"
+  }
+  return out;
+}
+for (const w of enable) {
+  if (w.length >= MIN_LEN && !allWords.has(w) && !badSet.has(w) && stems(w).some((s) => used.has(s))) allWords.add(w);
 }
 
 // ---- DAWG ------------------------------------------------------------------
