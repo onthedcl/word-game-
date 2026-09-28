@@ -3,6 +3,7 @@ import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
 import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken } from './api';
+import { isNativeApp, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
@@ -73,6 +74,7 @@ function initialDateKey(): string {
 
 async function share(text: string): Promise<string> {
   try {
+    if (await nativeShare(text)) return '';
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       await navigator.share({ text });
       return '';
@@ -357,7 +359,8 @@ export default function App() {
 
   // ---- shared ---------------------------------------------------------------
   // Never reload out from under a Blitz round; daily progress is saved, so that's safe.
-  const { updateReady, reload } = useUpdateCheck(blitz.phase !== 'playing' && blitz.phase !== 'loading');
+  // (The iPhone app bundles its files and updates through the App Store instead.)
+  const { updateReady, reload } = useUpdateCheck(blitz.phase !== 'playing' && blitz.phase !== 'loading', !isNativeApp);
 
   useEffect(() => {
     if (!notice) return;
@@ -506,6 +509,7 @@ export default function App() {
               onFound={(w, r) => {
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);
+                scheduleDailyReminder().catch(() => {}); // in the iPhone app: once, after the first word
               }}
               keyboard={dialog === null}
               statusExtra={

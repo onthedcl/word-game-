@@ -20,7 +20,7 @@ async function deployedEntryScript(): Promise<string | null> {
  * (progress is saved, so nothing is lost); otherwise `updateReady` is set so the
  * UI can offer a refresh.
  */
-export function useUpdateCheck(canReload: boolean) {
+export function useUpdateCheck(canReload: boolean, enabled = true) {
   const [updateReady, setUpdateReady] = useState(false);
   const canReloadRef = useRef(canReload);
   canReloadRef.current = canReload;
@@ -28,7 +28,7 @@ export function useUpdateCheck(canReload: boolean) {
   const reload = useCallback(() => location.reload(), []);
 
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    if (import.meta.env.DEV || !enabled) return;
     const current = entryScript(document);
     if (!current) return;
 
@@ -57,7 +57,7 @@ export function useUpdateCheck(canReload: boolean) {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
     };
-  }, []);
+  }, [enabled]);
 
   return { updateReady, reload };
 }
