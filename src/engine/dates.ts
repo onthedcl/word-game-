@@ -27,3 +27,18 @@ export function shortDate(dateKey: string): string {
   const [, m, d] = dateKey.split('-').map(Number);
   return `${m}/${d}`;
 }
+
+const HOUR = 3600 * 1000;
+
+/** A daily board opens when its date begins in the earliest time zone (UTC+14). */
+export function boardOpensAt(dateKey: string): number {
+  return Date.parse(`${dateKey}T00:00:00Z`) - 14 * HOUR;
+}
+
+/**
+ * A daily board locks once its date has ended in every time zone (UTC-12): noon
+ * UTC the next day, 8 AM Eastern in summer. After that its leaderboard is final.
+ */
+export function boardLocksAt(dateKey: string): number {
+  return Date.parse(`${dateKey}T00:00:00Z`) + 36 * HOUR;
+}

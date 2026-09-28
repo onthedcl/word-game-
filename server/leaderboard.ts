@@ -2,7 +2,7 @@
 // up the puzzle's answer table and scores the submitted words itself.
 import { rankFor, scorePath, TOP_RANK } from '../src/engine/scoring';
 import { CENTER, isValidRoute } from '../src/engine/hexgrid';
-import { EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
+import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
@@ -129,11 +129,10 @@ function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
   return { boardId: value as string, dateKey: parsed.dateKey };
 }
 
-/** Today's date could be yesterday or tomorrow somewhere, so allow one day either side of UTC. */
+/** A board takes scores from when its date starts anywhere until it has ended everywhere, then locks. */
 function checkDailyDate(value: unknown, now: number): string {
   const { boardId, dateKey } = boardIdOf(value);
-  const today = new Date(now).toISOString().slice(0, 10);
-  if (dateKey < shiftDateKey(today, -1) || dateKey > shiftDateKey(today, 1)) throw new ApiError(400, 'That puzzle is closed');
+  if (now < boardOpensAt(dateKey) || now >= boardLocksAt(dateKey)) throw new ApiError(400, 'That puzzle is closed');
   return boardId;
 }
 

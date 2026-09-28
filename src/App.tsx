@@ -14,7 +14,7 @@ import { requestPuzzle } from './worker/client';
 import {
   adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
 } from './storage';
-import { dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
+import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
 import { dailyBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
@@ -234,12 +234,20 @@ export default function App() {
 
   // The first visit after a day closes: show where this player finished yesterday (once).
   // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
+  // It waits until yesterday's board has locked (its results are final), checking again at that moment.
   const [podium, setPodium] = useState<Board | null>(null);
+  const [podiumCheck, setPodiumCheck] = useState(0);
   useEffect(() => {
     if (!online || !name || !isToday) return;
-    const yesterdayId = dailyBoardId(shiftDateKey(dateKeyFor(), -1));
+    const yesterday = shiftDateKey(dateKeyFor(), -1);
+    const yesterdayId = dailyBoardId(yesterday);
     const seenKey = `hexicon:podium:${yesterdayId}`;
-    if (yesterdayId < EPOCH || readStored(seenKey, false)) return;
+    if (yesterday < EPOCH || readStored(seenKey, false)) return;
+    const wait = boardLocksAt(yesterday) - Date.now();
+    if (wait > 0) {
+      const t = setTimeout(() => setPodiumCheck((n) => n + 1), Math.min(wait + 5000, 2 ** 31 - 1));
+      return () => clearTimeout(t);
+    }
     let live = true;
     const t = setTimeout(() => {
       api.daily(yesterdayId, me).then((b) => {
@@ -255,7 +263,7 @@ export default function App() {
       live = false;
       clearTimeout(t);
     };
-  }, [online, name, isToday, me]);
+  }, [online, name, isToday, me, podiumCheck]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
