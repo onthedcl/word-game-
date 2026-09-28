@@ -1,0 +1,12 @@
+The word lists in this folder (words.dawg, words-all.dawg, pangrams.txt) are built by
+scripts/build-dictionary.mjs from:
+
+- ENABLE word list (public domain).
+- FrequencyWords by Hermit Dave (https://github.com/hermitdave/FrequencyWords), content
+  licensed CC BY-SA 4.0, derived from OpenSubtitles (http://www.opensubtitles.org/).
+- A blocklist from LDNOOBW (https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
+  CC BY 4.0, used to remove offensive words.
+
+Because they are adapted from FrequencyWords, these word lists are shared under the
+Creative Commons Attribution-ShareAlike 4.0 license: https://creativecommons.org/licenses/by-sa/4.0/
+This applies only to the files in this folder, not to the rest of the game.

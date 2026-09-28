@@ -156,6 +156,17 @@ export default function App() {
     location.reload();
   }, []);
 
+  /** Erase this player from the server and this device, then start fresh. */
+  const deleteMyData = useCallback(async () => {
+    await api.deleteMe(me);
+    try {
+      for (const k of Object.keys(localStorage)) if (k.startsWith('hexicon:')) localStorage.removeItem(k);
+    } catch {
+      /* nothing stored */
+    }
+    location.replace(location.pathname);
+  }, [me]);
+
   // ---- daily ----------------------------------------------------------------
   // New players get a "show me a word" tip until they find their first word.
   const [starterDone, setStarterDone] = useStoredState<boolean>('hexicon:starter-done', hasPlayedBefore());
@@ -566,6 +577,7 @@ export default function App() {
             }
           }}
           onClaim={claimName}
+          onDelete={deleteMyData}
           initialTab={mode}
         />
       </Modal>

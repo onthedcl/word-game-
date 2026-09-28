@@ -1,4 +1,4 @@
-// Scrabble-style scoring with board premiums, length bonus and pangram jackpot.
+// Letter-value scoring with board premiums, length bonus and pangram jackpot.
 
 export type Premium = 'DL' | 'TL' | 'DW';
 

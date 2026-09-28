@@ -401,3 +401,65 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
   });
   return { ok: true };
 }
+
+// ---- privacy & moderation ------------------------------------------------------
+
+/** Delete everything the server keeps about a player: name, scores, found words, visit history. */
+export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  if (player) {
+    const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
+    if (owner?.playerId === playerId) await deps.kv.setJSON(nameKey(player.name), null);
+  }
+  const mine = (prefix: string) => deps.kv.list({ prefix }).then(({ blobs }) => blobs.filter((b) => b.key.endsWith(`/${playerId}`)));
+  const keys = [
+    ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')),
+  ].map((b) => b.key);
+  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`);
+  for (const key of keys) await deps.kv.setJSON(key, null);
+  return { ok: true };
+}
+
+/** A player flags a leaderboard name as offensive; the owner is told right away. */
+export async function reportName(deps: Deps, body: Record<string, unknown>) {
+  const reporter = playerIdOf(body.playerId);
+  const name = typeof body.name === 'string' ? body.name.slice(0, 32) : '';
+  if (!name) throw new ApiError(400, 'Bad name');
+  const key = `reports/${name.toLowerCase()}/${reporter}`;
+  if (!(await deps.kv.get(key, { type: 'json' }))) {
+    await deps.kv.setJSON(key, { at: deps.now() });
+    const count = (await deps.kv.list({ prefix: `reports/${name.toLowerCase()}/` })).blobs.length;
+    deps.notify?.({
+      title: 'Name reported',
+      message: `“${name}” was reported as offensive (${count} ${count === 1 ? 'report' : 'reports'}). Rename or remove it with the Moderate workflow.`,
+      tags: ['warning'],
+      urgent: true,
+    });
+  }
+  return { ok: true };
+}
+
+/**
+ * Owner-only: rename a player (to "Player 1234" if no new name is given) wherever
+ * their name shows, and free the old name. Scores are kept.
+ */
+export async function moderateName(deps: Deps, body: Record<string, unknown>) {
+  const name = nameOf(body.name);
+  const owner = await ownerOf(deps, name);
+  if (!owner) throw new ApiError(404, 'No player has that name');
+  const to = body.to ? nameOf(body.to) : `Player ${String(Math.floor(deps.random() * 9000) + 1000)}`;
+  const taken = await ownerOf(deps, to);
+  if (taken && taken.playerId !== owner.playerId) throw new ApiError(409, 'That new name is taken');
+  const id = owner.playerId;
+  for (const { key } of (await deps.kv.list({ prefix: 'daily/' })).blobs.filter((b) => b.key.endsWith(`/${id}`))) {
+    const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+    if (entry) await deps.kv.setJSON(key, { ...entry, name: to });
+  }
+  const blitz = (await deps.kv.get(`blitz-best/${id}`, { type: 'json' })) as Entry | null;
+  if (blitz) await deps.kv.setJSON(`blitz-best/${id}`, { ...blitz, name: to });
+  await deps.kv.setJSON(`players/${id}`, { name: to });
+  await deps.kv.setJSON(nameKey(name), null);
+  await deps.kv.setJSON(nameKey(to), { playerId: id, pin: owner.pin ?? newPin(deps) } satisfies NameOwner);
+  return { ok: true, name: to };
+}

@@ -6,7 +6,8 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, claimName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily,
+  ApiError, claimName, deletePlayer, finishBlitz, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
+  startBlitz, submitDaily,
   type Deps, type Place,
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
@@ -64,7 +65,8 @@ export class Leaderboard extends DurableObject<Env> {
     return {
       kv: {
         get: async (key) => (await storage.get(key)) ?? null,
-        setJSON: (key, value) => storage.put(key, value),
+        // Writing null deletes the key, so deleted data really is gone (and isn't listed or counted).
+        setJSON: (key, value) => (value === null ? storage.delete(key) : storage.put(key, value)),
         list: async ({ prefix }) => ({ blobs: [...(await storage.list({ prefix })).keys()].map((key) => ({ key })) }),
       },
       answers: async (key) => {
@@ -79,7 +81,9 @@ export class Leaderboard extends DurableObject<Env> {
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
-      notify: this.env.NTFY_TOPIC ? (n) => this.ctx.waitUntil(this.queueNotification(n)) : undefined,
+      notify: this.env.NTFY_TOPIC
+        ? (n) => this.ctx.waitUntil(n.urgent ? this.sendNotification(n) : this.queueNotification(n))
+        : undefined,
     };
   }
 
@@ -165,6 +169,14 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await me(deps, url.searchParams.get('player')));
         case 'GET /api/progress':
           return json(await progressOf(deps, url.searchParams.get('date'), url.searchParams.get('player')));
+        case 'POST /api/delete':
+          return json(await deletePlayer(deps, body));
+        case 'POST /api/report':
+          return json(await reportName(deps, body));
+        case 'POST /api/admin/moderate':
+          // Owner only: the Moderate workflow sends the private ntfy topic as its key.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          return json(await moderateName(deps, body));
         case 'GET /api/notify-status': {
           // Delivery health only: counts and the last error, never message contents.
           const status = (await this.ctx.storage.get('notify-status')) ?? { sent: 0, failed: 0 };

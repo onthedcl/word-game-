@@ -8,7 +8,7 @@ const board = (word: string, premiums: Record<number, Premium> = {}): Board => (
 const route = (n: number) => [...Array(n).keys()];
 
 describe('scorePath', () => {
-  it('sums Scrabble letter values', () => {
+  it('sums letter values', () => {
     // T1 R1 E1 K5
     expect(scorePath(route(4), board('trek'))).toEqual({ score: 8, pangram: false });
   });

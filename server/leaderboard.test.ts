@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, describePlace, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, describePlace, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -12,7 +12,7 @@ function memoryKV(): KV & { data: Map<string, unknown> } {
   return {
     data,
     get: async (key) => structuredClone(data.get(key) ?? null),
-    setJSON: async (key, value) => void data.set(key, structuredClone(value)),
+    setJSON: async (key, value) => void (value === null ? data.delete(key) : data.set(key, structuredClone(value))),
     list: async ({ prefix }) => ({ blobs: [...data.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })) }),
   };
 }
@@ -290,5 +290,40 @@ describe('day-one fixes', () => {
     const board = await getDaily(deps, DATE, P1);
     expect(board.you!.score).toBeLessThan(puzzle.maxScore);
     expect(board.you!.rankName).toBe('Key to the City');
+  });
+});
+
+describe('privacy and moderation', () => {
+  it('deletes everything about a player', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    await submitDaily(deps, { playerId: P1, name: 'Castle', date: DATE, words: words.slice(0, 3) });
+    await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words: words.slice(0, 2) });
+    await hello(deps, { playerId: P1, mode: 'daily', date: DATE });
+    await deletePlayer(deps, { playerId: P1 });
+    expect([...deps.kv.data.keys()].filter((k) => k.includes(P1))).toEqual([]);
+    expect((await getDaily(deps, DATE, null)).top.map((r) => r.name)).toEqual(['Bo']);
+    // The name is free again.
+    expect((await saveName(deps, { playerId: P2, name: 'Castle' })).name).toBe('Castle');
+  });
+
+  it('tells the owner right away when a name is reported, once per reporter', async () => {
+    await reportName(deps, { playerId: P1, name: 'Rude' });
+    await reportName(deps, { playerId: P1, name: 'Rude' });
+    await reportName(deps, { playerId: P2, name: 'rude' });
+    expect(sent.filter((m) => m.startsWith('Name reported'))).toHaveLength(2);
+    expect(sent.at(-1)).toContain('2 reports');
+  });
+
+  it('lets the owner rename an offensive name everywhere, keeping the scores', async () => {
+    await submitDaily(deps, { playerId: P1, name: 'Rude', date: DATE, words: words.slice(0, 3) });
+    const before = (await getDaily(deps, DATE, P1)).you!.score;
+    const r = await moderateName(deps, { name: 'rude' });
+    expect(r.name).toMatch(/^Player \d{4}$/);
+    const you = (await getDaily(deps, DATE, P1)).you!;
+    expect(you).toMatchObject({ name: r.name, score: before });
+    expect(await me(deps, P1)).toMatchObject({ name: r.name });
+    expect((await saveName(deps, { playerId: P2, name: 'Rude' })).name).toBe('Rude');
+    await moderateName(deps, { name: r.name, to: 'Nice' });
+    expect((await getDaily(deps, DATE, P1)).you!.name).toBe('Nice');
   });
 });

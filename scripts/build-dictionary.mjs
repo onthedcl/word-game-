@@ -5,7 +5,7 @@
 // Sources (downloaded at build time, not committed):
 //   - ENABLE word list (public domain) — the base of valid English words.
 //   - FrequencyWords en_50k (hermitdave, MIT/CC-BY-SA) — used to drop obscure
-//     words so the answer list feels fair, Spelling Bee style.
+//     words so the answer list feels fair.
 //   - FrequencyWords en_full — any ENABLE word seen at least ALL_MIN_COUNT times
 //     is accepted as an answer too, with its -s/-ed/-ing forms, so real words
 //     like "tiled" and "sifts" aren't rejected.

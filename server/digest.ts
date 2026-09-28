@@ -15,6 +15,8 @@ export interface Notification {
   tags?: string[];
   /** Structured form of the ping, for the digest. */
   event?: DigestEvent;
+  /** Send right away instead of waiting for the digest (e.g. a reported name). */
+  urgent?: boolean;
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

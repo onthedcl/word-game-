@@ -1,0 +1,30 @@
+name: Moderate
+
+# Rename an offensive leaderboard name everywhere it shows (scores are kept).
+# Run it by hand from the Actions tab. Leave "new name" empty to use "Player 1234".
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Name to rename'
+        required: true
+      new_name:
+        description: 'New name (optional)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  moderate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rename
+        env:
+          KEY: ${{ secrets.NTFY_TOPIC }}
+          NAME: ${{ inputs.name }}
+          TO: ${{ inputs.new_name }}
+        run: |
+          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg to "$TO" '{key: $key, name: $name} + (if $to == "" then {} else {to: $to} end)')
+          curl -sS -w '\nHTTP %{http_code}\n' -H 'Content-Type: application/json' -d "$body" \
+            https://word-game-leaderboard.danlagstein.workers.dev/api/admin/moderate

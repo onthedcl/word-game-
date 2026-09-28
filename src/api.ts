@@ -89,4 +89,7 @@ export const api = {
   startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
   finishBlitz: (b: { playerId: string; name: string; game: string; words: Submitted[] }) =>
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
+  /** Erase this player's name, scores and history from the server. */
+  deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
+  report: (playerId: string, name: string) => call<{ ok: true }>('POST', '/api/report', { playerId, name }),
 };

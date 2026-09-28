@@ -2,11 +2,11 @@
 
 ![DPIYF Lettertown](public/lettertown.jpg)
 
-A daily word puzzle that mixes three classics:
+A daily word puzzle on a hex board of letter tiles:
 
-- **Spelling Bee**: 7 distinct letters, a required key letter, a pangram jackpot and a rank ladder.
-- **Boggle**: words are traced through *adjacent* tiles, and no tile is reused within a word.
-- **Scrabble**: letters carry Scrabble values and some tiles are premium (DL, TL, DW).
+- A required gold **key** tile that every word must use, a **pangram** jackpot and a rank ladder.
+- Words are traced through *adjacent* tiles, and no tile is reused within a word.
+- Letters carry point values and some tiles are premium (DL, TL, DW).
 
 Built with Vite, React, TypeScript and Tailwind. No backend: every device builds the same board from the date.
 

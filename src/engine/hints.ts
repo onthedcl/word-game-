@@ -1,4 +1,4 @@
-// Spelling Bee style hint grid: remaining words by first letter and length.
+// Hint grid: remaining words by first letter and length.
 import type { Puzzle } from './generator';
 
 export interface HintGrid {
