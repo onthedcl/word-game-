@@ -19,8 +19,9 @@ export type SubmitResult =
   | { ok: true; answer: Answer; route: number[]; score: number }
   | { ok: false; reason: Rejection };
 
+/** Every accepted word on the board, including bonus words. */
 export function answerIndex(puzzle: Puzzle): Map<string, Answer> {
-  return new Map(puzzle.answers.map((a) => [a.word, a]));
+  return new Map([...(puzzle.bonus ?? []), ...puzzle.answers].map((a) => [a.word, a]));
 }
 
 /**
@@ -68,7 +69,8 @@ export function scoreOf(puzzle: Puzzle, answers: Map<string, Answer>, found: Ite
 
 export function progress(puzzle: Puzzle, answers: Map<string, Answer>, found: readonly string[], routes?: Routes) {
   const score = scoreOf(puzzle, answers, found, routes);
-  const complete = found.length === puzzle.answers.length;
+  // Bonus words score, but "every word" means every counted word.
+  const complete = found.filter((w) => answers.has(w) && !answers.get(w)!.bonus).length === puzzle.answers.length;
   return {
     score,
     rank: rankFor(score, puzzle.maxScore, complete),

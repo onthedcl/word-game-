@@ -6,7 +6,7 @@ import type { WorkerRequest, WorkerResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-let loaded: Promise<{ dict: Dawg; accepted: Dawg; seeds: string[] }> | null = null;
+let loaded: Promise<{ dict: Dawg; accepted: Dawg; full: Dawg; seeds: string[] }> | null = null;
 
 async function fetchText(file: string): Promise<string> {
   const res = await fetch(new URL(`${import.meta.env.BASE_URL}dict/${file}`, self.location.origin));
@@ -15,9 +15,12 @@ async function fetchText(file: string): Promise<string> {
 }
 
 function load() {
-  loaded ??= Promise.all([fetchText('words.dawg'), fetchText('words-all.dawg'), fetchText('pangrams.txt')]).then(([dawg, all, pangrams]) => ({
+  loaded ??= Promise.all([
+    fetchText('words.dawg'), fetchText('words-all.dawg'), fetchText('words-full.dawg'), fetchText('pangrams.txt'),
+  ]).then(([dawg, all, everything, pangrams]) => ({
     dict: parseDawg(dawg),
     accepted: parseDawg(all),
+    full: parseDawg(everything),
     seeds: pangrams.split('\n').filter(Boolean),
   }));
   return loaded;
@@ -26,12 +29,13 @@ function load() {
 self.onmessage = async ({ data }: MessageEvent<WorkerRequest>) => {
   let reply: WorkerResponse;
   try {
-    const { dict, accepted, seeds } = await load();
+    const { dict, accepted, full, seeds } = await load();
     const { request } = data;
     // Boards come from common words; answers include every accepted word.
     const puzzle = withAnswers(
       request.type === 'daily' ? generateDaily(dict, seeds, request.dateKey) : generateBlitz(dict, seeds, request.seed),
       accepted,
+      full,
     );
     reply = { id: data.id, puzzle };
   } catch (err) {

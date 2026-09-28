@@ -128,3 +128,19 @@ describe('share', () => {
     );
   });
 });
+
+describe('bonus words', () => {
+  it('are accepted and scored, but not counted toward every word', async () => {
+    const { accepted, dict, full, seeds } = await import('./node-dict');
+    const { generateDaily, withAnswers } = await import('./generator');
+    const { answerIndex, checkWord, progress } = await import('./game');
+    const p = withAnswers(generateDaily(dict, seeds, '2026-09-28'), accepted, full);
+    const index = answerIndex(p);
+    const b = p.bonus![0];
+    const r = checkWord(p, index, new Set(), b.word, b.path);
+    expect(r.ok && r.answer.bonus).toBe(true);
+    const all = p.answers.map((a) => a.word);
+    expect(progress(p, index, [...all.slice(0, -1), b.word]).complete).toBe(false);
+    expect(progress(p, index, [...all, b.word]).complete).toBe(true);
+  });
+});

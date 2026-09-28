@@ -34,7 +34,7 @@ export function PuzzleView({
 }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
-  const { score, rank } = progress(puzzle, answers, found, routes);
+  const { score, rank, complete } = progress(puzzle, answers, found, routes);
 
   // Input: either a traced path or typed letters (with a route highlighted for them).
   const [path, setPathState] = useState<number[]>([]);
@@ -129,12 +129,15 @@ export function PuzzleView({
     setPulse({ id: Date.now(), ids: route, kind: 'good' });
     setFresh(answer.word);
     const after = progress(puzzle, answers, [...found, answer.word], { ...routes, [answer.word]: route });
-    if (after.complete && puzzle.kind === 'daily') {
+    if (after.complete && !complete && puzzle.kind === 'daily') {
       setBanner({ id: Date.now(), text: 'Every word found!', sub: after.rank.name === TOP_RANK ? TOP_RANK : `+${points}` });
       haptics.pangram();
     } else if (answer.pangram) {
       setBanner({ id: Date.now(), text: 'Pangram!', sub: `+${points}` });
       haptics.pangram();
+    } else if (answer.bonus) {
+      say(`Bonus word! +${points}`, 'good');
+      haptics.success();
     } else {
       const bestNote = points < answer.score ? ` (best spot: ${answer.score})` : '';
       say(after.rank.index > before ? `${after.rank.name}! +${points}` : `+${points}${bestNote}`, 'good');

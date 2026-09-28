@@ -327,3 +327,26 @@ describe('privacy and moderation', () => {
     expect((await getDaily(deps, DATE, P1)).you!.name).toBe('Nice');
   });
 });
+
+describe('bonus words', () => {
+  it('score, but finding every counted word is enough for the top rank', async () => {
+    const { accepted, full } = await import('../src/engine/node-dict');
+    const { withAnswers } = await import('../src/engine/generator');
+    const wide = withAnswers(puzzle, accepted, full);
+    expect(wide.bonus!.length).toBeGreaterThan(0);
+    deps.answers = async () => answerTable(wide);
+    const main = wide.answers.map((a) => ({ w: a.word, p: a.path }));
+    const bonus = wide.bonus![0];
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: main.slice(0, -1) });
+    expect((await getDaily(deps, DATE, P1)).you!.rankName).not.toBe('Key to the City');
+    // A bonus word adds points but doesn't complete the board...
+    const r1 = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [...main.slice(0, -1), { w: bonus.word, p: bonus.path }] });
+    expect(r1.you!.words).toBe(main.length);
+    expect(r1.you!.rankName).not.toBe('Key to the City');
+    // ...every counted word does.
+    const r2 = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [...main, { w: bonus.word, p: bonus.path }] });
+    expect(r2.you!.rankName).toBe('Key to the City');
+    expect(r2.score).toBeGreaterThan(wide.maxScore);
+    expect(sent.filter((m) => m.includes('found all')).at(-1)).toContain(`found all ${wide.answers.length} words`);
+  });
+});

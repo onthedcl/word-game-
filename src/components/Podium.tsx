@@ -17,8 +17,42 @@ interface Props {
   onClose(): void;
 }
 
+/** Everyone else who played yesterday gets a quieter card: their place and the podium to aim for. */
+function Finish({ board, onClose }: Omit<Props, 'onShare'>) {
+  const you = board.you!;
+  const third = board.top[2];
+  const gap = third ? third.score - you.score + 1 : 0;
+  return (
+    <div className="text-center">
+      <div className="text-5xl">🎖️</div>
+      <p className="mt-2 text-2xl font-black">You finished #{you.position}</p>
+      <p className="mt-1 text-muted">
+        out of {board.total} players on yesterday's board, with <b className="text-ink">{you.score}</b> points
+      </p>
+      <ol className="mx-auto mt-5 max-w-xs space-y-1 text-left">
+        {board.top.slice(0, 3).map((r) => (
+          <li key={r.position} className="flex items-center gap-3 rounded-lg bg-bg px-3 py-1.5">
+            <span>{MEDALS[r.position - 1]}</span>
+            <span className="min-w-0 flex-1 truncate">{r.name}</span>
+            <span className="font-bold tabular-nums">{r.score}</span>
+          </li>
+        ))}
+      </ol>
+      {gap > 0 && (
+        <p className="mt-3 text-sm text-muted">
+          {gap} more {gap === 1 ? 'point' : 'points'} would have put you on the podium. Go get it today!
+        </p>
+      )}
+      <button type="button" onClick={onClose} className="mt-5 whitespace-nowrap rounded-full bg-ink px-5 py-2.5 font-bold text-bg active:scale-95">
+        Play today's
+      </button>
+    </div>
+  );
+}
+
 export function Podium({ board, onShare, onClose }: Props) {
   const you = board.you!;
+  if (you.position > 3) return <Finish board={board} onClose={onClose} />;
   return (
     <div className="relative text-center">
       <div className="pointer-events-none absolute inset-x-0 -top-6 h-72 overflow-hidden" aria-hidden>

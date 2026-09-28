@@ -20,8 +20,10 @@ export interface Puzzle {
   centerLetter: string;
   seedPangram: string;
   board: Board;
-  /** Every valid word with its best route, sorted alphabetically. */
+  /** Every word to find, with its best route, sorted alphabetically. */
   answers: Answer[];
+  /** Uncommon words that are also accepted (and score), but aren't counted in the total. */
+  bonus?: Answer[];
   pangrams: string[];
   maxScore: number;
   /** 0 (Monday, easiest) to 6 (Sunday, hardest). null for boards made before difficulty existed. */
@@ -326,13 +328,22 @@ export function generateBlitz(dict: Dawg, seeds: readonly string[], seed: string
 /**
  * The same board with its answers taken from a wider dictionary. Boards are
  * built from common words only (so they stay fair and stable), but any real
- * word the player can trace on them counts.
+ * word the player can trace on them counts. With `full`, every other word in
+ * that list is accepted as a bonus word.
  */
-export function withAnswers(puzzle: Puzzle, dict: Dawg): Puzzle {
+export function withAnswers(puzzle: Puzzle, dict: Dawg, full?: Dawg): Puzzle {
   const answers = [...solveBoard(puzzle.board, dict).values()].sort((a, b) => a.word.localeCompare(b.word));
+  const main = new Set(answers.map((a) => a.word));
+  const bonus = full
+    ? [...solveBoard(puzzle.board, full).values()]
+        .filter((a) => !main.has(a.word))
+        .map((a) => ({ ...a, bonus: true }))
+        .sort((a, b) => a.word.localeCompare(b.word))
+    : undefined;
   return {
     ...puzzle,
     answers,
+    bonus,
     pangrams: answers.filter((a) => a.pangram).map((a) => a.word),
     maxScore: answers.reduce((s, a) => s + a.score, 0),
   };

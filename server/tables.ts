@@ -8,13 +8,14 @@ export interface AnswerTable {
   maxScore: number;
   /** The board itself, so the server can score the route each word was traced along. */
   board?: Board;
-  /** word -> [score, isPangram (1/0)] */
-  words: Record<string, [number, 0 | 1]>;
+  /** word -> [score, isPangram (1/0)], plus a trailing 1 for bonus words (they score but aren't counted in the total). */
+  words: Record<string, [number, 0 | 1] | [number, 0 | 1, 1]>;
 }
 
 export function answerTable(puzzle: Puzzle): AnswerTable {
   const words: AnswerTable['words'] = {};
   for (const a of puzzle.answers) words[a.word] = [a.score, a.pangram ? 1 : 0];
+  for (const a of puzzle.bonus ?? []) words[a.word] = [a.score, a.pangram ? 1 : 0, 1];
   return { maxScore: puzzle.maxScore, board: puzzle.board, words };
 }
 

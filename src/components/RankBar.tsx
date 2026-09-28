@@ -12,7 +12,7 @@ interface Props {
 export function RankBar({ score, maxScore, rank, extra, note }: Props) {
   const thresholds = rankThresholds(maxScore);
   const cur = thresholds[rank.index];
-  const within = rank.next ? (score - cur.points) / Math.max(1, rank.next.points - cur.points) : 1;
+  const within = rank.next ? Math.min(1, (score - cur.points) / Math.max(1, rank.next.points - cur.points)) : 1;
   const pct = ((rank.index + Math.min(1, within)) / (thresholds.length - 1)) * 100;
 
   return (
@@ -38,7 +38,13 @@ export function RankBar({ score, maxScore, rank, extra, note }: Props) {
         ))}
       </div>
       <div className="flex items-center justify-between gap-2 text-sm text-muted">
-        <p>{rank.next ? `${rank.next.points - score} points to ${rank.next.name}` : 'You hold the Key to the City!'}</p>
+        <p>
+          {!rank.next
+            ? 'You hold the Key to the City!'
+            : score >= rank.next.points
+              ? `Find every word for the ${rank.next.name}` // bonus points got them there, but the top rank needs every word
+              : `${rank.next.points - score} points to ${rank.next.name}`}
+        </p>
         {note}
       </div>
     </section>

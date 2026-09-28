@@ -232,7 +232,8 @@ export default function App() {
     if (online && name && !pin) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
   }, [online, name, pin, me, setPin]);
 
-  // The first visit after a day closes: if this player made yesterday's top 3, roll out the podium (once).
+  // The first visit after a day closes: show where this player finished yesterday (once).
+  // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
   const [podium, setPodium] = useState<Board | null>(null);
   useEffect(() => {
     if (!online || !name || !isToday) return;
@@ -244,10 +245,10 @@ export default function App() {
       api.daily(yesterdayId, me).then((b) => {
         if (!live) return;
         writeStored(seenKey, true);
-        if (!b.you || b.you.position > 3) return;
+        if (!b.you) return;
         setPodium(b);
         setDialog((d) => d ?? 'podium');
-        haptics.pangram();
+        if (b.you.position <= 3) haptics.pangram();
       }, () => {});
     }, 1200);
     return () => {

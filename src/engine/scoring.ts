@@ -66,7 +66,10 @@ export function rankFor(score: number, maxScore: number, allFound = false) {
   thresholds.forEach((r, i) => {
     if (score >= r.points) index = i;
   });
-  if (allFound) index = thresholds.length - 1;
+  // The top rank means finding every word; bonus points alone can't reach it.
+  const top = thresholds.length - 1;
+  if (allFound) index = top;
+  else if (index === top) index = top - 1;
   const next = thresholds[index + 1] ?? null;
   return { name: thresholds[index].name, index, next };
 }

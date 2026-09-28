@@ -40,12 +40,16 @@ describe('ranks', () => {
   it('uses the percentage ladder', () => {
     expect(rankThresholds(200).map((r) => r.points)).toEqual([0, 20, 50, 90, 130, 160, 200]);
     const names = [0, 19, 20, 50, 90, 130, 160, 199, 200].map((s) => rankFor(s, 200).name);
-    expect(names).toEqual(['Tourist', 'Tourist', 'Newcomer', 'Local', 'Wordsmith', 'Town Crier', 'Mayor', 'Mayor', 'Key to the City']);
+    expect(names).toEqual(['Tourist', 'Tourist', 'Newcomer', 'Local', 'Wordsmith', 'Town Crier', 'Mayor', 'Mayor', 'Mayor']);
+    // The top rank is for finding every word (bonus points can pass the maximum without it).
+    expect(rankFor(200, 200, true).name).toBe('Key to the City');
+    expect(rankFor(260, 200).name).toBe('Mayor');
   });
 
   it('reports the next rank', () => {
     expect(rankFor(25, 200).next).toMatchObject({ name: 'Local', points: 50 });
-    expect(rankFor(200, 200).next).toBeNull();
+    expect(rankFor(200, 200, true).next).toBeNull();
+    expect(rankFor(200, 200).next).toMatchObject({ name: 'Key to the City' });
   });
 });
 

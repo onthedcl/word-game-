@@ -96,19 +96,24 @@ function wordPoints(table: AnswerTable, { word, route }: Submitted, best: number
   return genuine ? scorePath(route, board).score : 0;
 }
 
-function score(table: AnswerTable, submitted: Submitted[], name: string, now: number): Entry {
+/** How many words a board counts toward "every word" (bonus words don't count). */
+const countedWords = (table: AnswerTable) => Object.values(table.words).filter((w) => !w[2]).length;
+
+function score(table: AnswerTable, submitted: Submitted[], name: string, now: number): Entry & { allFound: boolean } {
   let total = 0;
   let words = 0;
+  let counted = 0;
   let pangrams = 0;
   for (const s of submitted) {
     const hit = Object.hasOwn(table.words, s.word) ? table.words[s.word] : undefined;
     if (!hit) continue;
     total += wordPoints(table, s, hit[0]);
     words += 1;
+    if (!hit[2]) counted += 1;
     pangrams += hit[1];
   }
-  const allFound = words === Object.keys(table.words).length;
-  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now };
+  const allFound = counted === countedWords(table);
+  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now, allFound };
 }
 
 async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
@@ -171,12 +176,13 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
-  if (entry.words === Object.keys(table.words).length && (prev?.words ?? 0) < entry.words) {
+  if (entry.allFound && !(prev as (Entry & { allFound?: boolean }) | null)?.allFound) {
+    const all = countedWords(table);
     deps.notify?.({
       title: entry.rankName === TOP_RANK ? `${TOP_RANK}!` : 'Every word found!',
-      message: `${name} found all ${entry.words} words today (${entry.score} pts)`,
+      message: `${name} found all ${all} words today (${entry.score} pts)`,
       tags: ['crown'],
-      event: { kind: 'allwords', who: name, words: entry.words, score: entry.score },
+      event: { kind: 'allwords', who: name, words: all, score: entry.score },
     });
   }
   // Progress only moves forward; a stale device can't lower your score.

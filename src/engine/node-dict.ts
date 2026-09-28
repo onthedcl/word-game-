@@ -8,4 +8,6 @@ const file = (name: string) => readFileSync(fileURLToPath(new URL(`../../public/
 export const dict = parseDawg(file('words.dawg'));
 /** Every accepted answer (a superset of `dict`). */
 export const accepted = parseDawg(file('words-all.dawg'));
+/** Every playable word (bonus words included). */
+export const full = parseDawg(file('words-full.dawg'));
 export const seeds = file('pangrams.txt').split('\n').filter(Boolean);

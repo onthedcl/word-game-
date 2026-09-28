@@ -15,7 +15,10 @@ export function FoundWords({ found, answers, scoreOf, routeOf, total, fresh, onS
   const [open, setOpen] = useState(false);
   const [alpha, setAlpha] = useState(false);
   const words = alpha ? [...found].sort() : [...found].reverse();
-  const title = `${found.length} ${found.length === 1 ? 'word' : 'words'} of ${total}`;
+  // Bonus words (uncommon but valid) score, but don't count toward the total.
+  const bonus = found.filter((w) => answers.get(w)?.bonus).length;
+  const counted = found.length - bonus;
+  const title = `${counted} ${counted === 1 ? 'word' : 'words'} of ${total}${bonus ? ` +${bonus} bonus` : ''}`;
 
   const list = (
     <ul className="max-h-[50vh] columns-2 gap-4 overflow-y-auto lg:max-h-[520px]">
@@ -29,7 +32,10 @@ export function FoundWords({ found, answers, scoreOf, routeOf, total, fresh, onS
               title="Show your route"
               className="flex w-full justify-between gap-2 py-1 text-left capitalize"
             >
-              <span className={a.pangram ? 'font-extrabold text-accent' : ''}>{w}</span>
+              <span className={a.pangram ? 'font-extrabold text-accent' : ''}>
+                {w}
+                {a.bonus && <span className="ml-1 text-xs text-muted" title="Bonus word: scores, but isn't counted in the total">★</span>}
+              </span>
               <span className="text-sm tabular-nums text-muted">{scoreOf(w)}</span>
             </button>
           </li>

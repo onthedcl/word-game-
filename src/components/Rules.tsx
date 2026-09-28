@@ -53,6 +53,10 @@ export function Rules() {
         </li>
         <li>A <b>pangram</b> is a word with <b>7 or more different letters</b>: +25, then the whole score doubles. Every board has one.</li>
         <li>
+          Rarer words from the full word list are <b>bonus words</b> ★: they score points but don't count toward the
+          board's word total.
+        </li>
+        <li>
           You'll often find the same word in more than one spot on the board. It only counts once, and it scores
           the spot you trace, so <b>pick the highest-scoring one</b> (look for premium tiles).
         </li>

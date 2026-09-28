@@ -1,5 +1,6 @@
 // Builds public/dict/words.dawg (the common words boards are built from, as a
 // minimized trie), public/dict/words-all.dawg (every word accepted as an answer)
+// public/dict/words-full.dawg (every ENABLE word, playable as a bonus word)
 // and public/dict/pangrams.txt (curated pangram seeds).
 //
 // Sources (downloaded at build time, not committed):
@@ -119,6 +120,14 @@ function buildDawg(list) {
 const sorted = (s) => [...s].sort();
 const dawg = buildDawg(sorted(words));
 writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
+// Bonus words: every other ENABLE word (the public-domain equivalent of a
+// Scrabble word list). They're accepted and score points, but don't count
+// toward a board's total, so finding every word stays achievable.
+const fullWords = enable.filter((w) => /^[a-z]+$/.test(w) && w.length >= MIN_LEN && !badSet.has(w));
+const fullDawg = buildDawg(sorted(new Set(fullWords)));
+writeFileSync(join(ROOT, "public/dict/words-full.dawg"), fullDawg.text);
+console.log(`every playable word: ${fullWords.length} (${fullDawg.text.length} bytes)`);
+
 const all = buildDawg(sorted(allWords));
 writeFileSync(join(ROOT, 'public/dict/words-all.dawg'), all.text);
 writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');

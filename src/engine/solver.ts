@@ -8,6 +8,8 @@ export interface Answer {
   score: number;
   path: number[];
   pangram: boolean;
+  /** A real but uncommon word: it scores, but isn't counted in the board's total. */
+  bonus?: boolean;
 }
 
 export function solveBoard(board: Board, dict: Dawg): Map<string, Answer> {
