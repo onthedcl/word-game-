@@ -129,7 +129,7 @@ function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
   return { boardId: value as string, dateKey: parsed.dateKey };
 }
 
-/** A board takes scores from when its date starts anywhere until it has ended everywhere, then locks. */
+/** A board takes scores from when its date starts anywhere until midnight Pacific at the end of that date. */
 function checkDailyDate(value: unknown, now: number): string {
   const { boardId, dateKey } = boardIdOf(value);
   if (now < boardOpensAt(dateKey) || now >= boardLocksAt(dateKey)) throw new ApiError(400, 'That puzzle is closed');

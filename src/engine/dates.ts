@@ -35,10 +35,25 @@ export function boardOpensAt(dateKey: string): number {
   return Date.parse(`${dateKey}T00:00:00Z`) - 14 * HOUR;
 }
 
+const LOCK_ZONE = 'America/Los_Angeles';
+
+/** How far a time zone's wall clock is ahead of UTC at an instant (negative for the Americas). */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  const parts: Record<string, string> = {};
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  for (const p of fmt.formatToParts(instant)) parts[p.type] = p.value;
+  const wall = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return wall - Math.floor(instant / 1000) * 1000;
+}
+
 /**
- * A daily board locks once its date has ended in every time zone (UTC-12): noon
- * UTC the next day, 8 AM Eastern in summer. After that its leaderboard is final.
+ * A daily board hard-locks at midnight Pacific time at the end of its date
+ * (daylight saving included). After that its leaderboard is final.
  */
 export function boardLocksAt(dateKey: string): number {
-  return Date.parse(`${dateKey}T00:00:00Z`) + 36 * HOUR;
+  const midnight = Date.parse(`${shiftDateKey(dateKey, 1)}T00:00:00Z`); // that wall-clock time, read as UTC
+  const guess = midnight - zoneOffsetMs(midnight, LOCK_ZONE);
+  return midnight - zoneOffsetMs(guess, LOCK_ZONE);
 }

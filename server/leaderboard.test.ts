@@ -115,9 +115,9 @@ describe('daily leaderboard', () => {
     await rejects(submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words }), 400);
     at('2026-09-25T10:30:00Z'); // already the 26th in Kiribati (UTC+14)
     await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: words.slice(0, 2) });
-    at('2026-09-27T11:59:00Z'); // still the 26th in UTC-12
+    at('2026-09-27T06:59:00Z'); // 11:59 PM Pacific on the 26th
     await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: words.slice(0, 3) });
-    at('2026-09-27T12:00:00Z'); // locked: 8 AM Eastern
+    at('2026-09-27T07:00:00Z'); // locked: midnight Pacific
     await rejects(submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words }), 400);
     expect((await getDaily(deps, DATE, P1)).you!.words).toBe(3);
   });

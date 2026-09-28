@@ -144,3 +144,15 @@ describe('bonus words', () => {
     expect(progress(p, index, [...all, b.word]).complete).toBe(true);
   });
 });
+
+describe('board lock', () => {
+  it('is midnight Pacific at the end of the date, daylight saving included', async () => {
+    const { boardLocksAt } = await import('./dates');
+    expect(new Date(boardLocksAt('2026-09-27')).toISOString()).toBe('2026-09-28T07:00:00.000Z'); // PDT
+    expect(new Date(boardLocksAt('2026-11-15')).toISOString()).toBe('2026-11-16T08:00:00.000Z'); // PST
+    expect(new Date(boardLocksAt('2026-10-31')).toISOString()).toBe('2026-11-01T07:00:00.000Z'); // night before clocks go back
+    expect(new Date(boardLocksAt('2026-11-01')).toISOString()).toBe('2026-11-02T08:00:00.000Z');
+    expect(new Date(boardLocksAt('2027-03-13')).toISOString()).toBe('2027-03-14T08:00:00.000Z'); // night before clocks go forward
+    expect(new Date(boardLocksAt('2027-03-14')).toISOString()).toBe('2027-03-15T07:00:00.000Z');
+  });
+});
