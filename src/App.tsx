@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken } from './api';
+import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board } from './api';
 import { isNativeApp, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
+import { Podium } from './components/Podium';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
@@ -28,7 +29,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard' | 'name-taken';
+type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -230,6 +231,30 @@ export default function App() {
   useEffect(() => {
     if (online && name && !pin) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
   }, [online, name, pin, me, setPin]);
+
+  // The first visit after a day closes: if this player made yesterday's top 3, roll out the podium (once).
+  const [podium, setPodium] = useState<Board | null>(null);
+  useEffect(() => {
+    if (!online || !name || !isToday) return;
+    const yesterdayId = dailyBoardId(shiftDateKey(dateKeyFor(), -1));
+    const seenKey = `hexicon:podium:${yesterdayId}`;
+    if (yesterdayId < EPOCH || readStored(seenKey, false)) return;
+    let live = true;
+    const t = setTimeout(() => {
+      api.daily(yesterdayId, me).then((b) => {
+        if (!live) return;
+        writeStored(seenKey, true);
+        if (!b.you || b.you.position > 3) return;
+        setPodium(b);
+        setDialog((d) => d ?? 'podium');
+        haptics.pangram();
+      }, () => {});
+    }, 1200);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [online, name, isToday, me]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
@@ -584,6 +609,23 @@ export default function App() {
           onDelete={deleteMyData}
           initialTab={mode}
         />
+      </Modal>
+
+      <Modal open={dialog === 'podium' && !!podium} title="Yesterday's results" onClose={closeDialog}>
+        {podium && (
+          <Podium
+            board={podium}
+            onClose={closeDialog}
+            onShare={async () => {
+              const place = ['1st', '2nd', '3rd'][podium.you!.position - 1];
+              const msg = await share(
+                `🏆 I finished ${place} of ${podium.total} in yesterday's DPIYF Lettertown with ${podium.you!.score} points! ` +
+                  `Can you beat me today? https://onthedcl.github.io/word-game-/`,
+              );
+              if (msg) setNotice(msg);
+            }}
+          />
+        )}
       </Modal>
 
       <Modal open={dialog === 'name-taken'} title="That name is taken" onClose={closeDialog}>

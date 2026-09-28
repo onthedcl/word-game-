@@ -143,3 +143,28 @@ button { cursor: pointer; }
 @keyframes tile-text { from { fill: #fff; } }
 .trace { fill: none; stroke: var(--trace); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .trace.flash-line { stroke: var(--good); opacity: .55; }
+
+/* Yesterday's podium */
+.confetti {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-iteration-count: 2;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0); opacity: 1; }
+  100% { transform: translateY(300px) rotate(540deg); opacity: 0; }
+}
+.podium-step { animation: podium-rise 0.6s cubic-bezier(.2,.9,.3,1.2) both; transform-origin: bottom; }
+@keyframes podium-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.animate-banner-in { animation: podium-medal 0.7s cubic-bezier(.2,.9,.3,1.4) both; }
+@keyframes podium-medal { from { transform: scale(0.2) rotate(-20deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
+  .podium-step, .animate-banner-in { animation: none; }
+}
