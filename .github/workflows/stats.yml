@@ -1,0 +1,42 @@
+name: Stats
+
+# Read-only summary of who played: the notification pings sent through notify.yml
+# and the public leaderboards. Run it by hand from the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Include pings from this date on (YYYY-MM-DD)'
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      API: https://word-game-leaderboard.danlagstein.workers.dev
+      SINCE: ${{ inputs.since }}
+    steps:
+      - name: Pings
+        run: |
+          since=${SINCE:-$(date -u -d yesterday +%F)}
+          gh run list -R "$GITHUB_REPOSITORY" --workflow notify.yml --limit 1000 --json databaseId,createdAt \
+            --jq ".[] | select(.createdAt >= \"$since\") | \"\(.databaseId) \(.createdAt)\"" > runs.txt
+          echo "pings since $since: $(wc -l < runs.txt)"
+          while read -r id at; do
+            log=$(gh run view -R "$GITHUB_REPOSITORY" "$id" --log 2>/dev/null)
+            title=$(grep -m1 -oP 'TITLE: \K.*' <<<"$log")
+            msg=$(grep -m1 -oP 'MESSAGE: \K.*' <<<"$log")
+            echo "PING|$at|$title|$msg"
+          done < runs.txt
+      - name: Leaderboards
+        run: |
+          for d in $(date -u -d '2 days ago' +%F) $(date -u -d yesterday +%F) $(date -u +%F); do
+            echo "DAILY $d"; curl -fsS "$API/api/daily?date=$d" || true; echo
+          done
+          d=2026-09-26~v1; echo "DAILY $d"; curl -fsS "$API/api/daily?date=$d" || true; echo
+          echo "BLITZ"; curl -fsS "$API/api/blitz" || true; echo
