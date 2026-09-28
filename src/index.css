@@ -54,7 +54,7 @@
 
 @theme {
   --animate-shake: shake 0.32s ease-in-out;
-  --animate-pop: pop 0.25s ease-out;
+  --animate-pop: pop 0.25s ease-out both;
   --animate-banner: banner 1.9s ease-in-out forwards;
   --animate-fresh: fresh 1.2s ease;
   --animate-blink: blink 1s steps(1) infinite;

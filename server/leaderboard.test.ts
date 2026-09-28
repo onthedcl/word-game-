@@ -268,3 +268,27 @@ describe('names as logins', () => {
     expect((await progressOf(deps, DATE, P1)).found).toHaveLength(5);
   });
 });
+
+describe('day-one fixes', () => {
+  it('never shows two players under the same name', async () => {
+    await submitDaily(deps, { playerId: P1, name: 'EmBar', date: DATE, words: words.slice(0, 3) });
+    // Another device that kept "EmBar" locally (e.g. saved while offline) can't post as EmBar.
+    await rejects(submitDaily(deps, { playerId: P2, name: 'embar', date: DATE, words: words.slice(0, 2) }), 409);
+    const game = await startBlitz(deps, { playerId: P2 });
+    await rejects(finishBlitz(deps, { playerId: P2, name: 'EmBar', game: game.game, words: [] }), 409);
+    const board = await getDaily(deps, DATE, null);
+    expect(board.top.filter((r) => r.name.toLowerCase() === 'embar')).toHaveLength(1);
+    // The rightful owner keeps posting, and picking the name registered it.
+    await submitDaily(deps, { playerId: P1, name: 'EmBar', date: DATE, words: words.slice(0, 4) });
+    await rejects(saveName(deps, { playerId: P2, name: 'EmBar' }), 409);
+  });
+
+  it('gives the top rank to anyone who finds every word, whatever route they used', async () => {
+    // Every word typed with a bogus route scores low, but it's still every word.
+    const all = puzzle.answers.map((a) => ({ w: a.word, p: [...a.path].reverse() }));
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: all });
+    const board = await getDaily(deps, DATE, P1);
+    expect(board.you!.score).toBeLessThan(puzzle.maxScore);
+    expect(board.you!.rankName).toBe('Key to the City');
+  });
+});

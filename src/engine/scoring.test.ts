@@ -48,3 +48,11 @@ describe('ranks', () => {
     expect(rankFor(200, 200).next).toBeNull();
   });
 });
+
+describe('top rank', () => {
+  it('goes to finding every word even below the maximum score', async () => {
+    const { rankFor, TOP_RANK } = await import('./scoring');
+    expect(rankFor(516, 517).name).not.toBe(TOP_RANK);
+    expect(rankFor(516, 517, true).name).toBe(TOP_RANK);
+  });
+});

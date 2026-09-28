@@ -5,6 +5,7 @@ import { CENTER, isValidRoute } from '../src/engine/hexgrid';
 import { EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
+import type { Notification } from './digest';
 import { parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
@@ -28,7 +29,7 @@ export interface Deps {
   randomId(): string;
   random(): number;
   /** Send the owner a notification (fire and forget). */
-  notify?(n: { title: string; message: string; tags?: string[] }): void;
+  notify?(n: Notification): void;
 }
 
 export interface Entry {
@@ -106,7 +107,8 @@ function score(table: AnswerTable, submitted: Submitted[], name: string, now: nu
     words += 1;
     pangrams += hit[1];
   }
-  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore).name, updatedAt: now };
+  const allFound = words === Object.keys(table.words).length;
+  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now };
 }
 
 async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
@@ -146,9 +148,22 @@ async function readBoard(kv: KV, prefix: string, playerId: string | null) {
 
 // ---- daily --------------------------------------------------------------------
 
+/**
+ * The name a player's score is posted under. A name someone else already owns is
+ * refused (409), so two players can't show up under the same name; a name nobody
+ * owns yet becomes this player's.
+ */
+async function postingName(deps: Deps, playerId: string, raw: unknown): Promise<string> {
+  const name = nameOf(raw);
+  const owner = await ownerOf(deps, name);
+  if (owner && owner.playerId !== playerId) throw new ApiError(409, 'That name is taken');
+  if (!owner || !owner.pin) await deps.kv.setJSON(nameKey(name), { playerId, pin: owner?.pin ?? newPin(deps) } satisfies NameOwner);
+  return name;
+}
+
 export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
-  const name = nameOf(body.name);
+  const name = await postingName(deps, playerId, body.name);
   const date = checkDailyDate(body.date, deps.now());
   const table = await tableFor(deps, `daily/${date}`);
   const submitted = wordsOf(body.words);
@@ -161,6 +176,7 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
       title: entry.rankName === TOP_RANK ? `${TOP_RANK}!` : 'Every word found!',
       message: `${name} found all ${entry.words} words today (${entry.score} pts)`,
       tags: ['crown'],
+      event: { kind: 'allwords', who: name, words: entry.words, score: entry.score },
     });
   }
   // Progress only moves forward; a stale device can't lower your score.
@@ -198,7 +214,7 @@ export async function startBlitz(deps: Deps, body: Record<string, unknown>) {
 
 export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
-  const name = nameOf(body.name);
+  const name = await postingName(deps, playerId, body.name);
   if (typeof body.game !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(body.game)) throw new ApiError(400, 'Bad game');
   const id = body.game;
   const game = (await deps.kv.get(`blitz-games/${id}`, { type: 'json' })) as BlitzGame | null;
@@ -219,6 +235,7 @@ export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {
     title: 'Blitz finished',
     message: `${name} scored ${entry.score} (${entry.words} words)${best ? ` · personal best, #${board.you?.position} of ${board.total}` : ''}`,
     tags: ['zap'],
+    event: { kind: 'blitz', who: name, score: entry.score, best },
   });
   return { ok: true, score: entry.score, personalBest: best, ...board };
 }
@@ -273,8 +290,10 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
   await deps.kv.setJSON(nameKey(name), { playerId, pin } satisfies NameOwner);
   if (prev && prev.name.toLowerCase() !== name.toLowerCase()) await deps.kv.setJSON(nameKey(prev.name), null);
   await deps.kv.setJSON(`players/${playerId}`, { name });
-  if (!prev) deps.notify?.({ title: 'Joined the leaderboard', message: `${name} picked their leaderboard name`, tags: ['trophy'] });
-  else if (prev.name !== name) deps.notify?.({ title: 'Name change', message: `${prev.name} is now ${name}`, tags: ['pencil2'] });
+  if (!prev) deps.notify?.({ title: 'Joined the leaderboard', message: `${name} picked their leaderboard name`, tags: ['trophy'], event: { kind: 'joined', who: name } });
+  else if (prev.name !== name) {
+    deps.notify?.({ title: 'Name change', message: `${prev.name} is now ${name}`, tags: ['pencil2'], event: { kind: 'renamed', from: prev.name, who: name } });
+  }
   return { ok: true, name, pin };
 }
 
@@ -289,7 +308,7 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const pin = owner.pin ?? newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
   const player = (await deps.kv.get(`players/${owner.playerId}`, { type: 'json' })) as { name: string } | null;
-  deps.notify?.({ title: 'Back on another device', message: `${player?.name ?? name} picked up their game on another device`, tags: ['iphone'] });
+  deps.notify?.({ title: 'Back on another device', message: `${player?.name ?? name} picked up their game on another device`, tags: ['iphone'], event: { kind: 'device', who: player?.name ?? name } });
   return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin };
 }
 
@@ -374,6 +393,11 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
     days === 1
       ? `${name ?? 'A new player'} opened ${mode}${from} for the first time · ${count}`
       : `${name ?? 'A returning player (no name)'} is back for day ${days} · opened ${mode}${from} · ${count}`;
-  deps.notify?.({ title: days === 1 ? 'New player!' : 'Someone is playing', message, tags: [days === 1 ? 'tada' : 'wave'] });
+  deps.notify?.({
+    title: days === 1 ? 'New player!' : 'Someone is playing',
+    message,
+    tags: [days === 1 ? 'tada' : 'wave'],
+    event: days === 1 ? { kind: 'new', who: name, place: where ?? undefined, today } : { kind: 'back', who: name, days, place: where ?? undefined, today },
+  });
   return { ok: true };
 }

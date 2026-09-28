@@ -20,7 +20,8 @@ export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
       />
       <p className="mb-3">
         Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the
-        gold <b>key</b> tile. Drag and let go to submit.
+        gold <b>key</b> tile. Drag and let go to submit. Boards are easiest on Monday and get harder each day, up to
+        Sunday's toughest.
       </p>
       <p className="mb-4 text-sm text-muted">
         {isHomeScreenApp()

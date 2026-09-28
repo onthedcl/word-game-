@@ -10,6 +10,7 @@ import {
   type Deps, type Place,
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
+import { buildDigest, type Notification } from '../../server/digest';
 
 interface Env {
   BOARD: DurableObjectNamespace<Leaderboard>;
@@ -32,6 +33,9 @@ interface Env {
 const NOTIFY_REPO = 'onthedcl/word-game-';
 
 const MISSING_RETRY_MS = 10 * 60 * 1000;
+/** Pings are collected and sent as one summary this often. */
+const DIGEST_MS = 60 * 60 * 1000;
+const DIGEST_QUEUE = 'digest-queue';
 
 interface NotifyStatus {
   sent: number;
@@ -75,12 +79,27 @@ export class Leaderboard extends DurableObject<Env> {
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
-      notify: this.env.NTFY_TOPIC ? (n) => this.ctx.waitUntil(this.sendNotification(n)) : undefined,
+      notify: this.env.NTFY_TOPIC ? (n) => this.ctx.waitUntil(this.queueNotification(n)) : undefined,
     };
   }
 
+  /** Hold a ping for the next digest (sent by alarm(), about an hour after the first one). */
+  private async queueNotification(n: Notification) {
+    const queue = ((await this.ctx.storage.get(DIGEST_QUEUE)) as Notification[] | undefined) ?? [];
+    queue.push(n);
+    await this.ctx.storage.put(DIGEST_QUEUE, queue);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + DIGEST_MS);
+  }
+
+  async alarm() {
+    const queue = ((await this.ctx.storage.get(DIGEST_QUEUE)) as Notification[] | undefined) ?? [];
+    await this.ctx.storage.delete(DIGEST_QUEUE);
+    const digest = buildDigest(queue);
+    if (digest) await this.sendNotification(digest);
+  }
+
   /** Push to ntfy.sh and keep a tally (no message contents) so delivery can be checked. */
-  private async sendNotification({ title, message, tags }: { title: string; message: string; tags?: string[] }) {
+  private async sendNotification({ title, message, tags }: Notification) {
     const status = ((await this.ctx.storage.get('notify-status')) as NotifyStatus | undefined) ?? { sent: 0, failed: 0 };
     try {
       // ntfy.sh refuses free-plan pushes from Cloudflare's shared IPs (429), so when a

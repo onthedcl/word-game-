@@ -22,11 +22,16 @@ interface Props {
   statusNote?: React.ReactNode;
   /** Called after every submitted word, right or wrong. */
   onAttempt?(ok: boolean): void;
+  /** First game: offer to show an easy word to get started. */
+  starter?: boolean;
+  onStarterUsed?(): void;
 }
 
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
-export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt }: Props) {
+export function PuzzleView({
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed,
+}: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
   const { score, rank } = progress(puzzle, answers, found, routes);
@@ -41,6 +46,7 @@ export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard,
   const press = useRef({ moved: false, submitOnRelease: false });
 
   const [flashPath, setFlashPath] = useState<number[] | null>(null);
+  const [flashMs, setFlashMs] = useState(900);
   // Quick green/red flash on the tiles of the word just submitted.
   const [pulse, setPulse] = useState<{ id: number; ids: number[]; kind: 'good' | 'bad' } | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
@@ -58,14 +64,24 @@ export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard,
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 1500);
+    const t = setTimeout(() => setToast(null), toast.kind === 'info' ? 3500 : 1500);
     return () => clearTimeout(t);
   }, [toast]);
   useEffect(() => {
     if (!flashPath) return;
-    const t = setTimeout(() => setFlashPath(null), 900);
+    const t = setTimeout(() => setFlashPath(null), flashMs);
     return () => clearTimeout(t);
-  }, [flashPath]);
+  }, [flashPath, flashMs]);
+
+  /** Light up a short, easy word so a first-time player sees how tracing works. */
+  function showStarter() {
+    const easy = [...puzzle.answers].filter((a) => !foundSet.has(a.word)).sort((a, b) => a.word.length - b.word.length || a.score - b.score)[0];
+    if (!easy) return;
+    setFlashMs(3500);
+    setFlashPath([...easy.path]);
+    setToast({ id: Date.now(), text: `Try tracing ${easy.word.toUpperCase()}`, kind: 'info' });
+    onStarterUsed?.();
+  }
   useEffect(() => {
     if (!pulse) return;
     const t = setTimeout(() => setPulse(null), 500);
@@ -208,7 +224,10 @@ export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard,
           routeOf={(w) => [...(routes[w] ?? answers.get(w)!.path)]}
           total={puzzle.answers.length}
           fresh={fresh}
-          onShow={setFlashPath}
+          onShow={(p) => {
+            setFlashMs(900);
+            setFlashPath(p);
+          }}
         />
       </div>
 
@@ -228,6 +247,16 @@ export function PuzzleView({ puzzle, found, routes, onFound, disabled, keyboard,
           ))}
           <span className="ml-0.5 h-[1.1em] w-0.5 animate-blink bg-accent" />
         </div>
+
+        {starter && !found.length && !toast && !disabled && (
+          <button
+            type="button"
+            onClick={showStarter}
+            className="absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-full bg-key px-3 py-1 text-sm font-semibold text-key-ink shadow"
+          >
+            First time? Show me a word
+          </button>
+        )}
 
         {toast && (
           <div

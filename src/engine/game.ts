@@ -68,10 +68,11 @@ export function scoreOf(puzzle: Puzzle, answers: Map<string, Answer>, found: Ite
 
 export function progress(puzzle: Puzzle, answers: Map<string, Answer>, found: readonly string[], routes?: Routes) {
   const score = scoreOf(puzzle, answers, found, routes);
+  const complete = found.length === puzzle.answers.length;
   return {
     score,
-    rank: rankFor(score, puzzle.maxScore),
+    rank: rankFor(score, puzzle.maxScore, complete),
     pangramsFound: found.filter((w) => answers.get(w)?.pangram).length,
-    complete: found.length === puzzle.answers.length,
+    complete,
   };
 }

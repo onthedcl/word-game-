@@ -27,7 +27,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard';
+type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard' | 'name-taken';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -55,6 +55,15 @@ type Blitz =
       newBest?: boolean;
       posted?: Posted;
     };
+
+/** Anyone with saved progress from an earlier day has played before. */
+function hasPlayedBefore(): boolean {
+  try {
+    return Object.keys(localStorage).some((k) => k.startsWith('hexicon:daily:'));
+  } catch {
+    return false;
+  }
+}
 
 function initialDateKey(): string {
   // ?date=YYYY-MM-DD replays (or previews) any day's board.
@@ -148,6 +157,8 @@ export default function App() {
   }, []);
 
   // ---- daily ----------------------------------------------------------------
+  // New players get a "show me a word" tip until they find their first word.
+  const [starterDone, setStarterDone] = useStoredState<boolean>('hexicon:starter-done', hasPlayedBefore());
   const daily = usePuzzle(dateKey);
   const [dailyFound, setDailyFound] = useStoredState<Progress>(dailyKey(dailyBoardId(dateKey)), { found: [] });
   const boardId = dailyBoardId(dateKey);
@@ -219,7 +230,10 @@ export default function App() {
           posted.current = key;
           noteStanding(b);
         },
-        () => {},
+        (e) => {
+          // Someone else owns this name: ask the player to confirm it's them or pick another.
+          if (e instanceof ApiRejected && e.status === 409) setDialog((d) => d ?? 'name-taken');
+        },
       );
     }, 1500);
     return () => clearTimeout(t);
@@ -321,7 +335,10 @@ export default function App() {
                 : `Your best Blitz score ranks #${r.you?.position} of ${r.total}`,
               standing: r.you ? { position: r.you.position, total: r.total } : null,
             }),
-          (e: Error) => update({ status: 'error', text: `Couldn't post to the leaderboard: ${e.message}` }),
+          (e: Error) => {
+            update({ status: 'error', text: `Couldn't post to the leaderboard: ${e.message}` });
+            if (e instanceof ApiRejected && e.status === 409) setDialog('name-taken');
+          },
         );
       }
     }
@@ -473,7 +490,12 @@ export default function App() {
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
               onAttempt={onDailyAttempt}
-              onFound={(w, r) => setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }))}
+              starter={!starterDone}
+              onStarterUsed={() => setStarterDone(true)}
+              onFound={(w, r) => {
+                setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
+                setStarterDone(true);
+              }}
               keyboard={dialog === null}
               statusExtra={
                 standing && (
@@ -545,6 +567,25 @@ export default function App() {
           }}
           onClaim={claimName}
           initialTab={mode}
+        />
+      </Modal>
+
+      <Modal open={dialog === 'name-taken'} title="That name is taken" onClose={closeDialog}>
+        <p className="mb-3 text-sm">
+          Someone else is already on the leaderboard as <b>{name}</b>. If that's you, continue as them; otherwise pick a new name
+          so your score can post.
+        </p>
+        <NameForm
+          name={name}
+          cta="Save"
+          onSave={async (n) => {
+            await saveName(n);
+            if (isToday && dailyFound.found.length) {
+              await api.submitDaily({ playerId: me, name: n.trim(), date: boardId, words: submission(dailyFound) }).then(noteStanding, () => {});
+            }
+            closeDialog();
+          }}
+          onClaim={claimName}
         />
       </Modal>
 

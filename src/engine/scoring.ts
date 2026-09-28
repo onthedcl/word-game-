@@ -59,12 +59,14 @@ export function rankThresholds(maxScore: number) {
   return RANKS.map((r) => ({ ...r, points: Math.ceil((r.pct / 100) * maxScore) }));
 }
 
-export function rankFor(score: number, maxScore: number) {
+/** The rank for a score. Finding every word earns the top rank, whatever routes were used. */
+export function rankFor(score: number, maxScore: number, allFound = false) {
   const thresholds = rankThresholds(maxScore);
   let index = 0;
   thresholds.forEach((r, i) => {
     if (score >= r.points) index = i;
   });
+  if (allFound) index = thresholds.length - 1;
   const next = thresholds[index + 1] ?? null;
   return { name: thresholds[index].name, index, next };
 }
