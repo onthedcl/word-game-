@@ -35,13 +35,15 @@ function About() {
 export function Rules() {
   return (
     <div>
-      <img
-        src={`${import.meta.env.BASE_URL}lettertown.jpg`}
-        alt="DPIYF Lettertown: letter tiles spelling DPIYF TOWNE on a wooden game board"
-        width={1408}
-        height={768}
-        className="mb-4 aspect-[1408/768] w-full rounded-xl object-cover"
-      />
+      <div className="mb-4 overflow-hidden rounded-xl">
+        <img
+          src={`${import.meta.env.BASE_URL}share.jpg`}
+          alt="Lettertown: a hex board of letter tiles with a gold key tile in the middle"
+          width={1024}
+          height={1024}
+          className="aspect-[1024/880] w-full scale-[1.06] object-cover object-[50%_10%]"
+        />
+      </div>
       <ul className="list-disc space-y-2 pl-5">
         <li>Make words of <b>4+ letters</b> by linking <b>neighbouring tiles</b>.</li>
         <li>You can use <b>each tile only once</b> in a word, but the board has repeat letters, so a letter can appear more than once.</li>

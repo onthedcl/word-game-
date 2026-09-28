@@ -11,13 +11,15 @@ interface Props {
 export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
   return (
     <div>
-      <img
-        src={`${import.meta.env.BASE_URL}lettertown.jpg`}
-        alt="DPIYF Lettertown: letter tiles on a wooden game board"
-        width={1408}
-        height={768}
-        className="mb-4 aspect-[1408/768] w-full rounded-xl object-cover"
-      />
+      <div className="mb-4 overflow-hidden rounded-xl">
+        <img
+          src={`${import.meta.env.BASE_URL}share.jpg`}
+          alt="Lettertown: a hex board of letter tiles with a gold key tile in the middle"
+          width={1024}
+          height={1024}
+          className="aspect-[1024/880] w-full scale-[1.06] object-cover object-[50%_10%]"
+        />
+      </div>
       <p className="mb-3">
         Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the
         gold <b>key</b> tile. Drag and let go to submit. Boards are easiest on Monday and get harder each day, up to
