@@ -146,6 +146,7 @@ export const api = {
   myLeagues: (player: string) => call<{ leagues: LeagueSummary[] }>('GET', `/api/league/mine?player=${encodeURIComponent(player)}`),
   league: (id: string, date: string, player: string) =>
     call<LeagueView>('GET', `/api/league?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
+  suggest: (playerId: string, word: string) => call<{ ok: true }>('POST', '/api/suggest', { playerId, word }),
   /** First word of the day (counts players without a name in the owner's onboarding numbers). */
   event: (playerId: string, kind: 'first-word', date: string) => call<{ ok: true }>('POST', '/api/event', { playerId, kind, date }),
   report: (playerId: string, name: string) => call<{ ok: true }>('POST', '/api/report', { playerId, name }),

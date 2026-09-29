@@ -16,6 +16,10 @@ function About() {
         <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
           <li>Words from the <b>ENABLE</b> word list (public domain).</li>
           <li>
+            Newer words from <a className={link} href="https://github.com/en-wl/wordlist" target="_blank" rel="noreferrer">SCOWL</a>,
+            copyright 2000–2026 Kevin Atkinson (permissive license).
+          </li>
+          <li>
             Word commonness from <a className={link} href="https://github.com/hermitdave/FrequencyWords" target="_blank" rel="noreferrer">FrequencyWords</a>{' '}
             by Hermit Dave, built from OpenSubtitles (CC BY-SA 4.0). The game's word lists (<code>dict/</code>) are adapted from
             it and shared under the same license.

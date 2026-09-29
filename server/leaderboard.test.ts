@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, describeFunnel, suggestWord, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -416,5 +416,19 @@ describe('streaks on the leaderboard', () => {
     expect(board.top.map((r) => [r.name, r.streak])).toEqual([['Bo', 1], ['Ann', 3]]);
     expect(board.you).toMatchObject({ name: 'Ann', streak: 3 });
     expect(JSON.stringify(board)).not.toContain(P2); // no player ids leak
+  });
+});
+
+describe('word suggestions', () => {
+  it('reach the owner once per player and word, and ignore junk', async () => {
+    await suggestWord(deps, { playerId: P1, word: 'LITES' });
+    await suggestWord(deps, { playerId: P1, word: 'lites' });
+    await suggestWord(deps, { playerId: P2, word: 'lites' });
+    await suggestWord(deps, { playerId: P2, word: 'shitty' }); // offensive: not passed on
+    await rejects(suggestWord(deps, { playerId: P1, word: 'no' }), 400);
+    expect(sent.filter((m) => m.startsWith('Word suggested'))).toEqual([
+      'Word suggested: Someone thinks “lites” should count',
+      'Word suggested: Someone thinks “lites” should count',
+    ]);
   });
 });

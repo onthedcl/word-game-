@@ -4,6 +4,19 @@ scripts/build-dictionary.mjs from:
 - ENABLE word list (public domain).
 - FrequencyWords by Hermit Dave (https://github.com/hermitdave/FrequencyWords), content
   licensed CC BY-SA 4.0, derived from OpenSubtitles (http://www.opensubtitles.org/).
+- SCOWL / English Speller Database (https://github.com/en-wl/wordlist): newer words that
+  ENABLE lacks (size 60, American spellings), in words-full.dawg only. Its notice:
+
+    Copyright 2000-2026 by Kevin Atkinson
+
+    Permission to use, copy, modify, distribute, and sell any part of the English
+    Speller Database (ESDB, previously known as SCOWLv2), or word lists
+    created from it, is hereby granted without fee, provided that the above
+    copyright notice appears in all copies and that both the above copyright
+    notice and this notice appear in supporting documentation.  Kevin Atkinson
+    makes no representations about the suitability of this database for any
+    purpose.  It is provided "as is" without express or implied warranty.
+
 - A blocklist from LDNOOBW (https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
   CC BY 4.0, used to remove offensive words.
 

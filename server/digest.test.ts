@@ -22,6 +22,9 @@ describe('notification digest', () => {
       ping({ kind: 'allwords', who: 'stOri', words: 49, score: 516 }),
       ping({ kind: 'device', who: 'J-ojo' }),
       ping({ kind: 'device', who: 'J-ojo' }),
+      ping({ kind: 'suggest', word: 'lites' }),
+      ping({ kind: 'suggest', word: 'lites' }),
+      ping({ kind: 'suggest', word: 'selfies' }),
       { title: 'Something else', message: 'odd one' },
     ])!;
     expect(d.title).toBe('Lettertown: 34 players today');
@@ -32,6 +35,7 @@ describe('notification digest', () => {
       '👋 2 returning players: Castle (day 3), 1 without a name',
       '🏷️ New names: Bean',
       '⚡ 2 Blitz games: Poop 154',
+      '📝 Word suggestions: lites ×2, selfies (add with the Add words workflow)',
       '📱 Picked up on another device: J-ojo',
       'Something else: odd one',
     ]);

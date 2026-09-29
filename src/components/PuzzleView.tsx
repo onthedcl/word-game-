@@ -23,6 +23,8 @@ interface Props {
   statusNote?: React.ReactNode;
   /** Called after every submitted word, right or wrong. */
   onAttempt?(ok: boolean): void;
+  /** Suggest a rejected word to the owner (only when there's a leaderboard server). */
+  onSuggest?(word: string): void;
   /** A 5+ letter word earned a compliment (the app may ask for a rating then). */
   onLongWord?(): void;
   /** First game: offer to show an easy word to get started. */
@@ -33,8 +35,10 @@ interface Props {
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord,
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord, onSuggest,
 }: Props) {
+  // A word just rejected as "Not a word" that the player could suggest.
+  const [suggestable, setSuggestable] = useState<string | null>(null);
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
   const { score, rank, complete } = progress(puzzle, answers, found, routes);
@@ -65,6 +69,11 @@ export function PuzzleView({
   const shownPath = typed ? typedPath : path;
   const word = typed || path.map((id) => puzzle.board.letters[id]).join('');
 
+  useEffect(() => {
+    if (!suggestable) return;
+    const t = setTimeout(() => setSuggestable(null), 9000);
+    return () => clearTimeout(t);
+  }, [suggestable]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), toast.kind === 'info' ? 3500 : 1500);
@@ -124,7 +133,11 @@ export function PuzzleView({
     // Every submission starts the next word fresh, right or wrong.
     clear();
     onAttempt?.(result.ok);
-    if (!result.ok) return reject(result.reason, attempted);
+    if (!result.ok) {
+      setSuggestable(result.reason === 'Not a word' && onSuggest ? w.toLowerCase() : null);
+      return reject(result.reason, attempted);
+    }
+    setSuggestable(null);
     const { answer, route, score: points } = result;
     const before = rank.index;
     onFound(answer.word, route);
@@ -258,6 +271,20 @@ export function PuzzleView({
           ))}
           <span className="ml-0.5 h-[1.1em] w-0.5 animate-blink bg-accent" />
         </div>
+
+        {suggestable && !toast && (
+          <button
+            type="button"
+            onClick={() => {
+              onSuggest?.(suggestable);
+              setSuggestable(null);
+              say('Thanks! We’ll take a look', 'info');
+            }}
+            className="absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold shadow"
+          >
+            Is “{suggestable.toUpperCase()}” a word? Suggest it
+          </button>
+        )}
 
         {starter && !found.length && !toast && !disabled && (
           <button

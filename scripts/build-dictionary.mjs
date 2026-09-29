@@ -13,7 +13,7 @@
 //   - LDNOOBW English list — offensive words are removed.
 //
 // Usage: node scripts/build-dictionary.mjs
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -28,6 +28,9 @@ const FREQ_LIMIT = 50000;   // words accepted as answers
 const PANGRAM_LIMIT = 25000; // pangram seeds come from the more common words
 const ALL_MIN_COUNT = 30;   // uses in the full corpus for the accepted list
 const MIN_LEN = 4;
+// --full-only rewrites just words-full.dawg (bonus words), never the lists boards are built from,
+// so adding words can't change any board.
+const FULL_ONLY = process.argv.includes('--full-only');
 const MAX_PANGRAM_LEN = 10;
 
 async function fetchLines(url) {
@@ -119,17 +122,27 @@ function buildDawg(list) {
 
 const sorted = (s) => [...s].sort();
 const dawg = buildDawg(sorted(words));
-writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
+if (!FULL_ONLY) writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
 // Bonus words: every other ENABLE word (the public-domain equivalent of a
 // Scrabble word list). They're accepted and score points, but don't count
 // toward a board's total, so finding every word stays achievable.
 const fullWords = enable.filter((w) => /^[a-z]+$/.test(w) && w.length >= MIN_LEN && !badSet.has(w));
+// Plus newer words ENABLE lacks (from SCOWL, size 60) and words the owner has added.
+for (const file of ['scowl-extra.txt', 'extra-words.txt']) {
+  const lines = readFileSync(join(ROOT, 'scripts/data', file), 'utf8').split(/\r?\n/);
+  for (const raw of lines) {
+    const w = raw.trim().toLowerCase();
+    if (/^[a-z]+$/.test(w) && w.length >= MIN_LEN && !badSet.has(w)) fullWords.push(w);
+  }
+}
 const fullDawg = buildDawg(sorted(new Set(fullWords)));
 writeFileSync(join(ROOT, "public/dict/words-full.dawg"), fullDawg.text);
 console.log(`every playable word: ${fullWords.length} (${fullDawg.text.length} bytes)`);
 
 const all = buildDawg(sorted(allWords));
-writeFileSync(join(ROOT, 'public/dict/words-all.dawg'), all.text);
-writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
+if (!FULL_ONLY) {
+  writeFileSync(join(ROOT, 'public/dict/words-all.dawg'), all.text);
+  writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
+}
 console.log(`accepted words: ${allWords.size} (${all.text.length} bytes)`);
 console.log(`words: ${words.size} (${dawg.nodes} DAWG nodes, ${dawg.text.length} bytes), pangram seeds: ${pangrams.size}`);

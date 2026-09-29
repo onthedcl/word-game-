@@ -1,0 +1,2 @@
+# Extra words accepted as bonus words, one per line (added by the owner, e.g. via the Add words workflow).
+lites

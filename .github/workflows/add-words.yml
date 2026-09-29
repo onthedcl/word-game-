@@ -1,0 +1,53 @@
+name: Add words
+
+# Accept extra words (as bonus words) that the dictionary is missing, e.g. from the
+# "Word suggestions" line in the owner's digest. Run it from the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      words:
+        description: 'Words to accept, separated by spaces or commas'
+        required: true
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Add the words
+        env:
+          WORDS: ${{ inputs.words }}
+        run: |
+          added=""
+          for w in $(echo "$WORDS" | tr 'A-Z,' 'a-z ' ); do
+            if ! [[ "$w" =~ ^[a-z]{4,15}$ ]]; then echo "Skipping '$w' (4-15 letters only)"; continue; fi
+            if grep -qx "$w" scripts/data/extra-words.txt; then echo "'$w' is already there"; continue; fi
+            echo "$w" >> scripts/data/extra-words.txt
+            added="$added $w"
+          done
+          echo "ADDED=$added" >> "$GITHUB_ENV"
+          echo "Added:$added"
+      - name: Rebuild the dictionary
+        if: env.ADDED != ''
+        run: node scripts/build-dictionary.mjs --full-only
+      - name: Commit and redeploy
+        if: env.ADDED != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "Lettertown words"
+          git config user.email "actions@users.noreply.github.com"
+          git add scripts/data/extra-words.txt public/dict/words-full.dawg
+          git commit -m "Accept extra words:${ADDED}"
+          git push
+          # Pushes made by this workflow don't trigger other workflows, so start the deploy directly.
+          gh workflow run deploy-pages.yml --ref main

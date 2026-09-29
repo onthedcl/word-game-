@@ -834,6 +834,7 @@ export default function App() {
                 if (online && !dailyFound.found.length && boardOpen) api.event(me, 'first-word', dateKey).catch(() => {});
               }}
               keyboard={dialog === null}
+              onSuggest={online ? (w) => void api.suggest(me, w).catch(() => {}) : undefined}
               statusExtra={
                 <span className="flex items-center gap-1.5">
                 {standing && (
@@ -864,6 +865,7 @@ export default function App() {
               }
               disabled={blitz.phase === 'over'}
               keyboard={dialog === null}
+              onSuggest={online ? (w) => void api.suggest(me, w).catch(() => {}) : undefined}
               statusExtra={timer || (
                 <button type="button" onClick={startBlitz} className="rounded-full bg-ink px-3 py-1 text-sm font-semibold text-bg">Play again</button>
               )}

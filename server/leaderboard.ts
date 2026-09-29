@@ -543,3 +543,18 @@ export async function funnelFor(deps: Deps, day: string): Promise<Funnel> {
 
 export const describeFunnel = (f: Funnel) =>
   `📊 ${f.opened} opened → ${f.foundWord} found a word → ${f.onLeaderboard} on the leaderboard · ${f.cameBack} came back from yesterday`;
+
+// ---- word suggestions ----------------------------------------------------------
+
+/** A player thinks a rejected word should count; the owner sees it in the digest. */
+export async function suggestWord(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const word = typeof body.word === 'string' ? body.word.toLowerCase() : '';
+  if (!/^[a-z]{4,15}$/.test(word)) throw new ApiError(400, 'Bad word');
+  const key = `suggest/${word}/${playerId}`;
+  if (!(await deps.kv.get(key, { type: 'json' })) && cleanName(word)) {
+    await deps.kv.setJSON(key, { at: deps.now() });
+    deps.notify?.({ title: 'Word suggested', message: `Someone thinks “${word}” should count`, tags: ['memo'], event: { kind: 'suggest', word } });
+  }
+  return { ok: true };
+}

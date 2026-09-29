@@ -6,7 +6,7 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, claimName, deletePlayer, describeFunnel, finishBlitz, funnelFor, recordEvent, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
+  ApiError, claimName, deletePlayer, describeFunnel, finishBlitz, funnelFor, recordEvent, suggestWord, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
   startBlitz, submitDaily,
   type Deps, type Place,
 } from '../../server/leaderboard';
@@ -203,6 +203,8 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await leagueInfo(deps, url.searchParams.get('id')));
         case 'GET /api/league':
           return json(await leagueBoard(deps, url.searchParams.get('id'), url.searchParams.get('date'), player));
+        case 'POST /api/suggest':
+          return json(await suggestWord(deps, body));
         case 'POST /api/event':
           return json(await recordEvent(deps, body));
         case 'POST /api/admin/funnel':
