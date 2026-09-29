@@ -98,5 +98,7 @@ export const api = {
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
   /** Erase this player's name, scores and history from the server. */
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
+  /** First word of the day (counts players without a name in the owner's onboarding numbers). */
+  event: (playerId: string, kind: 'first-word', date: string) => call<{ ok: true }>('POST', '/api/event', { playerId, kind, date }),
   report: (playerId: string, name: string) => call<{ ok: true }>('POST', '/api/report', { playerId, name }),
 };

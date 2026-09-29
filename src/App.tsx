@@ -619,6 +619,7 @@ export default function App() {
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);
                 scheduleDailyReminder().catch(() => {}); // in the iPhone app: once, after the first word
+                if (online && !dailyFound.found.length && isToday) api.event(me, 'first-word', dateKeyFor()).catch(() => {});
               }}
               keyboard={dialog === null}
               statusExtra={

@@ -6,7 +6,7 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, claimName, deletePlayer, finishBlitz, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
+  ApiError, claimName, deletePlayer, describeFunnel, finishBlitz, funnelFor, recordEvent, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
   startBlitz, submitDaily,
   type Deps, type Place,
 } from '../../server/leaderboard';
@@ -99,7 +99,11 @@ export class Leaderboard extends DurableObject<Env> {
     const queue = ((await this.ctx.storage.get(DIGEST_QUEUE)) as Notification[] | undefined) ?? [];
     await this.ctx.storage.delete(DIGEST_QUEUE);
     const digest = buildDigest(queue);
-    if (digest) await this.sendNotification(digest);
+    if (!digest) return;
+    // Add how today's visitors are getting on (owner-only numbers).
+    const funnel = await funnelFor(this.deps(), easternDay()).catch(() => null);
+    if (funnel?.opened) digest.message += `\n${describeFunnel(funnel)}`;
+    await this.sendNotification(digest);
   }
 
   /** Push to ntfy.sh and keep a tally (no message contents) so delivery can be checked. */
@@ -169,6 +173,11 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await me(deps, url.searchParams.get('player')));
         case 'GET /api/progress':
           return json(await progressOf(deps, url.searchParams.get('date'), url.searchParams.get('player')));
+        case 'POST /api/event':
+          return json(await recordEvent(deps, body));
+        case 'POST /api/admin/funnel':
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          return json(await funnelFor(deps, typeof body.day === 'string' ? body.day : easternDay()));
         case 'POST /api/delete':
           return json(await deletePlayer(deps, body));
         case 'POST /api/report':
@@ -205,6 +214,11 @@ export class Leaderboard extends DurableObject<Env> {
       return json({ error: 'Something went wrong' }, 500);
     }
   }
+}
+
+/** Today's date in New York, where most players are. */
+function easternDay(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 }
 
 function json(body: unknown, status = 200): Response {

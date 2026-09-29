@@ -40,3 +40,11 @@ jobs:
           done
           d=2026-09-26~v1; echo "DAILY $d"; curl -fsS "$API/api/daily?date=$d" || true; echo
           echo "BLITZ"; curl -fsS "$API/api/blitz" || true; echo
+      - name: Onboarding funnel (last 3 days, Eastern)
+        env:
+          KEY: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          for n in 2 1 0; do
+            d=$(TZ=America/New_York date -d "$n days ago" +%F)
+            echo "FUNNEL $d $(curl -fsS -H 'Content-Type: application/json' -d "$(jq -n --arg key "$KEY" --arg day "$d" '{key: $key, day: $day}')" "$API/api/admin/funnel" || true)"
+          done

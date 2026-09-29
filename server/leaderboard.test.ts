@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, describePlace, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -381,5 +381,23 @@ describe('streaks', () => {
     expect(await play('2026-09-28')).toMatchObject({ count: 3, best: 3 });
     expect(await play('2026-09-30')).toMatchObject({ count: 1, best: 3, last: '2026-09-30' }); // missed the 29th
     expect((await me(deps, P1)).streak).toMatchObject({ count: 1, best: 3 });
+  });
+});
+
+describe('onboarding funnel', () => {
+  it('counts opened, found a word, on the leaderboard and came back', async () => {
+    const P3 = 'player-three-cccccccccc';
+    await hello(deps, { playerId: P1, mode: 'daily', date: '2026-09-25' }); // P1 played the day before
+    for (const p of [P1, P2, P3]) await hello(deps, { playerId: p, mode: 'daily', date: DATE });
+    await recordEvent(deps, { playerId: P1, kind: 'first-word', date: DATE });
+    await recordEvent(deps, { playerId: P2, kind: 'first-word', date: DATE });
+    await recordEvent(deps, { playerId: P2, kind: 'first-word', date: DATE });
+    // Players post to the day's board id (this day was rerolled, so it's "2026-09-26~v1").
+    deps.answers = async () => answerTable(puzzle);
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: `${DATE}~v1`, words: words.slice(0, 2) });
+    const f = await funnelFor(deps, DATE);
+    expect(f).toEqual({ day: DATE, opened: 3, foundWord: 2, onLeaderboard: 1, cameBack: 1 });
+    expect(describeFunnel(f)).toBe('📊 3 opened → 2 found a word → 1 on the leaderboard · 1 came back from yesterday');
+    await rejects(recordEvent(deps, { playerId: P1, kind: 'nope', date: DATE }), 400);
   });
 });

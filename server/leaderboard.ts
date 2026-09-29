@@ -6,7 +6,7 @@ import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../s
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
-import { parseBoardId } from '../src/engine/rerolls';
+import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
 const BLITZ_GRACE_SECONDS = 20; // network latency and slow phones
@@ -443,7 +443,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   }
   const mine = (prefix: string) => deps.kv.list({ prefix }).then(({ blobs }) => blobs.filter((b) => b.key.endsWith(`/${playerId}`)));
   const keys = [
-    ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')),
+    ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')), ...(await mine('funnel/')),
   ].map((b) => b.key);
   keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`);
   for (const key of keys) await deps.kv.setJSON(key, null);
@@ -492,3 +492,42 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   await deps.kv.setJSON(nameKey(to), { playerId: id, pin: owner.pin ?? newPin(deps) } satisfies NameOwner);
   return { ok: true, name: to };
 }
+
+// ---- onboarding funnel (owner only) --------------------------------------------
+
+/** The game reports a player's first word of the day, so players without a name are counted too. */
+export async function recordEvent(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  if (body.kind !== 'first-word') throw new ApiError(400, 'Bad event');
+  const day = typeof body.date === 'string' && isDateKey(body.date) ? body.date : null;
+  if (!day) throw new ApiError(400, 'Bad date');
+  await deps.kv.setJSON(`funnel/${day}/first-word/${playerId}`, 1);
+  return { ok: true };
+}
+
+export interface Funnel {
+  day: string;
+  opened: number;
+  foundWord: number;
+  onLeaderboard: number;
+  /** Players who also opened the game the day before. */
+  cameBack: number;
+}
+
+/** How a day's visitors got on: opened → found a word → on the leaderboard, and who came back. */
+export async function funnelFor(deps: Deps, day: string): Promise<Funnel> {
+  const ids = async (prefix: string) =>
+    new Set((await deps.kv.list({ prefix })).blobs.map((b) => b.key.slice(b.key.lastIndexOf('/') + 1)));
+  const today = await ids(`seen-v2/${day}/`);
+  const yesterday = await ids(`seen-v2/${shiftDateKey(day, -1)}/`);
+  return {
+    day,
+    opened: today.size,
+    foundWord: (await ids(`funnel/${day}/first-word/`)).size,
+    onLeaderboard: (await ids(`daily/${dailyBoardId(day)}/`)).size,
+    cameBack: [...today].filter((id) => yesterday.has(id)).length,
+  };
+}
+
+export const describeFunnel = (f: Funnel) =>
+  `📊 ${f.opened} opened → ${f.foundWord} found a word → ${f.onLeaderboard} on the leaderboard · ${f.cameBack} came back from yesterday`;
