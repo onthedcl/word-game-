@@ -11,6 +11,7 @@ import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
 import { Archive } from './components/Archive';
+import { drawShareCard, shareCard, tileHeat } from './shareCard';
 import { requestPuzzle } from './worker/client';
 import {
   adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
@@ -75,6 +76,13 @@ function takeLeagueInvite(): string | null {
     history.replaceState(history.state, '', url);
   }
   return readStored<string | null>(PENDING_LEAGUE_KEY, null);
+}
+
+/** "Mon 9/28" */
+function archiveDate(dateKey: string): string {
+  const [, m, d] = dateKey.split('-').map(Number);
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${dateKey}T12:00:00Z`));
+  return `${weekday} ${m}/${d}`;
 }
 
 /** Anyone with saved progress from an earlier day has played before. */
@@ -558,6 +566,22 @@ export default function App() {
       standing: mode === 'daily' ? (isToday ? standing : null) : blitzStanding,
       streak: mode === 'daily' ? streak : undefined,
     });
+    // Daily boards: share "your honeycomb" image where the phone can share pictures.
+    if (mode === 'daily' && active.puzzle.dateKey && !isNativeApp) {
+      const pz = active.puzzle;
+      const where = isToday && standing ? `🏆 #${standing.position} of ${standing.total} today` : null;
+      const card = await drawShareCard(tileHeat(active.found, active.routes ?? {}, activeAnswers), {
+        title: `Lettertown #${pz.number}`,
+        subtitle: [archiveDate(pz.dateKey!), pz.difficulty !== null ? DIFFICULTY_NAMES[pz.difficulty] : null].filter(Boolean).join(' · '),
+        lines: [
+          `${p.score} pts · ${p.rank.name}`,
+          [where, streak >= 2 ? `🔥 ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
+          `${active.found.length} words${p.pangramsFound ? ` · ${p.pangramsFound} pangram${p.pangramsFound > 1 ? 's' : ''} 🌟` : ''}`,
+        ],
+        footer: 'Can you beat me?  onthedcl.github.io/word-game-',
+      }).catch(() => null);
+      if (card && (await shareCard(card, text))) return;
+    }
     const msg = await share(text);
     if (msg) setNotice(msg);
   }
