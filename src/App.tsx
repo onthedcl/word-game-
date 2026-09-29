@@ -288,6 +288,22 @@ export default function App() {
 
   const yesterdayKey = shiftDateKey(dateKey, -1);
   const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
+  // Words this player found yesterday: saved on this device, plus any from other devices (the server keeps them).
+  const [yesterdayFound, setYesterdayFound] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (dialog !== 'yesterday' || yesterdayKey < EPOCH) return;
+    const id = dailyBoardId(yesterdayKey);
+    const local = readStored<{ found: string[] }>(dailyKey(id), { found: [] }).found;
+    setYesterdayFound(new Set(local));
+    if (!online || !name) return;
+    let live = true;
+    api.progress(id, me).then(({ found }) => {
+      if (live) setYesterdayFound(new Set([...local, ...found.map((f) => (typeof f === 'string' ? f : f.w))]));
+    }, () => {});
+    return () => {
+      live = false;
+    };
+  }, [dialog, yesterdayKey, online, name, me]);
 
   // ---- blitz ----------------------------------------------------------------
   const [blitz, setBlitz] = useState<Blitz>({ phase: 'intro' });
@@ -691,7 +707,8 @@ export default function App() {
             </p>
             <AnswerList
               answers={yesterday.puzzle.answers}
-              found={new Set(readStored<{ found: string[] }>(dailyKey(dailyBoardId(yesterdayKey)), { found: [] }).found)}
+              bonus={yesterday.puzzle.bonus}
+              found={yesterdayFound}
             />
           </>
         ) : (
@@ -715,7 +732,7 @@ export default function App() {
                   {blitz.posted.status === 'pending' ? 'Posting to the leaderboard…' : blitz.posted.text}
                 </p>
               )}
-              <AnswerList answers={blitz.puzzle.answers} found={new Set(blitz.found)} />
+              <AnswerList answers={blitz.puzzle.answers} bonus={blitz.puzzle.bonus} found={new Set(blitz.found)} />
               <div className="mt-4 flex justify-end gap-2">
                 <button type="button" className={textBtn} onClick={onShare}>Share</button>
                 <button
