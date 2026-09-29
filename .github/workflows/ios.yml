@@ -1,0 +1,39 @@
+name: iOS build
+
+# Builds the iPhone app for the simulator (no signing) to prove it compiles.
+# Separate from Deploy, so it never affects the live website.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'src/native.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the game for the app and copy it into the Xcode project
+        run: npm run build:app
+      - name: Xcode version
+        run: xcodebuild -version
+      - name: Build for the iOS simulator
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40
+          exit ${PIPESTATUS[0]}
