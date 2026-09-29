@@ -146,10 +146,18 @@ export async function readBoard(kv: KV, prefix: string, playerId: string | null,
   rows.sort((a, b) => b.entry.score - a.entry.score || a.entry.updatedAt - b.entry.updatedAt);
   const toRow = (r: (typeof rows)[number], i: number) => {
     const { name, score, words, pangrams, rankName } = r.entry;
-    return { position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId };
+    return { position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId, key: r.key };
   };
   const all = rows.map(toRow);
-  return { total: rows.length, top: all.slice(0, TOP_N), you: all.find((r) => r.you) ?? null };
+  // Each shown player's streak, if it's still going as of this board's day (or today, for Blitz).
+  const day = parseBoardId(prefix.split('/')[1] ?? '')?.dateKey ?? new Date().toISOString().slice(0, 10);
+  const withStreak = async ({ key, ...row }: (typeof all)[number]) => {
+    const s = (await kv.get(`streak/${key.slice(prefix.length)}`, { type: 'json' })) as Streak | null;
+    return { ...row, streak: s && s.last >= shiftDateKey(day, -1) ? s.count : 0 };
+  };
+  const top = await Promise.all(all.slice(0, TOP_N).map(withStreak));
+  const you = all.find((r) => r.you);
+  return { total: rows.length, top, you: you ? await withStreak(you) : null };
 }
 
 // ---- daily --------------------------------------------------------------------

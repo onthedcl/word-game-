@@ -401,3 +401,20 @@ describe('onboarding funnel', () => {
     await rejects(recordEvent(deps, { playerId: P1, kind: 'nope', date: DATE }), 400);
   });
 });
+
+describe('streaks on the leaderboard', () => {
+  it('show each player’s current streak next to their row', async () => {
+    const tables: Record<string, ReturnType<typeof answerTable>> = {};
+    const day = (d: string) => (tables[d] ??= answerTable(generateDaily(dict, seeds, d)));
+    deps.answers = async (key) => day(key.split('/')[1]);
+    for (const d of ['2026-09-26', '2026-09-27', '2026-09-28']) {
+      clock = Date.parse(`${d}T15:00:00Z`);
+      await submitDaily(deps, { playerId: P1, name: 'Ann', date: d, words: Object.keys(day(d).words).slice(0, 1) });
+    }
+    await submitDaily(deps, { playerId: P2, name: 'Bo', date: '2026-09-28', words: Object.keys(day('2026-09-28').words).slice(0, 5) });
+    const board = await getDaily(deps, '2026-09-28', P1);
+    expect(board.top.map((r) => [r.name, r.streak])).toEqual([['Bo', 1], ['Ann', 3]]);
+    expect(board.you).toMatchObject({ name: 'Ann', streak: 3 });
+    expect(JSON.stringify(board)).not.toContain(P2); // no player ids leak
+  });
+});

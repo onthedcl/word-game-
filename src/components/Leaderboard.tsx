@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
 import { readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
+import { streakAnimal } from '../engine/streak';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
@@ -422,7 +423,16 @@ export function Leaderboard({
                   className={`flex w-full items-center gap-3 px-1 py-1.5 text-left ${r.you ? 'rounded bg-key/30 font-bold' : ''}`}
                 >
                   <span className="w-7 text-right tabular-nums text-muted">{r.position <= 3 ? ['🥇', '🥈', '🥉'][r.position - 1] : r.position}</span>
-                  <span className="min-w-0 flex-1 truncate">{r.name}{r.you && ' (you)'}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {r.name}
+                    {r.you && ' (you)'}
+                    {(r.streak ?? 0) >= 2 && (
+                      <span className="ml-1.5 text-sm font-semibold text-muted" title={`${r.streak}-day streak`}>
+                        {streakAnimal(r.streak!).emoji}
+                        {r.streak}
+                      </span>
+                    )}
+                  </span>
                   <span className="hidden text-xs text-muted sm:inline">{r.rankName} · {r.words}w{r.pangrams ? ' · 🌟' : ''}</span>
                   <span className="w-12 text-right font-bold tabular-nums">{r.score}</span>
                 </button>

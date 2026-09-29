@@ -10,6 +10,8 @@ export interface BoardRow {
   pangrams: number;
   rankName: string;
   you: boolean;
+  /** Days in a row this player has found a word (still going). */
+  streak?: number;
 }
 
 /** A found word, with the route it was traced along when known (the server scores that route). */

@@ -779,15 +779,6 @@ export default function App() {
               keyboard={dialog === null}
               statusExtra={
                 <span className="flex items-center gap-1.5">
-                {streak > 0 && (
-                  <span
-                    className="rounded-full bg-orange-500/15 px-2 py-0.5 text-sm font-bold tabular-nums"
-                    title={`${streak}-day streak: find a word every day to keep it going`}
-                    aria-label={`${streak}-day streak`}
-                  >
-                    {streakAnimal(streak).emoji} {streak}
-                  </span>
-                )}
                 {standing && (
                   <button
                     type="button"
