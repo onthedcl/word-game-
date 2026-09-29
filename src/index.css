@@ -119,23 +119,26 @@ button { cursor: pointer; }
 .tile.prem-TL polygon { fill: var(--tl); }
 .tile.prem-TL text { fill: #fff; }
 .tile.prem-DW polygon { fill: var(--dw); }
-.tile.key polygon { fill: url(#key-gold); stroke: #d69a0c; stroke-width: 2.5; animation: key-glow 2.8s ease-in-out infinite; }
+.tile.key polygon { fill: url(#key-gold); stroke: #d69a0c; stroke-width: 2.5; transition: none; }
 .tile.key .letter { font-size: 37px; font-weight: 850; }
-.tile.key .key-shine { fill: none; stroke: rgb(255 255 255 / 0.55); stroke-width: 1.5; animation: none; filter: none; pointer-events: none; }
+.tile.key .key-shine { fill: none; stroke: rgb(255 255 255 / 0.55); stroke-width: 1.5; pointer-events: none; }
 .tile.key text { fill: var(--key-ink); }
-@keyframes key-glow {
-  0%, 100% { filter: drop-shadow(0 0 4px rgb(245 190 40 / 0.55)); }
-  50% { filter: drop-shadow(0 0 10px rgb(245 190 40 / 0.85)); }
+/* The key tile's glow: a soft gold halo behind it that breathes. Only opacity is animated:
+   an animated CSS filter on an SVG shape makes iPhone Safari sometimes stop drawing the tile. */
+.tile.key .key-halo { fill: #f5be28; stroke: #f5be28; stroke-width: 8; stroke-linejoin: round; opacity: .3; pointer-events: none; animation: key-halo 2.8s ease-in-out infinite; }
+@keyframes key-halo {
+  0%, 100% { opacity: .22; }
+  50% { opacity: .55; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tile.key polygon { animation: none; filter: drop-shadow(0 0 6px rgb(245 190 40 / 0.7)); }
+  .tile.key .key-halo { animation: none; opacity: .4; }
 }
-.tile.selected polygon { stroke: var(--accent); stroke-width: 5; }
-.tile.flash polygon { stroke: var(--good); stroke-width: 5; }
+.tile.selected polygon:not(.key-halo) { stroke: var(--accent); stroke-width: 5; }
+.tile.flash polygon:not(.key-halo) { stroke: var(--good); stroke-width: 5; }
 .tile.pulse-good, .tile.pulse-bad { transform-box: fill-box; transform-origin: center; }
 .tile.pulse-good { animation: tile-pop .42s ease-out; }
-.tile.pulse-good polygon { animation: tile-good .5s ease-out; }
-.tile.pulse-bad polygon { animation: tile-bad .5s ease-out; }
+.tile.pulse-good polygon:not(.key-halo) { animation: tile-good .5s ease-out; }
+.tile.pulse-bad polygon:not(.key-halo) { animation: tile-bad .5s ease-out; }
 @keyframes tile-pop { 40% { transform: scale(1.1); } }
 @keyframes tile-good { from { fill: var(--good); stroke: var(--good); } }
 @keyframes tile-bad { from { fill: var(--bad); stroke: var(--bad); } }

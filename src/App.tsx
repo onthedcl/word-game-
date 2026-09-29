@@ -95,10 +95,36 @@ function hasPlayedBefore(): boolean {
   }
 }
 
-function initialDateKey(): string {
-  // ?date=YYYY-MM-DD replays (or previews) any day's board.
+/** The board being played (and when), so a reload after midnight doesn't yank the player to a new board. */
+const PLAYING_KEY = 'hexicon:playing';
+const KEEP_PLAYING_MS = 3 * 3600 * 1000;
+
+function rememberPlaying(date: string) {
+  try {
+    sessionStorage.setItem(PLAYING_KEY, JSON.stringify({ date, at: Date.now() }));
+  } catch {
+    /* no storage */
+  }
+}
+
+/** ?date=YYYY-MM-DD shows any day's board (read-only once it has locked). */
+const datePreview = (() => {
   const param = new URLSearchParams(location.search).get('date');
-  return isDateKey(param) && param >= EPOCH ? param : dateKeyFor();
+  return isDateKey(param) && param >= EPOCH ? param : null;
+})();
+
+function initialDateKey(): string {
+  if (datePreview) return datePreview;
+  const today = dateKeyFor();
+  // Mid-game when the day changed (e.g. the page reloaded after midnight): stay on that board
+  // while it's still open; a banner offers today's board instead.
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PLAYING_KEY) ?? 'null') as { date: string; at: number } | null;
+    if (p && p.date === shiftDateKey(today, -1) && Date.now() - p.at < KEEP_PLAYING_MS && Date.now() < boardLocksAt(p.date)) return p.date;
+  } catch {
+    /* no storage */
+  }
+  return today;
 }
 
 /**
@@ -220,7 +246,18 @@ export default function App() {
   const daily = usePuzzle(dateKey);
   const [dailyFound, setDailyFound] = useStoredState<Progress>(dailyKey(dailyBoardId(dateKey)), { found: [] });
   const boardId = dailyBoardId(dateKey);
-  const isToday = dateKey === dateKeyFor();
+  // The calendar day, re-checked every half minute so midnight is noticed while playing.
+  const [today, setToday] = useState(dateKeyFor);
+  useEffect(() => {
+    const t = setInterval(() => setToday((d) => (d === dateKeyFor() ? d : dateKeyFor())), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const isToday = dateKey === today;
+  // The board being played still takes scores (it stays open past midnight until it locks).
+  const boardOpen = !datePreview && dateKey >= shiftDateKey(today, -1) && Date.now() < boardLocksAt(dateKey);
+  useEffect(() => {
+    if (!datePreview) rememberPlaying(dateKey);
+  }, [dateKey, dailyFound.found.length]);
 
   // Live standing on today's leaderboard, shown next to your rank.
   const [standing, setStanding] = useState<{ position: number; total: number } | null>(null);
@@ -228,7 +265,7 @@ export default function App() {
     setStanding(b.you ? { position: b.you.position, total: b.total } : null);
   }, []);
   useEffect(() => {
-    if (!online || !name || !isToday) return;
+    if (!online || !name || !boardOpen) return;
     let live = true;
     const poll = () =>
       document.visibilityState === 'visible' &&
@@ -239,11 +276,11 @@ export default function App() {
       live = false;
       clearInterval(t);
     };
-  }, [online, name, isToday, boardId, me, noteStanding]);
+  }, [online, name, boardOpen, boardId, me, noteStanding]);
 
   // Bring back words this player found on another device or browser today.
   useEffect(() => {
-    if (!online || !name || !isToday) return;
+    if (!online || !name || !boardOpen) return;
     let live = true;
     api.progress(boardId, me).then(({ found }) => {
       if (!live || !found.length) return;
@@ -259,7 +296,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [online, name, isToday, boardId, me, setDailyFound]);
+  }, [online, name, boardOpen, boardId, me, setDailyFound]);
   // A home-screen app that took its player from the address: fetch their name and PIN.
   useEffect(() => {
     if (!online || name || !adoptedPlayer()) return;
@@ -421,7 +458,7 @@ export default function App() {
   useEffect(() => {
     const found = dailyFound.found;
     const key = `${name}|${found.length}`;
-    if (!online || !name || !isToday || !found.length || posted.current === key) return;
+    if (!online || !name || !boardOpen || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
       api.submitDaily({ playerId: me, name, date: boardId, words: submission(dailyFound) }).then(
         (b) => {
@@ -436,7 +473,7 @@ export default function App() {
       );
     }, 1500);
     return () => clearTimeout(t);
-  }, [dailyFound, online, name, isToday, me, boardId, noteStanding]);
+  }, [dailyFound, online, name, boardOpen, me, boardId, noteStanding]);
 
   // ---- past boards ----------------------------------------------------------
   const [archiveDay, setArchiveDay] = useState<string | null>(null);
@@ -598,13 +635,13 @@ export default function App() {
     const blitzStanding = blitz.phase === 'over' && blitz.posted?.status === 'done' ? blitz.posted.standing : null;
     const text = shareText(active.puzzle, {
       rankName: p.rank.name, rankIndex: p.rank.index, score: p.score, words: active.found.length, pangrams: p.pangramsFound,
-      standing: mode === 'daily' ? (isToday ? standing : null) : blitzStanding,
+      standing: mode === 'daily' ? (boardOpen ? standing : null) : blitzStanding,
       streak: mode === 'daily' ? streak : undefined,
     });
     // Daily boards: share "your honeycomb" image where the phone can share pictures.
     if (mode === 'daily' && active.puzzle.dateKey && !isNativeApp) {
       const pz = active.puzzle;
-      const where = isToday && standing ? `🏆 #${standing.position} of ${standing.total} today` : null;
+      const where = boardOpen && standing ? `🏆 #${standing.position} of ${standing.total}` : null;
       let card: Blob | null = null;
       try {
         card = drawShareCard(tileHeat(active.found, active.routes ?? {}, activeAnswers), {
@@ -755,6 +792,26 @@ export default function App() {
         </button>
       )}
 
+      {!datePreview && mode === 'daily' && dateKey < today && (
+        // The day changed mid-game: keep playing this board, and switch whenever they like.
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-key/25 px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            🌅 It's a new day!{' '}
+            {boardOpen ? 'You can finish this board until midnight Pacific.' : 'This board has closed.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              rememberPlaying(today);
+              location.reload();
+            }}
+            className="shrink-0 rounded-full bg-ink px-3 py-1 font-semibold text-bg"
+          >
+            Play today's board
+          </button>
+        </div>
+      )}
+
       <main className="flex min-h-0 flex-1 flex-col pt-3 lg:block lg:pt-4">
         {mode === 'daily' &&
           (daily?.puzzle ? (
@@ -774,7 +831,7 @@ export default function App() {
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);
                 scheduleDailyReminder().catch(() => {}); // in the iPhone app: once, after the first word
-                if (online && !dailyFound.found.length && isToday) api.event(me, 'first-word', dateKeyFor()).catch(() => {});
+                if (online && !dailyFound.found.length && boardOpen) api.event(me, 'first-word', dateKey).catch(() => {});
               }}
               keyboard={dialog === null}
               statusExtra={
@@ -838,12 +895,12 @@ export default function App() {
 
       <Modal open={dialog === 'leaderboard'} title="Leaderboard" onClose={closeDialog}>
         <Leaderboard
-          dateKey={isToday ? boardId : dailyBoardId(dateKeyFor())}
+          dateKey={boardOpen ? boardId : dailyBoardId(today)}
           playerId={me}
           name={name}
           onName={async (n) => {
             await saveName(n);
-            if (isToday && dailyFound.found.length) {
+            if (boardOpen && dailyFound.found.length) {
               await api.submitDaily({ playerId: me, name: n, date: boardId, words: submission(dailyFound) }).catch(() => {});
             }
           }}
@@ -922,7 +979,7 @@ export default function App() {
           cta="Save"
           onSave={async (n) => {
             await saveName(n);
-            if (isToday && dailyFound.found.length) {
+            if (boardOpen && dailyFound.found.length) {
               await api.submitDaily({ playerId: me, name: n.trim(), date: boardId, words: submission(dailyFound) }).then(noteStanding, () => {});
             }
             closeDialog();

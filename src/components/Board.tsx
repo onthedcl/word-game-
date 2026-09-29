@@ -30,6 +30,7 @@ const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse }:
   const label = `${letter.toUpperCase()}${premium ? `, ${PREMIUMS[premium].name}` : ''}${key ? ', key tile' : ''}`;
   return (
     <g className={cls} role="gridcell" aria-label={label} aria-selected={selected}>
+      {key && <polygon className="key-halo" points={hexCorners(x, y, SIZE + 3).map((p) => p.join(',')).join(' ')} />}
       <polygon points={hexCorners(x, y, SIZE - 3).map((p) => p.join(',')).join(' ')} />
       {key && <polygon className="key-shine" points={hexCorners(x, y, SIZE - 8).map((p) => p.join(',')).join(' ')} />}
       <text x={x} y={y + 2} className="letter">{letter.toUpperCase()}</text>
