@@ -86,7 +86,8 @@ export function RoomChat({ roomId, playerId, hidden, onHide, onSeen }: Props) {
           const el = e.currentTarget;
           atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className="mb-2 h-64 space-y-1.5 overflow-y-auto rounded-xl bg-bg p-2"
+        // As tall as the screen allows: everything else in the dialog takes about 330px.
+        className="mb-2 h-[max(16rem,calc(100dvh-330px))] space-y-1.5 overflow-y-auto rounded-xl bg-bg p-2"
         aria-live="polite"
       >
         {!messages ? (

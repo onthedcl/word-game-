@@ -217,7 +217,7 @@ export function Leaderboard({
           />
           <p className="mt-2 text-xs text-muted">Shown to everyone. Your daily score is posted as you play; Blitz scores post when time runs out.</p>
         </div>
-      ) : (
+      ) : inChat ? null : (
         <div className="mb-3 text-sm text-muted">
           Playing as <b className="text-ink">{name}</b>{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
@@ -465,7 +465,7 @@ export function Leaderboard({
       )}
 
       {scope !== 'everyone' && scope !== 'new' && league && (
-        <div className="mt-4">
+        <div className={inChat ? "" : "mt-4"}>
           {!inChat && (
           <>
           <h3 className="mb-1 text-sm font-bold">Room news</h3>
@@ -496,7 +496,7 @@ export function Leaderboard({
           </button>
           </>
           )}
-          {league.owner && (
+          {league.owner && !inChat && (
             <div className="mt-2">
               {!confirmRoomDelete ? (
                 <button type="button" className="text-xs text-bad underline" onClick={() => setConfirmRoomDelete(true)}>
