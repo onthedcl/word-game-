@@ -101,13 +101,29 @@ function initialDateKey(): string {
   return isDateKey(param) && param >= EPOCH ? param : dateKeyFor();
 }
 
+/**
+ * Share text. Phones only open the share sheet straight from a tap, so nothing may be
+ * awaited before navigator.share. Dismissing the sheet is fine; if the phone refuses,
+ * the text is copied instead.
+ */
 async function share(text: string): Promise<string> {
-  try {
-    if (await nativeShare(text)) return '';
-    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+  if (isNativeApp) {
+    try {
+      await nativeShare(text);
+      return '';
+    } catch {
+      return 'Could not share';
+    }
+  }
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
       await navigator.share({ text });
       return '';
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return '';
     }
+  }
+  try {
     await navigator.clipboard.writeText(text);
     return 'Copied to clipboard';
   } catch {
@@ -321,12 +337,11 @@ export default function App() {
   const markLeagueSeen = useCallback((id: string, at: number) => {
     setLeagueSeen((s) => (s[id] && s[id] >= at ? s : { ...s, [id]: at }));
   }, [setLeagueSeen]);
+  const inviteLink = useCallback((id: string) => `${GAME_URL}?league=${id}`, []);
   const inviteToLeague = useCallback(async (l: { id: string; name: string }) => {
-    const msg = await share(
-      `Join my Lettertown league “${l.name}”! A new word puzzle every day, so let's see who's best. ${GAME_URL}?league=${l.id}`,
-    );
-    if (msg) setNotice(msg === 'Copied to clipboard' ? 'Invite link copied' : msg);
-  }, []);
+    const msg = await share(`Join my Lettertown room “${l.name}”! A new word puzzle every day, so let's see who's best. ${inviteLink(l.id)}`);
+    if (msg) setNotice(msg === 'Copied to clipboard' ? 'Invite copied, paste it to your friends' : msg);
+  }, [inviteLink]);
   // Arriving from an invite link: once there's a name, ask to join.
   const [pendingLeague, setPendingLeague] = useState<string | null>(takeLeagueInvite);
   const [invite, setInvite] = useState<{ id: string; name: string; members: number } | null>(null);
@@ -358,7 +373,7 @@ export default function App() {
       setLeaderboardLeague(current.id);
       setDialog('leaderboard');
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Could not join the league');
+      setNotice(e instanceof Error ? e.message : 'Could not join the room');
       setDialog(null);
     }
   };
@@ -582,16 +597,21 @@ export default function App() {
     if (mode === 'daily' && active.puzzle.dateKey && !isNativeApp) {
       const pz = active.puzzle;
       const where = isToday && standing ? `🏆 #${standing.position} of ${standing.total} today` : null;
-      const card = await drawShareCard(tileHeat(active.found, active.routes ?? {}, activeAnswers), {
-        title: `Lettertown #${pz.number}`,
-        subtitle: [archiveDate(pz.dateKey!), pz.difficulty !== null ? DIFFICULTY_NAMES[pz.difficulty] : null].filter(Boolean).join(' · '),
-        lines: [
-          `${p.score} pts · ${p.rank.name}`,
-          [where, streak >= 2 ? `${streakAnimal(streak).emoji} ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
-          `${active.found.length} words${p.pangramsFound ? ` · ${p.pangramsFound} pangram${p.pangramsFound > 1 ? 's' : ''} 🌟` : ''}`,
-        ],
-        footer: 'Can you beat me?  onthedcl.github.io/word-game-',
-      }).catch(() => null);
+      let card: Blob | null = null;
+      try {
+        card = drawShareCard(tileHeat(active.found, active.routes ?? {}, activeAnswers), {
+          title: `Lettertown #${pz.number}`,
+          subtitle: [archiveDate(pz.dateKey!), pz.difficulty !== null ? DIFFICULTY_NAMES[pz.difficulty] : null].filter(Boolean).join(' · '),
+          lines: [
+            `${p.score} pts · ${p.rank.name}`,
+            [where, streak >= 2 ? `${streakAnimal(streak).emoji} ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
+            `${active.found.length} words${p.pangramsFound ? ` · ${p.pangramsFound} pangram${p.pangramsFound > 1 ? 's' : ''} 🌟` : ''}`,
+          ],
+          footer: 'Can you beat me?  onthedcl.github.io/word-game-',
+        });
+      } catch {
+        card = null;
+      }
       if (card && (await shareCard(card, text))) return;
     }
     const msg = await share(text);
@@ -663,7 +683,7 @@ export default function App() {
             >
               <TrophyIcon /> Leaderboard
               {unreadLeagues.size > 0 && (
-                <span className="absolute -top-1 -right-1 size-3 rounded-full bg-bad ring-2 ring-bg" aria-label="League news" />
+                <span className="absolute -top-1 -right-1 size-3 rounded-full bg-bad ring-2 ring-bg" aria-label="Room news" />
               )}
             </button>
           )}
@@ -835,6 +855,8 @@ export default function App() {
           initialLeague={leaderboardLeague}
           onLeaguesChanged={loadLeagues}
           onInvite={inviteToLeague}
+          inviteLink={inviteLink}
+          onNotice={setNotice}
           onLeagueSeen={markLeagueSeen}
           unread={unreadLeagues}
         />
@@ -875,11 +897,11 @@ export default function App() {
             <div className="text-5xl">🏘️</div>
             <p className="mt-2 text-xl font-black">Join “{invite.name}”?</p>
             <p className="mt-1 text-muted">
-              {invite.members} {invite.members === 1 ? 'player' : 'players'} · your own leaderboard for every daily board
+              {invite.members} {invite.members === 1 ? 'player' : 'players'} · a leaderboard just for this room, every daily board
             </p>
             <div className="mt-5 flex justify-center gap-2">
               <button type="button" onClick={() => answerInvite(true)} className="rounded-full bg-ink px-5 py-2.5 font-bold text-bg active:scale-95">
-                Join the league
+                Join the room
               </button>
               <button type="button" onClick={() => answerInvite(false)} className="rounded-full border border-line px-5 py-2.5 font-semibold">
                 Not now

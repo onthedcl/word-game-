@@ -10,6 +10,8 @@ export interface League {
   owner: string;
   created: number;
   members: string[];
+  /** Listed in the public rooms anyone can browse and join (otherwise invite link only). */
+  public?: boolean;
 }
 
 export interface NewsItem {
@@ -67,17 +69,46 @@ export async function createLeague(deps: Deps, body: Record<string, unknown>) {
   if (mine.length >= MAX_LEAGUES) throw new ApiError(409, `You can be in up to ${MAX_LEAGUES} leagues`);
   let id = newId(deps);
   while (await deps.kv.get(leagueKey(id), { type: 'json' })) id = newId(deps);
-  await deps.kv.setJSON(leagueKey(id), { name, owner: playerId, created: deps.now(), members: [playerId] } satisfies League);
+  const isPublic = body.public === true;
+  await deps.kv.setJSON(leagueKey(id), { name, owner: playerId, created: deps.now(), members: [playerId], public: isPublic } satisfies League);
   await deps.kv.setJSON(mineKey(playerId), [...mine, id]);
   await addNews(deps, id, { at: deps.now(), text: `${who} started ${name}`, about: [playerId] });
-  deps.notify?.({ title: 'New league', message: `${who} started the league “${name}”`, tags: ['house'], event: { kind: 'league', who, league: name } });
-  return { id, name };
+  deps.notify?.({
+    title: 'New room',
+    message: `${who} started the ${isPublic ? 'public' : 'private'} room “${name}”`,
+    tags: ['house'],
+    event: { kind: 'league', who, league: `${name}${isPublic ? ' (public)' : ''}` },
+  });
+  return { id, name, public: isPublic };
 }
 
 /** Name and size only, for the "Join this league?" screen. */
 export async function leagueInfo(deps: Deps, rawId: unknown) {
   const league = await load(deps, leagueIdOf(rawId));
-  return { name: league.name, members: league.members.length };
+  return { name: league.name, members: league.members.length, public: !!league.public };
+}
+
+/** Public rooms anyone can join, busiest first. */
+export async function publicLeagues(deps: Deps, rawPlayer: unknown) {
+  const playerId = typeof rawPlayer === 'string' ? rawPlayer : '';
+  const rooms: { id: string; name: string; members: number; joined: boolean }[] = [];
+  for (const { key } of (await deps.kv.list({ prefix: 'leagues/' })).blobs) {
+    const league = (await deps.kv.get(key, { type: 'json' })) as League | null;
+    if (!league?.public) continue;
+    rooms.push({ id: key.slice('leagues/'.length), name: league.name, members: league.members.length, joined: league.members.includes(playerId) });
+  }
+  rooms.sort((a, b) => b.members - a.members || a.name.localeCompare(b.name));
+  return { rooms: rooms.slice(0, 50) };
+}
+
+/** The host can list a room publicly or make it invite-only. */
+export async function setLeaguePublic(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const id = leagueIdOf(body.id);
+  const league = await load(deps, id);
+  if (league.owner !== playerId) throw new ApiError(403, 'Only the host can change this');
+  await deps.kv.setJSON(leagueKey(id), { ...league, public: body.public === true });
+  return { ok: true, public: body.public === true };
 }
 
 export async function joinLeague(deps: Deps, body: Record<string, unknown>) {
@@ -146,7 +177,7 @@ export async function leagueBoard(deps: Deps, rawId: unknown, rawDate: unknown, 
   await announceYesterday(deps, id, league, parseBoardId(boardId)!.dateKey);
   const board = await readBoard(deps.kv, `daily/${boardId}/`, playerId, members);
   const news = ((await deps.kv.get(newsKey(id), { type: 'json' })) as NewsItem[] | null) ?? [];
-  return { id, name: league.name, members: league.members.length, owner: league.owner === playerId, board, news };
+  return { id, name: league.name, members: league.members.length, owner: league.owner === playerId, public: !!league.public, board, news };
 }
 
 /** Once the day before `today` has locked, post its league winner to the news (once). */

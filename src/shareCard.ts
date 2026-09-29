@@ -37,7 +37,8 @@ export interface CardInfo {
   footer: string;
 }
 
-export async function drawShareCard(heat: readonly number[], info: CardInfo): Promise<Blob | null> {
+/** Drawn synchronously, so sharing it still counts as coming straight from the player's tap. */
+export function drawShareCard(heat: readonly number[], info: CardInfo): Blob | null {
   const W = 1080;
   const H = 1350;
   const canvas = document.createElement('canvas');
@@ -91,7 +92,10 @@ export async function drawShareCard(heat: readonly number[], info: CardInfo): Pr
   ctx.font = font(32, 600);
   ctx.fillText(info.footer, W / 2, H - 70);
 
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  const data = atob(canvas.toDataURL('image/png').split(',')[1]);
+  const bytes = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) bytes[i] = data.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/png' });
 }
 
 /** Share the card with the system share sheet, if this browser can share images. */

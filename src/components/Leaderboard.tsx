@@ -21,8 +21,12 @@ interface Props {
   /** A league to open straight away (e.g. just joined). */
   initialLeague?: string | null;
   onLeaguesChanged(): void;
-  /** Share a league's invite link. */
+  /** Share a room's invite (straight from the tap). */
   onInvite(league: { id: string; name: string }): void;
+  /** The invite link for a room. */
+  inviteLink(id: string): string;
+  /** Show a short message (e.g. "Link copied"). */
+  onNotice(text: string): void;
   /** The player has seen a league's news up to this time. */
   onLeagueSeen(id: string, at: number): void;
   /** Which leagues have news the player hasn't seen. */
@@ -106,8 +110,9 @@ function ago(at: number): string {
 
 export function Leaderboard({
   dateKey, playerId, name, onName, onClaim, onDelete, initialTab,
-  leagues, initialLeague, onLeaguesChanged, onInvite, onLeagueSeen, unread,
+  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread,
 }: Props) {
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
   // Everyone, one of the player's leagues, or the "new league" form.
   const [scope, setScope] = useState<string>(initialLeague ?? 'everyone');
@@ -253,33 +258,88 @@ export function Leaderboard({
               scope === 'new' ? 'border-ink' : 'border-muted text-muted'
             }`}
           >
-            + League
+            + Room
           </button>
         </div>
       )}
 
       {scope === 'new' ? (
-        <NewLeague
+        <Rooms
           playerId={playerId}
           onCreated={(l) => {
             onLeaguesChanged();
             setScope(l.id);
-            onInvite(l);
+            setInviteOpen(true);
+          }}
+          onJoined={(id) => {
+            onLeaguesChanged();
+            setScope(id);
           }}
         />
       ) : scope !== 'everyone' ? (
         league && (
-          <div className="mb-2 flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-sm text-muted">
-              <b className="text-ink">{league.name}</b> · {league.members} {league.members === 1 ? 'member' : 'members'} · today
-            </p>
-            <button
-              type="button"
-              onClick={() => onInvite({ id: league.id, name: league.name })}
-              className="shrink-0 rounded-full bg-ink px-3 py-1 text-sm font-bold text-bg"
-            >
-              Invite friends
-            </button>
+          <div className="mb-2">
+            <div className="flex items-center gap-2">
+              <p className="min-w-0 flex-1 text-sm text-muted">
+                <b className="text-ink">{league.name}</b> · {league.members} {league.members === 1 ? 'member' : 'members'} ·{' '}
+                {league.public ? 'public' : 'private'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setInviteOpen((o) => !o)}
+                className="shrink-0 rounded-full bg-ink px-3 py-1 text-sm font-bold text-bg"
+                aria-expanded={inviteOpen}
+              >
+                Invite friends
+              </button>
+            </div>
+            {inviteOpen && (
+              <div className="mt-2 rounded-xl bg-bg p-3">
+                <p className="mb-2 text-sm">Send this link to friends. Opening it asks them to join <b>{league.name}</b>.</p>
+                <input
+                  readOnly
+                  value={inviteLink(league.id)}
+                  onFocus={(e) => e.target.select()}
+                  aria-label="Invite link"
+                  className="mb-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onInvite({ id: league.id, name: league.name })}
+                    className="flex-1 rounded-lg bg-ink px-3 py-2 font-semibold text-bg"
+                  >
+                    Share…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigator.clipboard.writeText(inviteLink(league.id)).then(
+                        () => onNotice('Invite link copied'),
+                        () => onNotice('Press and hold the link to copy it'),
+                      )
+                    }
+                    className="flex-1 rounded-lg border border-line px-3 py-2 font-semibold"
+                  >
+                    Copy link
+                  </button>
+                </div>
+                {league.owner && (
+                  <label className="mt-3 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={!!league.public}
+                      onChange={async (e) => {
+                        const on = e.target.checked;
+                        setLeague({ ...league, public: on });
+                        await api.setRoomPublic(playerId, league.id, on).catch(() => setLeague({ ...league }));
+                      }}
+                    />
+                    List in public rooms (anyone can find and join it)
+                  </label>
+                )}
+              </div>
+            )}
           </div>
         )
       ) : (
@@ -304,7 +364,7 @@ export function Leaderboard({
         <p className="py-6 text-center text-sm text-muted">Loading…</p>
       ) : !board.total ? (
         <p className="py-6 text-center text-sm text-muted">
-          {scope === 'everyone' ? 'No scores yet. Be the first!' : 'No one in this league has played today yet. Be the first!'}
+          {scope === 'everyone' ? 'No scores yet. Be the first!' : 'No one in this room has played today yet. Be the first!'}
         </p>
       ) : (
         <>
@@ -352,7 +412,7 @@ export function Leaderboard({
 
       {scope !== 'everyone' && scope !== 'new' && league && (
         <div className="mt-4">
-          <h3 className="mb-1 text-sm font-bold">League news</h3>
+          <h3 className="mb-1 text-sm font-bold">Room news</h3>
           {league.news.length ? (
             <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
               {league.news.slice(0, 12).map((n) => (
@@ -370,12 +430,13 @@ export function Leaderboard({
             className="mt-3 text-xs text-muted underline"
             onClick={async () => {
               if (!confirm(`Leave ${league.name}?`)) return;
+              setInviteOpen(false);
               await api.leagueLeave(playerId, league.id).catch(() => {});
               onLeaguesChanged();
               setScope('everyone');
             }}
           >
-            Leave this league
+            Leave this room
           </button>
         </div>
       )}
@@ -383,43 +444,102 @@ export function Leaderboard({
   );
 }
 
-/** Name a new league, then invite friends to it. */
-function NewLeague({ playerId, onCreated }: { playerId: string; onCreated(l: { id: string; name: string }): void }) {
+type PublicRoom = { id: string; name: string; members: number; joined: boolean };
+
+/** Host a room (public or private), or join a public one. */
+function Rooms({
+  playerId, onCreated, onJoined,
+}: { playerId: string; onCreated(l: { id: string; name: string }): void; onJoined(id: string): void }) {
   const [value, setValue] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [rooms, setRooms] = useState<PublicRoom[] | null>(null);
+  useEffect(() => {
+    api.publicRooms(playerId).then((r) => setRooms(r.rooms), () => setRooms([]));
+  }, [playerId]);
+  const seg = (on: boolean) => `flex-1 rounded-full px-3 py-1 text-sm font-semibold ${on ? 'bg-ink text-bg' : 'text-muted'}`;
   return (
-    <form
-      className="mb-2 rounded-xl bg-bg p-3"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setBusy(true);
-        setError('');
-        try {
-          onCreated(await api.leagueCreate(playerId, value.trim()));
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Could not create the league');
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <label className="text-sm font-semibold" htmlFor="league-name">Start a league</label>
-      <p className="mb-2 text-xs text-muted">A leaderboard just for your friends, family or office. You'll get a link to invite them.</p>
-      <div className="flex gap-2">
-        <input
-          id="league-name"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          maxLength={24}
-          placeholder="e.g. The Office"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-base"
-        />
-        <button type="submit" disabled={busy || value.trim().length < 2} className="rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
-          {busy ? '…' : 'Create'}
-        </button>
+    <div className="mb-2 space-y-3">
+      <form
+        className="rounded-xl bg-bg p-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError('');
+          try {
+            onCreated(await api.leagueCreate(playerId, value.trim(), isPublic));
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not create the room');
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className="text-sm font-semibold" htmlFor="room-name">Host a room</label>
+        <p className="mb-2 text-xs text-muted">A leaderboard for your friends, family or office, for every daily board.</p>
+        <div className="mb-2 flex rounded-full border border-line p-0.5" role="radiogroup" aria-label="Who can join">
+          <button type="button" role="radio" aria-checked={!isPublic} className={seg(!isPublic)} onClick={() => setIsPublic(false)}>
+            🔒 Private
+          </button>
+          <button type="button" role="radio" aria-checked={isPublic} className={seg(isPublic)} onClick={() => setIsPublic(true)}>
+            🌎 Public
+          </button>
+        </div>
+        <p className="mb-2 text-xs text-muted">
+          {isPublic ? 'Listed below for anyone to join, and you can invite friends too.' : 'Only people with your invite link can join.'}
+        </p>
+        <div className="flex gap-2">
+          <input
+            id="room-name"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            maxLength={24}
+            placeholder="e.g. The Office"
+            className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-base"
+          />
+          <button type="submit" disabled={busy || value.trim().length < 2} className="rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
+            {busy ? '…' : 'Create'}
+          </button>
+        </div>
+        {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+      </form>
+
+      <div>
+        <h3 className="mb-1 text-sm font-bold">Public rooms</h3>
+        {!rooms ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : !rooms.length ? (
+          <p className="text-sm text-muted">No public rooms yet. Host the first one!</p>
+        ) : (
+          <ul className="max-h-48 overflow-y-auto">
+            {rooms.map((r) => (
+              <li key={r.id} className="flex items-center gap-2 border-b border-line py-1.5">
+                <span className="min-w-0 flex-1 truncate font-semibold">{r.name}</span>
+                <span className="text-xs text-muted">{r.members} {r.members === 1 ? 'player' : 'players'}</span>
+                {r.joined ? (
+                  <button type="button" className="rounded-full border border-line px-3 py-0.5 text-sm" onClick={() => onJoined(r.id)}>Open</button>
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded-full bg-ink px-3 py-0.5 text-sm font-semibold text-bg"
+                    onClick={async () => {
+                      try {
+                        await api.leagueJoin(playerId, r.id);
+                        onJoined(r.id);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Could not join');
+                      }
+                    }}
+                  >
+                    Join
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-    </form>
+    </div>
   );
 }

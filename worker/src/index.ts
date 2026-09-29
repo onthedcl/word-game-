@@ -12,7 +12,7 @@ import {
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
-import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues } from '../../server/leagues';
+import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, publicLeagues, setLeaguePublic } from '../../server/leagues';
 
 interface Env {
   BOARD: DurableObjectNamespace<Leaderboard>;
@@ -182,6 +182,10 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await leaveLeague(deps, body));
         case 'GET /api/league/mine':
           return json(await myLeagues(deps, player));
+        case 'GET /api/league/public':
+          return json(await publicLeagues(deps, player));
+        case 'POST /api/league/visibility':
+          return json(await setLeaguePublic(deps, body));
         case 'GET /api/league/info':
           return json(await leagueInfo(deps, url.searchParams.get('id')));
         case 'GET /api/league':

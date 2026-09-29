@@ -28,6 +28,7 @@ export interface LeagueView {
   name: string;
   members: number;
   owner: boolean;
+  public?: boolean;
   board: Board;
   news: { at: number; text: string }[];
 }
@@ -115,10 +116,15 @@ export const api = {
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
   /** Erase this player's name, scores and history from the server. */
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
-  leagueCreate: (playerId: string, name: string) => call<{ id: string; name: string }>('POST', '/api/league/create', { playerId, name }),
+  leagueCreate: (playerId: string, name: string, isPublic: boolean) =>
+    call<{ id: string; name: string; public: boolean }>('POST', '/api/league/create', { playerId, name, public: isPublic }),
+  publicRooms: (player: string) =>
+    call<{ rooms: { id: string; name: string; members: number; joined: boolean }[] }>('GET', `/api/league/public?player=${encodeURIComponent(player)}`),
+  setRoomPublic: (playerId: string, id: string, isPublic: boolean) =>
+    call<{ ok: true; public: boolean }>('POST', '/api/league/visibility', { playerId, id, public: isPublic }),
   leagueJoin: (playerId: string, id: string) => call<{ id: string; name: string; members: number }>('POST', '/api/league/join', { playerId, id }),
   leagueLeave: (playerId: string, id: string) => call<{ ok: true }>('POST', '/api/league/leave', { playerId, id }),
-  leagueInfo: (id: string) => call<{ name: string; members: number }>('GET', `/api/league/info?id=${encodeURIComponent(id)}`),
+  leagueInfo: (id: string) => call<{ name: string; members: number; public?: boolean }>('GET', `/api/league/info?id=${encodeURIComponent(id)}`),
   myLeagues: (player: string) => call<{ leagues: LeagueSummary[] }>('GET', `/api/league/mine?player=${encodeURIComponent(player)}`),
   league: (id: string, date: string, player: string) =>
     call<LeagueView>('GET', `/api/league?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),

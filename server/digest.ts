@@ -67,9 +67,9 @@ export function buildDigest(batch: Notification[]): Notification | null {
     for (const e of blitz) top.set(e.who, Math.max(top.get(e.who) ?? 0, e.score));
     lines.push(`⚡ ${plural(blitz.length, 'Blitz game')}: ${[...top].map(([w, s]) => `${w} ${s}`).join(', ')}`);
   }
-  for (const e of of('league')) lines.push(`🏘️ New league: ${e.league} (by ${e.who})`);
+  for (const e of of('league')) lines.push(`🏘️ New room: ${e.league} (by ${e.who})`);
   const joins = of('league-join');
-  if (joins.length) lines.push(`🤝 League joins: ${joins.map((e) => `${e.who} → ${e.league}`).join(', ')}`);
+  if (joins.length) lines.push(`🤝 Room joins: ${joins.map((e) => `${e.who} → ${e.league}`).join(', ')}`);
   for (const e of of('renamed')) lines.push(`✏️ ${e.from} is now ${e.who}`);
   const moved = of('device');
   if (moved.length) lines.push(`📱 Picked up on another device: ${[...new Set(moved.map((e) => e.who))].join(', ')}`);

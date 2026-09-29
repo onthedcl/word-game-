@@ -3,7 +3,7 @@ import { dict, seeds } from '../src/engine/node-dict';
 import { generateDaily } from '../src/engine/generator';
 import { answerTable } from './tables';
 import { ApiError, deletePlayer, saveName, submitDaily, type Deps, type KV } from './leaderboard';
-import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues } from './leagues';
+import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, publicLeagues, setLeaguePublic } from './leagues';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
@@ -49,14 +49,14 @@ describe('leagues', () => {
   it('can be created, joined by id and shown to members only', async () => {
     const { id, name } = await createLeague(deps, { playerId: A, name: 'The Office' });
     expect(name).toBe('The Office');
-    expect(await leagueInfo(deps, id)).toEqual({ name: 'The Office', members: 1 });
+    expect(await leagueInfo(deps, id)).toEqual({ name: 'The Office', members: 1, public: false });
     await joinLeague(deps, { playerId: B, id });
     await joinLeague(deps, { playerId: B, id }); // twice is fine
-    expect(await leagueInfo(deps, id)).toEqual({ name: 'The Office', members: 2 });
+    expect(await leagueInfo(deps, id)).toEqual({ name: 'The Office', members: 2, public: false });
     await rejects(leagueBoard(deps, id, DATE, C), 403);
     await rejects(createLeague(deps, { playerId: A, name: 'x' }), 400);
     await rejects(createLeague(deps, { playerId: 'player-nonamexxxxxxxxxx', name: 'Mine' }), 403);
-    expect(sent.some((m) => m.includes('started the league “The Office”'))).toBe(true);
+    expect(sent.some((m) => m.includes('started the private room “The Office”'))).toBe(true);
     expect(sent.some((m) => m.includes('Bo joined “The Office”'))).toBe(true);
   });
 
@@ -93,8 +93,22 @@ describe('leagues', () => {
     await joinLeague(deps, { playerId: B, id });
     await leaveLeague(deps, { playerId: A, id });
     expect((await myLeagues(deps, A)).leagues).toEqual([]);
-    expect(await leagueInfo(deps, id)).toEqual({ name: 'Book Club', members: 1 });
+    expect(await leagueInfo(deps, id)).toEqual({ name: 'Book Club', members: 1, public: false });
     await deletePlayer(deps, { playerId: B });
     await rejects(leagueInfo(deps, id), 404);
+  });
+});
+
+describe('public rooms', () => {
+  it('are listed for anyone to join, private ones are not, and only the host can switch', async () => {
+    const pub = await createLeague(deps, { playerId: A, name: 'Word Nerds', public: true });
+    const priv = await createLeague(deps, { playerId: A, name: 'Secret Club' });
+    await joinLeague(deps, { playerId: B, id: pub.id });
+    const list = (await publicLeagues(deps, C)).rooms;
+    expect(list).toEqual([{ id: pub.id, name: 'Word Nerds', members: 2, joined: false }]);
+    expect((await publicLeagues(deps, B)).rooms[0].joined).toBe(true);
+    await rejects(setLeaguePublic(deps, { playerId: B, id: priv.id, public: true }), 403);
+    await setLeaguePublic(deps, { playerId: A, id: priv.id, public: true });
+    expect((await publicLeagues(deps, C)).rooms.map((r) => r.name)).toEqual(['Word Nerds', 'Secret Club']);
   });
 });
