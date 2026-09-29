@@ -165,7 +165,7 @@ describe('share text', () => {
     const p = generateDaily(dict, seeds, '2026-09-28');
     const base = { rankName: 'Local', rankIndex: 2, score: 120, words: 12, pangrams: 0 };
     expect(shareText(p, { ...base, streak: 1 })).not.toContain('streak');
-    expect(shareText(p, { ...base, streak: 5 })).toContain('🔥 5-day streak');
+    expect(shareText(p, { ...base, streak: 5 })).toContain('🐢 5-day streak');
   });
 });
 
@@ -177,5 +177,13 @@ describe('compliments', () => {
     expect(complimentFor('chest', () => 0.9)).toBeNull(); // then about 1 in 3
     expect(complimentFor('chests', () => 0.1)).not.toBeNull();
     expect(complimentFor('torches', () => 0.9)).not.toBeNull();
+  });
+});
+
+describe('streak animals', () => {
+  it('grow up every 5 days', async () => {
+    const { isNewAnimal, streakAnimal } = await import('./streak');
+    expect([1, 4, 5, 9, 10, 14, 15, 29, 30, 49, 50, 59, 60, 400].map((d) => streakAnimal(d).emoji).join('')).toBe('🐣🐣🐢🐢🐇🐇🦊🐬🦁🐘🐋🐋🐉🐉');
+    expect([1, 4, 5, 6, 10, 55, 60].map(isNewAnimal)).toEqual([false, false, true, false, true, false, true]);
   });
 });

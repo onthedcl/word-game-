@@ -21,6 +21,7 @@ import { dailyBoardId, parseBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { GAME_URL, shareText } from './engine/share';
+import { isNewAnimal, streakAnimal } from './engine/streak';
 import { useUpdateCheck } from './updates';
 import { haptics } from './haptics';
 import { Wordmark } from './components/Wordmark';
@@ -381,6 +382,17 @@ export default function App() {
     return Math.max(alive(serverStreak), local);
   }, [serverStreak, dailyFound.found.length]);
 
+  // A new streak animal: celebrate it once, the day it's reached.
+  useEffect(() => {
+    if (!isNewAnimal(streak) || !dailyFound.found.length) return;
+    const key = `hexicon:streak-animal:${streak}:${dateKeyFor()}`;
+    if (readStored(key, false)) return;
+    writeStored(key, true);
+    const { emoji, name } = streakAnimal(streak);
+    setNotice(`${emoji} ${streak}-day streak! Say hi to your ${name}`);
+    haptics.pangram();
+  }, [streak, dailyFound.found.length]);
+
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
   useEffect(() => {
@@ -544,7 +556,7 @@ export default function App() {
 
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(''), 1800);
+    const t = setTimeout(() => setNotice(""), notice.length > 30 ? 4000 : 1800);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -575,7 +587,7 @@ export default function App() {
         subtitle: [archiveDate(pz.dateKey!), pz.difficulty !== null ? DIFFICULTY_NAMES[pz.difficulty] : null].filter(Boolean).join(' · '),
         lines: [
           `${p.score} pts · ${p.rank.name}`,
-          [where, streak >= 2 ? `🔥 ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
+          [where, streak >= 2 ? `${streakAnimal(streak).emoji} ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
           `${active.found.length} words${p.pangramsFound ? ` · ${p.pangramsFound} pangram${p.pangramsFound > 1 ? 's' : ''} 🌟` : ''}`,
         ],
         footer: 'Can you beat me?  onthedcl.github.io/word-game-',
@@ -693,7 +705,7 @@ export default function App() {
       </header>
 
       {notice && (
-        <div role="status" className="fixed top-16 left-1/2 z-30 -translate-x-1/2 rounded-md bg-ink px-3 py-1 text-sm font-semibold text-bg">{notice}</div>
+        <div role="status" className="fixed top-16 left-1/2 z-30 w-max max-w-[90vw] -translate-x-1/2 rounded-md bg-ink px-3 py-1.5 text-center text-sm font-semibold text-bg">{notice}</div>
       )}
 
       {updateReady && (
@@ -736,7 +748,7 @@ export default function App() {
                     title={`${streak}-day streak: find a word every day to keep it going`}
                     aria-label={`${streak}-day streak`}
                   >
-                    🔥 {streak}
+                    {streakAnimal(streak).emoji} {streak}
                   </span>
                 )}
                 {standing && (

@@ -1,5 +1,6 @@
 // Spoiler-free share text that invites friends to beat your score.
 import { RANKS } from './scoring';
+import { streakAnimal } from './streak';
 import { shortDate } from './dates';
 import { DIFFICULTY_NAMES, type Puzzle } from './generator';
 
@@ -40,7 +41,7 @@ export function shareText(puzzle: Puzzle, r: Result): string {
   return [
     `DPIYF Lettertown ${day}${level}`,
     `${where ? `🏆 ${where} · ` : ''}${r.score} pts · ${r.rankName}${pangrams}`,
-    hexRow(r.rankIndex) + (r.streak && r.streak >= 2 ? `  🔥 ${r.streak}-day streak` : ''),
+    hexRow(r.rankIndex) + (r.streak && r.streak >= 2 ? `  ${streakAnimal(r.streak).emoji} ${r.streak}-day streak` : ''),
     `Can you beat me? ${GAME_URL}`,
   ].join('\n');
 }
