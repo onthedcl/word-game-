@@ -501,7 +501,7 @@ export default function App() {
   const headerBtn = 'rounded-full border border-line py-1 text-sm hover:border-muted disabled:opacity-40';
   const textBtn = `${headerBtn} px-2.5 sm:px-3`;
   const iconBtn = `${headerBtn} flex h-8 min-w-8 items-center justify-center gap-1.5 sm:px-3`;
-  const pastBtn = 'items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-sm font-bold shadow-sm active:scale-95 flex';
+  const pastBtn = 'flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-sm font-bold shadow-sm active:scale-95';
   const label = (text: string) => <span className="hidden sm:inline">{text}</span>;
   const tab = (m: Mode) =>
     `rounded-full px-2.5 py-1 sm:px-3 text-sm font-semibold ${mode === m ? 'bg-ink text-bg' : 'text-muted hover:text-ink'}`;
@@ -557,8 +557,8 @@ export default function App() {
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
           <button type="button" className={iconBtn} onClick={onShare} disabled={!active} aria-label="Share"><ShareIcon />{label('Share')}</button>
           <button type="button" className={`${headerBtn} h-8 w-8 font-bold`} onClick={() => setDialog('rules')} aria-label="How to play">?</button>
-          {/* Phones: no room beside the logo, so it sits at the end of this row, under the Leaderboard button. */}
-          <button type="button" onClick={() => openArchive()} className={`${pastBtn} ml-auto sm:hidden`} aria-label="Past boards">
+          {/* Phones: no room beside the logo, so it sits right after the ? button. */}
+          <button type="button" onClick={() => openArchive()} className={`${pastBtn} h-8 px-2.5 sm:hidden`} aria-label="Past boards">
             <CalendarIcon /> Past
           </button>
         </nav>
