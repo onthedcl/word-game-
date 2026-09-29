@@ -705,7 +705,16 @@ export default function App() {
       </header>
 
       {notice && (
-        <div role="status" className="fixed top-16 left-1/2 z-30 w-max max-w-[90vw] -translate-x-1/2 rounded-md bg-ink px-3 py-1.5 text-center text-sm font-semibold text-bg">{notice}</div>
+        <button
+          type="button"
+          role="status"
+          onClick={() => setNotice('')}
+          aria-label={`${notice}. Tap to dismiss`}
+          className="fixed top-16 left-1/2 z-30 flex w-max max-w-[90vw] -translate-x-1/2 items-center gap-2 rounded-md bg-ink py-1.5 pr-2 pl-3 text-center text-sm font-semibold text-bg shadow-lg"
+        >
+          <span>{notice}</span>
+          <span aria-hidden className="text-base leading-none opacity-70">×</span>
+        </button>
       )}
 
       {updateReady && (
