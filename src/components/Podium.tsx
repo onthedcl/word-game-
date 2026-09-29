@@ -13,12 +13,14 @@ const CONFETTI_COLORS = ['#e0a526', '#2f855a', '#3b82f6', '#e76f8a', '#f2c94c', 
 
 interface Props {
   board: Board;
+  /** "yesterday's board" or "board #3". */
+  which: string;
   onShare(): void;
   onClose(): void;
 }
 
 /** Everyone else who played yesterday gets a quieter card: their place and the podium to aim for. */
-function Finish({ board, onClose }: Omit<Props, 'onShare'>) {
+function Finish({ board, which, onClose }: Omit<Props, 'onShare'>) {
   const you = board.you!;
   const third = board.top[2];
   const gap = third ? third.score - you.score + 1 : 0;
@@ -27,7 +29,7 @@ function Finish({ board, onClose }: Omit<Props, 'onShare'>) {
       <div className="text-5xl">🎖️</div>
       <p className="mt-2 text-2xl font-black">You finished #{you.position}</p>
       <p className="mt-1 text-muted">
-        out of {board.total} players on yesterday's board, with <b className="text-ink">{you.score}</b> points
+        out of {board.total} players on {which}, with <b className="text-ink">{you.score}</b> points
       </p>
       <ol className="mx-auto mt-5 max-w-xs space-y-1 text-left">
         {board.top.slice(0, 3).map((r) => (
@@ -50,9 +52,9 @@ function Finish({ board, onClose }: Omit<Props, 'onShare'>) {
   );
 }
 
-export function Podium({ board, onShare, onClose }: Props) {
+export function Podium({ board, which, onShare, onClose }: Props) {
   const you = board.you!;
-  if (you.position > 3) return <Finish board={board} onClose={onClose} />;
+  if (you.position > 3) return <Finish board={board} which={which} onClose={onClose} />;
   return (
     <div className="relative text-center">
       <div className="pointer-events-none absolute inset-x-0 -top-6 h-72 overflow-hidden" aria-hidden>
@@ -75,7 +77,7 @@ export function Podium({ board, onShare, onClose }: Props) {
         You finished {PLACES[you.position - 1]}!
       </p>
       <p className="mt-1 text-muted">
-        out of {board.total} players on yesterday's board, with <b className="text-ink">{you.score}</b> points
+        out of {board.total} players on {which}, with <b className="text-ink">{you.score}</b> points
       </p>
 
       <div className="mt-6 flex items-end justify-center gap-2">

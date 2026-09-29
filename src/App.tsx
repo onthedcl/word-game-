@@ -10,12 +10,13 @@ import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
 import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
+import { Archive } from './components/Archive';
 import { requestPuzzle } from './worker/client';
 import {
   adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
 } from './storage';
-import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, shiftDateKey } from './engine/dates';
-import { dailyBoardId } from './engine/rerolls';
+import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, puzzleNumber, shiftDateKey } from './engine/dates';
+import { dailyBoardId, parseBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { shareText } from './engine/share';
@@ -29,7 +30,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'hints' | 'yesterday' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium';
+type Dialog = null | 'welcome' | 'rules' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -257,6 +258,7 @@ export default function App() {
       api.daily(yesterdayId, me).then((b) => {
         if (!live || !b.you) return;
         setPodium({ id: yesterdayId, board: b });
+        setPodiumFromArchive(false);
         setRecapDue(true);
       }, () => {});
     }, 1200);
@@ -297,30 +299,37 @@ export default function App() {
     return () => clearTimeout(t);
   }, [dailyFound, online, name, isToday, me, boardId, noteStanding]);
 
-  const yesterdayKey = shiftDateKey(dateKey, -1);
-  const yesterday = usePuzzle(dialog === 'yesterday' && yesterdayKey >= EPOCH ? yesterdayKey : null);
-  // Words this player found yesterday: saved on this device, plus any from other devices (the server keeps them).
-  const [yesterdayFound, setYesterdayFound] = useState<Set<string>>(new Set());
+  // ---- past boards ----------------------------------------------------------
+  const [archiveDay, setArchiveDay] = useState<string | null>(null);
+  const archived = usePuzzle(dialog === 'archive' ? archiveDay : null);
+  // Words found on the chosen day: saved on this device, plus any from other devices (the server keeps them).
+  const [archiveFound, setArchiveFound] = useState<Set<string>>(new Set());
+  const [archiveStandings, setArchiveStandings] = useState<{ id: string; board: Board } | null>(null);
   useEffect(() => {
-    if (dialog !== 'yesterday' || yesterdayKey < EPOCH) return;
-    const id = dailyBoardId(yesterdayKey);
+    if (dialog !== 'archive' || !archiveDay) return;
+    const id = dailyBoardId(archiveDay);
     const local = readStored<{ found: string[] }>(dailyKey(id), { found: [] }).found;
-    setYesterdayFound(new Set(local));
+    setArchiveFound(new Set(local));
     if (!online || !name) return;
     let live = true;
     api.progress(id, me).then(({ found }) => {
-      if (live) setYesterdayFound(new Set([...local, ...found.map((f) => (typeof f === 'string' ? f : f.w))]));
+      if (live) setArchiveFound(new Set([...local, ...found.map((f) => (typeof f === 'string' ? f : f.w))]));
     }, () => {});
     // Once the board has locked, its final results can be reopened from here.
-    if (Date.now() >= boardLocksAt(yesterdayKey)) {
+    if (Date.now() >= boardLocksAt(archiveDay)) {
       api.daily(id, me).then((b) => {
-        if (live && b.you) setPodium({ id, board: b });
+        if (live) setArchiveStandings({ id, board: b });
       }, () => {});
     }
     return () => {
       live = false;
     };
-  }, [dialog, yesterdayKey, online, name, me]);
+  }, [dialog, archiveDay, online, name, me]);
+  const [podiumFromArchive, setPodiumFromArchive] = useState(false);
+  const openArchive = (day: string | null = null) => {
+    setArchiveDay(day);
+    setDialog('archive');
+  };
 
   // ---- blitz ----------------------------------------------------------------
   const [blitz, setBlitz] = useState<Blitz>({ phase: 'intro' });
@@ -492,6 +501,7 @@ export default function App() {
   const headerBtn = 'rounded-full border border-line py-1 text-sm hover:border-muted disabled:opacity-40';
   const textBtn = `${headerBtn} px-2.5 sm:px-3`;
   const iconBtn = `${headerBtn} flex h-8 min-w-8 items-center justify-center gap-1.5 sm:px-3`;
+  const pastBtn = 'items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-sm font-bold shadow-sm active:scale-95 flex';
   const label = (text: string) => <span className="hidden sm:inline">{text}</span>;
   const tab = (m: Mode) =>
     `rounded-full px-2.5 py-1 sm:px-3 text-sm font-semibold ${mode === m ? 'bg-ink text-bg' : 'text-muted hover:text-ink'}`;
@@ -504,15 +514,20 @@ export default function App() {
           <Wordmark />
           <span className="hidden lg:flex">{puzzleMeta}</span>
         </div>
-        {online && (
-          <button
-            type="button"
-            onClick={() => setDialog('leaderboard')}
-            className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3.5 py-1.5 text-sm font-extrabold text-[#3b2a00] shadow-md ring-2 ring-[#1f5fd6] active:scale-95 lg:order-last"
-          >
-            <TrophyIcon /> Leaderboard
+        <div className="flex items-center gap-1.5 lg:order-last">
+          <button type="button" onClick={() => openArchive()} className={`${pastBtn} hidden sm:flex`}>
+            <CalendarIcon /> Past boards
           </button>
-        )}
+          {online && (
+            <button
+              type="button"
+              onClick={() => setDialog('leaderboard')}
+              className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3 py-1 text-sm font-extrabold text-[#3b2a00] shadow ring-[1.5px] ring-[#1f5fd6] active:scale-95"
+            >
+              <TrophyIcon /> Leaderboard
+            </button>
+          )}
+        </div>
         <nav className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto">
           <div className="relative sm:mr-1">
           <div className="flex rounded-full border border-line p-0.5" role="tablist" aria-label="Mode">
@@ -540,11 +555,12 @@ export default function App() {
           )}
           </div>
           <button type="button" className={iconBtn} onClick={() => setDialog('hints')} disabled={!active} aria-label="Hints"><BulbIcon />{label('Hints')}</button>
-          {mode === 'daily' && (
-            <button type="button" className={iconBtn} onClick={() => setDialog('yesterday')} aria-label="Yesterday's answers"><CalendarIcon />{label('Yesterday')}</button>
-          )}
           <button type="button" className={iconBtn} onClick={onShare} disabled={!active} aria-label="Share"><ShareIcon />{label('Share')}</button>
           <button type="button" className={`${headerBtn} h-8 w-8 font-bold`} onClick={() => setDialog('rules')} aria-label="How to play">?</button>
+          {/* Phones: no room beside the logo, so it sits at the end of this row, under the Leaderboard button. */}
+          <button type="button" onClick={() => openArchive()} className={`${pastBtn} ml-auto sm:hidden`} aria-label="Past boards">
+            <CalendarIcon /> Past
+          </button>
         </nav>
       </header>
 
@@ -653,23 +669,34 @@ export default function App() {
         />
       </Modal>
 
-      <Modal open={dialog === 'podium' && !!podium} title="Yesterday's results" onClose={closeDialog}>
-        {podium && (
-          <Podium
-            board={podium.board}
-            onClose={closeDialog}
-            onShare={async () => {
-              const b = podium.board;
-              const place = ['1st', '2nd', '3rd'][b.you!.position - 1];
-              const msg = await share(
-                `🏆 I finished ${place} of ${b.total} in yesterday's DPIYF Lettertown with ${b.you!.score} points! ` +
-                  `Can you beat me today? https://onthedcl.github.io/word-game-/`,
-              );
-              if (msg) setNotice(msg);
-            }}
-          />
-        )}
-      </Modal>
+      {(() => {
+        // "yesterday's board", or "board #3" when opened from past boards.
+        const day = podium ? parseBoardId(podium.id)?.dateKey ?? '' : '';
+        const isYesterday = day === shiftDateKey(dateKeyFor(), -1);
+        const which = isYesterday ? "yesterday's board" : `board #${puzzleNumber(day)}`;
+        // Opened from past boards: closing goes back there.
+        const close = () => (podiumFromArchive ? setDialog('archive') : closeDialog());
+        return (
+          <Modal open={dialog === 'podium' && !!podium} title={isYesterday ? "Yesterday's results" : `Results · #${puzzleNumber(day)}`} onClose={close}>
+            {podium && (
+              <Podium
+                board={podium.board}
+                which={which}
+                onClose={close}
+                onShare={async () => {
+                  const b = podium.board;
+                  const place = ['1st', '2nd', '3rd'][b.you!.position - 1];
+                  const msg = await share(
+                    `🏆 I finished ${place} of ${b.total} on ${isYesterday ? "yesterday's" : `#${puzzleNumber(day)}`} DPIYF Lettertown with ${b.you!.score} points! ` +
+                      `Can you beat me today? https://onthedcl.github.io/word-game-/`,
+                  );
+                  if (msg) setNotice(msg);
+                }}
+              />
+            )}
+          </Modal>
+        );
+      })()}
 
       <Modal open={dialog === 'name-taken'} title="That name is taken" onClose={closeDialog}>
         <p className="mb-3 text-sm">
@@ -713,36 +740,24 @@ export default function App() {
         {active && <HintGrid grid={hintGrid(active.puzzle, new Set(active.found))} />}
       </Modal>
 
-      <Modal open={dialog === 'yesterday'} title="Yesterday's answers" onClose={closeDialog}>
-        {yesterdayKey < EPOCH ? (
-          <p className="text-muted">DPIYF Lettertown #1 is today. Check back tomorrow.</p>
-        ) : yesterday?.puzzle ? (
-          <>
-            <p className="mb-3 text-sm text-muted">
-              #{yesterday.puzzle.number} · Letters <b className="text-ink">{yesterday.puzzle.letters.join(' ').toUpperCase()}</b>, key{' '}
-              <b className="text-ink">{yesterday.puzzle.centerLetter.toUpperCase()}</b> · {yesterday.puzzle.answers.length} words ·{' '}
-              {yesterday.puzzle.maxScore} points
-            </p>
-            {podium?.id === dailyBoardId(yesterdayKey) && podium.board.you && (
-              <button
-                type="button"
-                onClick={() => setDialog('podium')}
-                className="mb-3 flex w-full items-center gap-2 rounded-xl bg-key/25 px-3 py-2 text-left font-semibold"
-              >
-                <span className="text-xl">{['🥇', '🥈', '🥉'][podium.board.you.position - 1] ?? '🎖️'}</span>
-                <span className="flex-1">You finished #{podium.board.you.position} of {podium.board.total}</span>
-                <span className="text-sm text-muted underline">See results</span>
-              </button>
-            )}
-            <AnswerList
-              answers={yesterday.puzzle.answers}
-              bonus={yesterday.puzzle.bonus}
-              found={yesterdayFound}
-            />
-          </>
-        ) : (
-          <p className="text-muted">{yesterday?.error ?? 'Loading…'}</p>
-        )}
+      <Modal open={dialog === 'archive'} title={archiveDay ? 'Past board' : 'Past boards'} onClose={closeDialog}>
+        <Archive
+          today={dateKeyFor()}
+          colors={DIFFICULTY_COLORS}
+          selected={archiveDay}
+          onSelect={setArchiveDay}
+          foundCount={(d) => readStored<{ found: string[] }>(dailyKey(dailyBoardId(d)), { found: [] }).found.length}
+          puzzle={archived}
+          found={archiveFound}
+          standings={archiveDay && archiveStandings?.id === dailyBoardId(archiveDay) ? archiveStandings.board : null}
+          locked={!!archiveDay && Date.now() >= boardLocksAt(archiveDay)}
+          onSeeResults={() => {
+            if (!archiveDay || !archiveStandings) return;
+            setPodium(archiveStandings);
+            setPodiumFromArchive(true);
+            setDialog('podium');
+          }}
+        />
       </Modal>
 
       <Modal open={dialog === 'blitz-over'} title="Time's up!" onClose={closeDialog}>
