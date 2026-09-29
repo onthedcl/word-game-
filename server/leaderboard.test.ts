@@ -250,7 +250,7 @@ describe('names as logins', () => {
     const r = await saveName(deps, { playerId: P1, name: 'Castle' });
     expect(r.pin).toMatch(/^\d{4}$/);
     await rejects(saveName(deps, { playerId: P2, name: 'castle' }), 409);
-    expect(await me(deps, P1)).toEqual({ name: 'Castle', pin: r.pin });
+    expect(await me(deps, P1)).toMatchObject({ name: 'Castle', pin: r.pin });
   });
 
   it('let a player continue on another device with just their name, and restore their words', async () => {
@@ -362,5 +362,24 @@ describe('bonus words', () => {
     expect(r2.you!.rankName).toBe('Key to the City');
     expect(r2.score).toBeGreaterThan(wide.maxScore);
     expect(sent.filter((m) => m.includes('found all')).at(-1)).toContain(`found all ${wide.answers.length} words`);
+  });
+});
+
+describe('streaks', () => {
+  it('count consecutive days with a word found, and reset after a gap', async () => {
+    const tables: Record<string, ReturnType<typeof answerTable>> = {};
+    const day = (d: string) => (tables[d] ??= answerTable(generateDaily(dict, seeds, d)));
+    deps.answers = async (key) => day(key.split('/')[1]);
+    const play = async (d: string) => {
+      clock = Date.parse(`${d}T15:00:00Z`);
+      const w = day(d);
+      return (await submitDaily(deps, { playerId: P1, name: 'Ann', date: d, words: Object.keys(w.words).slice(0, 1) })).streak;
+    };
+    expect(await play('2026-09-26')).toMatchObject({ count: 1, best: 1 });
+    expect(await play('2026-09-26')).toMatchObject({ count: 1 }); // same day again
+    expect(await play('2026-09-27')).toMatchObject({ count: 2 });
+    expect(await play('2026-09-28')).toMatchObject({ count: 3, best: 3 });
+    expect(await play('2026-09-30')).toMatchObject({ count: 1, best: 3, last: '2026-09-30' }); // missed the 29th
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 1, best: 3 });
   });
 });

@@ -18,6 +18,8 @@ interface Result {
   pangrams: number;
   /** Place on the leaderboard, when the player is on it. */
   standing?: { position: number; total: number } | null;
+  /** Days in a row with a word found. */
+  streak?: number;
 }
 
 const place = (s: Result['standing'], scope: string) => (s ? `#${s.position} of ${s.total} ${scope}` : null);
@@ -38,7 +40,7 @@ export function shareText(puzzle: Puzzle, r: Result): string {
   return [
     `DPIYF Lettertown ${day}${level}`,
     `${where ? `🏆 ${where} · ` : ''}${r.score} pts · ${r.rankName}${pangrams}`,
-    hexRow(r.rankIndex),
+    hexRow(r.rankIndex) + (r.streak && r.streak >= 2 ? `  🔥 ${r.streak}-day streak` : ''),
     `Can you beat me? ${GAME_URL}`,
   ].join('\n');
 }

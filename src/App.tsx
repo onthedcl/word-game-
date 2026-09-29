@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board } from './api';
+import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type Streak } from './api';
 import { isNativeApp, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { Podium } from './components/Podium';
@@ -278,6 +278,25 @@ export default function App() {
     }
   }, [recapDue, podium, dialog]);
 
+  // ---- streak ----------------------------------------------------------------
+  // Days in a row with a word found. The server keeps it (so it follows the player across
+  // devices); this device's own history covers players without a name.
+  const [serverStreak, setServerStreak] = useState<Streak | null>(null);
+  useEffect(() => {
+    if (online && name) api.me(me).then((r) => r.streak && setServerStreak(r.streak), () => {});
+  }, [online, name, me]);
+  const streak = useMemo(() => {
+    const today = dateKeyFor();
+    const yesterday = shiftDateKey(today, -1);
+    const alive = (s: Streak | null) => (s && (s.last === today || s.last === yesterday) ? s.count : 0);
+    // This device: count back from today (or yesterday, if today isn't played yet).
+    const played = (d: string) => readStored<{ found: string[] }>(dailyKey(dailyBoardId(d)), { found: [] }).found.length > 0;
+    let local = 0;
+    for (let d = played(today) ? today : yesterday; d >= EPOCH && played(d); d = shiftDateKey(d, -1)) local++;
+    if (dailyFound.found.length && !played(today)) local++;
+    return Math.max(alive(serverStreak), local);
+  }, [serverStreak, dailyFound.found.length]);
+
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
   useEffect(() => {
@@ -289,6 +308,7 @@ export default function App() {
         (b) => {
           posted.current = key;
           noteStanding(b);
+          if (b.streak) setServerStreak(b.streak);
         },
         (e) => {
           // Someone else owns this name: ask the player to confirm it's them or pick another.
@@ -460,6 +480,7 @@ export default function App() {
     const text = shareText(active.puzzle, {
       rankName: p.rank.name, rankIndex: p.rank.index, score: p.score, words: active.found.length, pangrams: p.pangramsFound,
       standing: mode === 'daily' ? (isToday ? standing : null) : blitzStanding,
+      streak: mode === 'daily' ? streak : undefined,
     });
     const msg = await share(text);
     if (msg) setNotice(msg);
@@ -597,7 +618,17 @@ export default function App() {
               }}
               keyboard={dialog === null}
               statusExtra={
-                standing && (
+                <span className="flex items-center gap-1.5">
+                {streak > 0 && (
+                  <span
+                    className="rounded-full bg-orange-500/15 px-2 py-0.5 text-sm font-bold tabular-nums"
+                    title={`${streak}-day streak: find a word every day to keep it going`}
+                    aria-label={`${streak}-day streak`}
+                  >
+                    🔥 {streak}
+                  </span>
+                )}
+                {standing && (
                   <button
                     type="button"
                     onClick={() => setDialog('leaderboard')}
@@ -606,7 +637,8 @@ export default function App() {
                   >
                     🏆 #{standing.position} <span className="font-normal text-muted">of {standing.total}</span>
                   </button>
-                )
+                )}
+                </span>
               }
             />
           ) : (

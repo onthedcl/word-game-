@@ -165,6 +165,29 @@ async function postingName(deps: Deps, playerId: string, raw: unknown): Promise<
   return name;
 }
 
+// ---- streaks ------------------------------------------------------------------
+
+export interface Streak {
+  /** Consecutive days with at least one word found, ending on `last`. */
+  count: number;
+  best: number;
+  last: string;
+}
+
+export const streakOf = async (deps: Deps, playerId: string) =>
+  ((await deps.kv.get(`streak/${playerId}`, { type: 'json' })) as Streak | null) ?? null;
+
+/** Count a day toward the player's streak (idempotent within a day). */
+async function bumpStreak(deps: Deps, playerId: string, dateKey: string): Promise<Streak> {
+  const key = `streak/${playerId}`;
+  const prev = (await deps.kv.get(key, { type: 'json' })) as Streak | null;
+  if (prev && prev.last >= dateKey) return prev;
+  const count = prev && prev.last === shiftDateKey(dateKey, -1) ? prev.count + 1 : 1;
+  const next = { count, best: Math.max(count, prev?.best ?? 0), last: dateKey };
+  await deps.kv.setJSON(key, next);
+  return next;
+}
+
 export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const name = await postingName(deps, playerId, body.name);
@@ -190,7 +213,8 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
     await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });
-  return { ok: true, score: entry.score, ...(await readBoard(deps.kv, `daily/${date}/`, playerId)) };
+  const streak = entry.words > 0 ? await bumpStreak(deps, playerId, boardIdOf(date).dateKey) : await streakOf(deps, playerId);
+  return { ok: true, score: entry.score, streak, ...(await readBoard(deps.kv, `daily/${date}/`, playerId)) };
 }
 
 export async function getDaily(deps: Deps, date: string | null, playerId: string | null) {
@@ -321,9 +345,9 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
 export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
-  if (!player) return { name: null, pin: null };
+  if (!player) return { name: null, pin: null, streak: await streakOf(deps, id) };
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
-  return { name: player.name, pin: owner?.playerId === id ? owner.pin : null };
+  return { name: player.name, pin: owner?.playerId === id ? owner.pin : null, streak: await streakOf(deps, id) };
 }
 
 /** Words this player has found on a daily board (to restore progress on another device). */
@@ -421,7 +445,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   const keys = [
     ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')),
   ].map((b) => b.key);
-  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`);
+  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`);
   for (const key of keys) await deps.kv.setJSON(key, null);
   return { ok: true };
 }

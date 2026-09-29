@@ -156,3 +156,15 @@ describe('board lock', () => {
     expect(new Date(boardLocksAt('2027-03-14')).toISOString()).toBe('2027-03-15T07:00:00.000Z');
   });
 });
+
+describe('share text', () => {
+  it('mentions a streak of two days or more', async () => {
+    const { shareText } = await import('./share');
+    const { dict, seeds } = await import('./node-dict');
+    const { generateDaily } = await import('./generator');
+    const p = generateDaily(dict, seeds, '2026-09-28');
+    const base = { rankName: 'Local', rankIndex: 2, score: 120, words: 12, pangrams: 0 };
+    expect(shareText(p, { ...base, streak: 1 })).not.toContain('streak');
+    expect(shareText(p, { ...base, streak: 5 })).toContain('🔥 5-day streak');
+  });
+});

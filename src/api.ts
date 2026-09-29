@@ -15,6 +15,13 @@ export interface BoardRow {
 /** A found word, with the route it was traced along when known (the server scores that route). */
 export type Submitted = string | { w: string; p: number[] };
 
+/** Consecutive days with a word found, ending on `last` (a date key). */
+export interface Streak {
+  count: number;
+  best: number;
+  last: string;
+}
+
 export interface Board {
   total: number;
   top: BoardRow[];
@@ -77,12 +84,12 @@ export async function leaderboardOnline(): Promise<boolean> {
 export const api = {
   daily: (date: string, player: string) => call<Board>('GET', `/api/daily?date=${date}&player=${encodeURIComponent(player)}`),
   submitDaily: (b: { playerId: string; name: string; date: string; words: Submitted[] }) =>
-    call<Board & { score: number }>('POST', '/api/daily', b),
+    call<Board & { score: number; streak?: Streak | null }>('POST', '/api/daily', b),
   hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string; pin: string }>('POST', '/api/name', { playerId, name }),
   claim: (name: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name }),
-  me: (player: string) => call<{ name: string | null; pin: string | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
+  me: (player: string) => call<{ name: string | null; pin: string | null; streak?: Streak | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
