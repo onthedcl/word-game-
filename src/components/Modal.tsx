@@ -9,6 +9,10 @@ interface Props {
 
 export function Modal({ open, title, onClose, children }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  // The browser's close event arrives after we close a dialog ourselves; only react to closes
+  // the player started (Esc, back gesture), or it would also close whatever opened next.
+  const openRef = useRef(open);
+  openRef.current = open;
   useEffect(() => {
     const dlg = ref.current;
     if (!dlg) return;
@@ -19,7 +23,7 @@ export function Modal({ open, title, onClose, children }: Props) {
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={() => openRef.current && onClose()}
       onClick={(e) => e.target === ref.current && onClose()}
       className="m-auto w-full max-w-[min(520px,calc(100vw-32px))] rounded-2xl bg-surface p-5 text-ink shadow-2xl backdrop:bg-black/40"
     >

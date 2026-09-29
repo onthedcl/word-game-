@@ -58,6 +58,9 @@ type Blitz =
       posted?: Posted;
     };
 
+/** Marks a day's results recap as seen ("v2": the first version marked it seen even when it wasn't shown). */
+const recapKey = (boardId: string) => `hexicon:recap-v2:${boardId}`;
+
 /** Anyone with saved progress from an earlier day has played before. */
 function hasPlayedBefore(): boolean {
   try {
@@ -235,14 +238,15 @@ export default function App() {
   // The first visit after a day closes: show where this player finished yesterday (once).
   // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
   // It waits until yesterday's board has locked (its results are final), checking again at that moment.
-  const [podium, setPodium] = useState<Board | null>(null);
+  const [podium, setPodium] = useState<{ id: string; board: Board } | null>(null);
+  // Set when there's a recap this player hasn't seen; it's marked seen only once it's actually on screen.
+  const [recapDue, setRecapDue] = useState(false);
   const [podiumCheck, setPodiumCheck] = useState(0);
   useEffect(() => {
     if (!online || !name || !isToday) return;
     const yesterday = shiftDateKey(dateKeyFor(), -1);
     const yesterdayId = dailyBoardId(yesterday);
-    const seenKey = `hexicon:podium:${yesterdayId}`;
-    if (yesterday < EPOCH || readStored(seenKey, false)) return;
+    if (yesterday < EPOCH || readStored(recapKey(yesterdayId), false)) return;
     const wait = boardLocksAt(yesterday) - Date.now();
     if (wait > 0) {
       const t = setTimeout(() => setPodiumCheck((n) => n + 1), Math.min(wait + 5000, 2 ** 31 - 1));
@@ -251,12 +255,9 @@ export default function App() {
     let live = true;
     const t = setTimeout(() => {
       api.daily(yesterdayId, me).then((b) => {
-        if (!live) return;
-        writeStored(seenKey, true);
-        if (!b.you) return;
-        setPodium(b);
-        setDialog((d) => d ?? 'podium');
-        if (b.you.position <= 3) haptics.pangram();
+        if (!live || !b.you) return;
+        setPodium({ id: yesterdayId, board: b });
+        setRecapDue(true);
       }, () => {});
     }, 1200);
     return () => {
@@ -264,6 +265,16 @@ export default function App() {
       clearTimeout(t);
     };
   }, [online, name, isToday, me, podiumCheck]);
+  // Show it as soon as nothing else (welcome, rules…) is on screen, and only then count it as seen.
+  useEffect(() => {
+    if (!recapDue || !podium) return;
+    if (dialog === null) setDialog('podium');
+    else if (dialog === 'podium') {
+      writeStored(recapKey(podium.id), true);
+      setRecapDue(false);
+      if (podium.board.you && podium.board.you.position <= 3) haptics.pangram();
+    }
+  }, [recapDue, podium, dialog]);
 
   // Post daily progress to the leaderboard (a moment after each new word).
   const posted = useRef('');
@@ -300,6 +311,12 @@ export default function App() {
     api.progress(id, me).then(({ found }) => {
       if (live) setYesterdayFound(new Set([...local, ...found.map((f) => (typeof f === 'string' ? f : f.w))]));
     }, () => {});
+    // Once the board has locked, its final results can be reopened from here.
+    if (Date.now() >= boardLocksAt(yesterdayKey)) {
+      api.daily(id, me).then((b) => {
+        if (live && b.you) setPodium({ id, board: b });
+      }, () => {});
+    }
     return () => {
       live = false;
     };
@@ -639,12 +656,13 @@ export default function App() {
       <Modal open={dialog === 'podium' && !!podium} title="Yesterday's results" onClose={closeDialog}>
         {podium && (
           <Podium
-            board={podium}
+            board={podium.board}
             onClose={closeDialog}
             onShare={async () => {
-              const place = ['1st', '2nd', '3rd'][podium.you!.position - 1];
+              const b = podium.board;
+              const place = ['1st', '2nd', '3rd'][b.you!.position - 1];
               const msg = await share(
-                `🏆 I finished ${place} of ${podium.total} in yesterday's DPIYF Lettertown with ${podium.you!.score} points! ` +
+                `🏆 I finished ${place} of ${b.total} in yesterday's DPIYF Lettertown with ${b.you!.score} points! ` +
                   `Can you beat me today? https://onthedcl.github.io/word-game-/`,
               );
               if (msg) setNotice(msg);
@@ -705,6 +723,17 @@ export default function App() {
               <b className="text-ink">{yesterday.puzzle.centerLetter.toUpperCase()}</b> · {yesterday.puzzle.answers.length} words ·{' '}
               {yesterday.puzzle.maxScore} points
             </p>
+            {podium?.id === dailyBoardId(yesterdayKey) && podium.board.you && (
+              <button
+                type="button"
+                onClick={() => setDialog('podium')}
+                className="mb-3 flex w-full items-center gap-2 rounded-xl bg-key/25 px-3 py-2 text-left font-semibold"
+              >
+                <span className="text-xl">{['🥇', '🥈', '🥉'][podium.board.you.position - 1] ?? '🎖️'}</span>
+                <span className="flex-1">You finished #{podium.board.you.position} of {podium.board.total}</span>
+                <span className="text-sm text-muted underline">See results</span>
+              </button>
+            )}
             <AnswerList
               answers={yesterday.puzzle.answers}
               bonus={yesterday.puzzle.bonus}
