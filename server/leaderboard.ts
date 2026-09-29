@@ -6,6 +6,7 @@ import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../s
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
+import { leaveAllLeagues, notePasses } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
@@ -51,7 +52,7 @@ export class ApiError extends Error {
 
 const PLAYER_ID = /^[A-Za-z0-9-]{16,64}$/;
 
-function playerIdOf(value: unknown): string {
+export function playerIdOf(value: unknown): string {
   if (typeof value !== 'string' || !PLAYER_ID.test(value)) throw new ApiError(400, 'Bad player id');
   return value;
 }
@@ -136,8 +137,9 @@ function checkDailyDate(value: unknown, now: number): string {
   return boardId;
 }
 
-async function readBoard(kv: KV, prefix: string, playerId: string | null) {
-  const { blobs } = await kv.list({ prefix });
+/** A leaderboard from the entries under `prefix`, optionally only for some players (a league). */
+export async function readBoard(kv: KV, prefix: string, playerId: string | null, only?: ReadonlySet<string>) {
+  const blobs = (await kv.list({ prefix })).blobs.filter((b) => !only || only.has(b.key.slice(prefix.length)));
   const rows = (
     await Promise.all(blobs.map(async ({ key }) => ({ key, entry: (await kv.get(key, { type: 'json' })) as Entry | null })))
   ).filter((r): r is { key: string; entry: Entry } => !!r.entry);
@@ -213,6 +215,7 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
     await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });
+  await notePasses(deps, playerId, name, date, prev?.score ?? 0, Math.max(entry.score, prev?.score ?? 0));
   const streak = entry.words > 0 ? await bumpStreak(deps, playerId, boardIdOf(date).dateKey) : await streakOf(deps, playerId);
   return { ok: true, score: entry.score, streak, ...(await readBoard(deps.kv, `daily/${date}/`, playerId)) };
 }
@@ -447,6 +450,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   ].map((b) => b.key);
   keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`);
   for (const key of keys) await deps.kv.setJSON(key, null);
+  await leaveAllLeagues(deps, playerId);
   return { ok: true };
 }
 

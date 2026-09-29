@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
-import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type Streak } from './api';
+import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type LeagueSummary, type Streak } from './api';
 import { isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { Podium } from './components/Podium';
@@ -19,7 +19,7 @@ import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, puzzleNumber, shiftDateKey 
 import { dailyBoardId, parseBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
-import { shareText } from './engine/share';
+import { GAME_URL, shareText } from './engine/share';
 import { useUpdateCheck } from './updates';
 import { haptics } from './haptics';
 import { Wordmark } from './components/Wordmark';
@@ -30,7 +30,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium';
+type Dialog = null | 'welcome' | 'rules' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -61,6 +61,21 @@ type Blitz =
 
 /** Marks a day's results recap as seen ("v2": the first version marked it seen even when it wasn't shown). */
 const recapKey = (boardId: string) => `hexicon:recap-v2:${boardId}`;
+
+const LEAGUE_SEEN_KEY = 'hexicon:league-seen';
+const PENDING_LEAGUE_KEY = 'hexicon:pending-league';
+
+/** An invite link (?league=abcd2345) is remembered until the player has a name and can join. */
+function takeLeagueInvite(): string | null {
+  const url = new URL(location.href);
+  const id = url.searchParams.get('league');
+  if (id && /^[a-z0-9]{8}$/.test(id)) {
+    writeStored(PENDING_LEAGUE_KEY, id);
+    url.searchParams.delete('league');
+    history.replaceState(history.state, '', url);
+  }
+  return readStored<string | null>(PENDING_LEAGUE_KEY, null);
+}
 
 /** Anyone with saved progress from an earlier day has played before. */
 function hasPlayedBefore(): boolean {
@@ -277,6 +292,67 @@ export default function App() {
       if (podium.board.you && podium.board.you.position <= 3) haptics.pangram();
     }
   }, [recapDue, podium, dialog]);
+
+  // ---- leagues ---------------------------------------------------------------
+  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
+  const [leagueSeen, setLeagueSeen] = useStoredState<Record<string, number>>(LEAGUE_SEEN_KEY, {});
+  const [leaderboardLeague, setLeaderboardLeague] = useState<string | null>(null);
+  const loadLeagues = useCallback(() => {
+    if (online && name) api.myLeagues(me).then((r) => setLeagues(r.leagues), () => {});
+  }, [online, name, me]);
+  useEffect(() => {
+    loadLeagues();
+    const t = setInterval(() => document.visibilityState === 'visible' && loadLeagues(), 60000);
+    return () => clearInterval(t);
+  }, [loadLeagues]);
+  const unreadLeagues = useMemo(
+    () => new Set(leagues.filter((l) => l.latestNews > (leagueSeen[l.id] ?? 0)).map((l) => l.id)),
+    [leagues, leagueSeen],
+  );
+  const markLeagueSeen = useCallback((id: string, at: number) => {
+    setLeagueSeen((s) => (s[id] && s[id] >= at ? s : { ...s, [id]: at }));
+  }, [setLeagueSeen]);
+  const inviteToLeague = useCallback(async (l: { id: string; name: string }) => {
+    const msg = await share(
+      `Join my Lettertown league “${l.name}”! A new word puzzle every day, so let's see who's best. ${GAME_URL}?league=${l.id}`,
+    );
+    if (msg) setNotice(msg === 'Copied to clipboard' ? 'Invite link copied' : msg);
+  }, []);
+  // Arriving from an invite link: once there's a name, ask to join.
+  const [pendingLeague, setPendingLeague] = useState<string | null>(takeLeagueInvite);
+  const [invite, setInvite] = useState<{ id: string; name: string; members: number } | null>(null);
+  useEffect(() => {
+    if (!online || !name || !pendingLeague || invite) return;
+    api.leagueInfo(pendingLeague).then(
+      (info) => {
+        setInvite({ id: pendingLeague, ...info });
+        setDialog((d) => (d === null || d === 'rules' ? 'join-league' : d));
+      },
+      () => {
+        writeStored(PENDING_LEAGUE_KEY, null);
+        setPendingLeague(null);
+      },
+    );
+  }, [online, name, pendingLeague, invite]);
+  useEffect(() => {
+    if (invite && dialog === null) setDialog('join-league');
+  }, [invite, dialog]);
+  const answerInvite = async (join: boolean) => {
+    const current = invite;
+    writeStored(PENDING_LEAGUE_KEY, null);
+    setPendingLeague(null);
+    setInvite(null);
+    if (!join || !current) return setDialog(null);
+    try {
+      await api.leagueJoin(me, current.id);
+      loadLeagues();
+      setLeaderboardLeague(current.id);
+      setDialog('leaderboard');
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Could not join the league');
+      setDialog(null);
+    }
+  };
 
   // ---- streak ----------------------------------------------------------------
   // Days in a row with a word found. The server keeps it (so it follows the player across
@@ -543,10 +619,16 @@ export default function App() {
           {online && (
             <button
               type="button"
-              onClick={() => setDialog('leaderboard')}
-              className="flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3 py-1 text-sm font-extrabold text-[#3b2a00] shadow ring-[1.5px] ring-[#1f5fd6] active:scale-95"
+              onClick={() => {
+                setLeaderboardLeague(unreadLeagues.values().next().value ?? null);
+                setDialog('leaderboard');
+              }}
+              className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3 py-1 text-sm font-extrabold text-[#3b2a00] shadow ring-[1.5px] ring-[#1f5fd6] active:scale-95"
             >
               <TrophyIcon /> Leaderboard
+              {unreadLeagues.size > 0 && (
+                <span className="absolute -top-1 -right-1 size-3 rounded-full bg-bad ring-2 ring-bg" aria-label="League news" />
+              )}
             </button>
           )}
         </div>
@@ -704,6 +786,12 @@ export default function App() {
           onClaim={claimName}
           onDelete={deleteMyData}
           initialTab={mode}
+          leagues={leagues}
+          initialLeague={leaderboardLeague}
+          onLeaguesChanged={loadLeagues}
+          onInvite={inviteToLeague}
+          onLeagueSeen={markLeagueSeen}
+          unread={unreadLeagues}
         />
       </Modal>
 
@@ -735,6 +823,26 @@ export default function App() {
           </Modal>
         );
       })()}
+
+      <Modal open={dialog === 'join-league' && !!invite} title="You're invited!" onClose={() => answerInvite(false)}>
+        {invite && (
+          <div className="text-center">
+            <div className="text-5xl">🏘️</div>
+            <p className="mt-2 text-xl font-black">Join “{invite.name}”?</p>
+            <p className="mt-1 text-muted">
+              {invite.members} {invite.members === 1 ? 'player' : 'players'} · your own leaderboard for every daily board
+            </p>
+            <div className="mt-5 flex justify-center gap-2">
+              <button type="button" onClick={() => answerInvite(true)} className="rounded-full bg-ink px-5 py-2.5 font-bold text-bg active:scale-95">
+                Join the league
+              </button>
+              <button type="button" onClick={() => answerInvite(false)} className="rounded-full border border-line px-5 py-2.5 font-semibold">
+                Not now
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={dialog === 'name-taken'} title="That name is taken" onClose={closeDialog}>
         <p className="mb-3 text-sm">

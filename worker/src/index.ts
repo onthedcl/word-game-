@@ -12,6 +12,7 @@ import {
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
+import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues } from '../../server/leagues';
 
 interface Env {
   BOARD: DurableObjectNamespace<Leaderboard>;
@@ -173,6 +174,18 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await me(deps, url.searchParams.get('player')));
         case 'GET /api/progress':
           return json(await progressOf(deps, url.searchParams.get('date'), url.searchParams.get('player')));
+        case 'POST /api/league/create':
+          return json(await createLeague(deps, body));
+        case 'POST /api/league/join':
+          return json(await joinLeague(deps, body));
+        case 'POST /api/league/leave':
+          return json(await leaveLeague(deps, body));
+        case 'GET /api/league/mine':
+          return json(await myLeagues(deps, player));
+        case 'GET /api/league/info':
+          return json(await leagueInfo(deps, url.searchParams.get('id')));
+        case 'GET /api/league':
+          return json(await leagueBoard(deps, url.searchParams.get('id'), url.searchParams.get('date'), player));
         case 'POST /api/event':
           return json(await recordEvent(deps, body));
         case 'POST /api/admin/funnel':

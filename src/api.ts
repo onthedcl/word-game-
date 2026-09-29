@@ -15,6 +15,23 @@ export interface BoardRow {
 /** A found word, with the route it was traced along when known (the server scores that route). */
 export type Submitted = string | { w: string; p: number[] };
 
+export interface LeagueSummary {
+  id: string;
+  name: string;
+  members: number;
+  /** When the newest news item not caused by this player was posted (ms). */
+  latestNews: number;
+}
+
+export interface LeagueView {
+  id: string;
+  name: string;
+  members: number;
+  owner: boolean;
+  board: Board;
+  news: { at: number; text: string }[];
+}
+
 /** Consecutive days with a word found, ending on `last` (a date key). */
 export interface Streak {
   count: number;
@@ -98,6 +115,13 @@ export const api = {
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
   /** Erase this player's name, scores and history from the server. */
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
+  leagueCreate: (playerId: string, name: string) => call<{ id: string; name: string }>('POST', '/api/league/create', { playerId, name }),
+  leagueJoin: (playerId: string, id: string) => call<{ id: string; name: string; members: number }>('POST', '/api/league/join', { playerId, id }),
+  leagueLeave: (playerId: string, id: string) => call<{ ok: true }>('POST', '/api/league/leave', { playerId, id }),
+  leagueInfo: (id: string) => call<{ name: string; members: number }>('GET', `/api/league/info?id=${encodeURIComponent(id)}`),
+  myLeagues: (player: string) => call<{ leagues: LeagueSummary[] }>('GET', `/api/league/mine?player=${encodeURIComponent(player)}`),
+  league: (id: string, date: string, player: string) =>
+    call<LeagueView>('GET', `/api/league?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   /** First word of the day (counts players without a name in the owner's onboarding numbers). */
   event: (playerId: string, kind: 'first-word', date: string) => call<{ ok: true }>('POST', '/api/event', { playerId, kind, date }),
   report: (playerId: string, name: string) => call<{ ok: true }>('POST', '/api/report', { playerId, name }),

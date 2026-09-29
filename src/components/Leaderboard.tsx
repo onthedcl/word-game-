@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, NameTaken, type Board } from '../api';
+import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
 import { readStored, writeStored } from '../storage';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
@@ -17,6 +17,16 @@ interface Props {
   /** Erase this player's data (server and device). */
   onDelete(): Promise<void>;
   initialTab: Tab;
+  leagues: readonly LeagueSummary[];
+  /** A league to open straight away (e.g. just joined). */
+  initialLeague?: string | null;
+  onLeaguesChanged(): void;
+  /** Share a league's invite link. */
+  onInvite(league: { id: string; name: string }): void;
+  /** The player has seen a league's news up to this time. */
+  onLeagueSeen(id: string, at: number): void;
+  /** Which leagues have news the player hasn't seen. */
+  unread: ReadonlySet<string>;
 }
 
 interface NameFormProps {
@@ -85,8 +95,23 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   );
 }
 
-export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete, initialTab }: Props) {
+/** "just now", "5m", "3h", "2d" */
+function ago(at: number): string {
+  const m = Math.round((Date.now() - at) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h` : `${Math.round(h / 24)}d`;
+}
+
+export function Leaderboard({
+  dateKey, playerId, name, onName, onClaim, onDelete, initialTab,
+  leagues, initialLeague, onLeaguesChanged, onInvite, onLeagueSeen, unread,
+}: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  // Everyone, one of the player's leagues, or the "new league" form.
+  const [scope, setScope] = useState<string>(initialLeague ?? 'everyone');
+  const [league, setLeague] = useState<LeagueView | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(!name);
@@ -97,14 +122,25 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     setBoard(null);
+    setLeague(null);
     setError('');
     const load = async () => {
       if (document.visibilityState === 'visible') {
+        if (scope === 'new') return;
         try {
-          const b = await (tab === 'daily' ? api.daily(dateKey, playerId) : api.blitz(playerId));
-          if (!live) return;
-          setBoard(b);
-          setError('');
+          if (scope !== 'everyone') {
+            const l = await api.league(scope, dateKey, playerId);
+            if (!live) return;
+            setLeague(l);
+            setBoard(l.board);
+            setError('');
+            onLeagueSeen(scope, Date.now());
+          } else {
+            const b = await (tab === 'daily' ? api.daily(dateKey, playerId) : api.blitz(playerId));
+            if (!live) return;
+            setBoard(b);
+            setError('');
+          }
         } catch (e) {
           if (live) setError((e as Error).message);
         }
@@ -116,7 +152,7 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete
       live = false;
       clearTimeout(timer);
     };
-  }, [tab, dateKey, playerId, reload]);
+  }, [tab, dateKey, playerId, reload, scope]);
 
   // Players can hide names they don't want to see, and report offensive ones.
   const [hidden, setHidden] = useState<string[]>(() => readStored<string[]>(HIDDEN_KEY, []));
@@ -193,18 +229,73 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete
         </div>
       )}
 
-      <div className="mb-3 flex rounded-full border border-line p-0.5" role="tablist">
-        {tabBtn('daily', "Today's puzzle")}
-        {tabBtn('blitz', 'Blitz best')}
-      </div>
+      {name && (
+        <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Leaderboards">
+          {[{ id: 'everyone', name: 'Everyone' }, ...leagues].map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              role="tab"
+              aria-selected={scope === l.id}
+              onClick={() => setScope(l.id)}
+              className={`relative shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm font-semibold ${
+                scope === l.id ? 'border-ink bg-ink text-bg' : 'border-line'
+              }`}
+            >
+              {l.name}
+              {unread.has(l.id) && scope !== l.id && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-bad" aria-label="new" />}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setScope('new')}
+            className={`shrink-0 whitespace-nowrap rounded-full border border-dashed px-3 py-1 text-sm font-semibold ${
+              scope === 'new' ? 'border-ink' : 'border-muted text-muted'
+            }`}
+          >
+            + League
+          </button>
+        </div>
+      )}
 
-      {board && (
+      {scope === 'new' ? (
+        <NewLeague
+          playerId={playerId}
+          onCreated={(l) => {
+            onLeaguesChanged();
+            setScope(l.id);
+            onInvite(l);
+          }}
+        />
+      ) : scope !== 'everyone' ? (
+        league && (
+          <div className="mb-2 flex items-center gap-2">
+            <p className="min-w-0 flex-1 text-sm text-muted">
+              <b className="text-ink">{league.name}</b> · {league.members} {league.members === 1 ? 'member' : 'members'} · today
+            </p>
+            <button
+              type="button"
+              onClick={() => onInvite({ id: league.id, name: league.name })}
+              className="shrink-0 rounded-full bg-ink px-3 py-1 text-sm font-bold text-bg"
+            >
+              Invite friends
+            </button>
+          </div>
+        )
+      ) : (
+        <div className="mb-3 flex rounded-full border border-line p-0.5" role="tablist">
+          {tabBtn('daily', "Today's puzzle")}
+          {tabBtn('blitz', 'Blitz best')}
+        </div>
+      )}
+
+      {scope !== 'new' && board && (
         <p className="-mt-1 mb-2 flex items-center gap-1.5 text-xs text-muted">
           <span className={`inline-block size-2 rounded-full ${error ? 'bg-bad' : 'animate-pulse bg-good'}`} />
           {error ? 'Reconnecting…' : 'Live'}
         </p>
       )}
-      {error && !board ? (
+      {scope === 'new' ? null : error && !board ? (
         <p className="py-6 text-center text-sm text-muted">
           Couldn't reach the leaderboard. {error}{' '}
           <button type="button" className="underline" onClick={() => setReload((r) => r + 1)}>Retry</button>
@@ -212,7 +303,9 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete
       ) : !board ? (
         <p className="py-6 text-center text-sm text-muted">Loading…</p>
       ) : !board.total ? (
-        <p className="py-6 text-center text-sm text-muted">No scores yet. Be the first!</p>
+        <p className="py-6 text-center text-sm text-muted">
+          {scope === 'everyone' ? 'No scores yet. Be the first!' : 'No one in this league has played today yet. Be the first!'}
+        </p>
       ) : (
         <>
           <ol className="max-h-[50vh] overflow-y-auto">
@@ -256,6 +349,77 @@ export function Leaderboard({ dateKey, playerId, name, onName, onClaim, onDelete
           </p>
         </>
       )}
+
+      {scope !== 'everyone' && scope !== 'new' && league && (
+        <div className="mt-4">
+          <h3 className="mb-1 text-sm font-bold">League news</h3>
+          {league.news.length ? (
+            <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+              {league.news.slice(0, 12).map((n) => (
+                <li key={`${n.at}-${n.text}`} className="flex gap-2">
+                  <span className="min-w-0 flex-1">{n.text}</span>
+                  <span className="shrink-0 text-xs text-muted">{ago(n.at)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Nothing yet.</p>
+          )}
+          <button
+            type="button"
+            className="mt-3 text-xs text-muted underline"
+            onClick={async () => {
+              if (!confirm(`Leave ${league.name}?`)) return;
+              await api.leagueLeave(playerId, league.id).catch(() => {});
+              onLeaguesChanged();
+              setScope('everyone');
+            }}
+          >
+            Leave this league
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Name a new league, then invite friends to it. */
+function NewLeague({ playerId, onCreated }: { playerId: string; onCreated(l: { id: string; name: string }): void }) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="mb-2 rounded-xl bg-bg p-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError('');
+        try {
+          onCreated(await api.leagueCreate(playerId, value.trim()));
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not create the league');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <label className="text-sm font-semibold" htmlFor="league-name">Start a league</label>
+      <p className="mb-2 text-xs text-muted">A leaderboard just for your friends, family or office. You'll get a link to invite them.</p>
+      <div className="flex gap-2">
+        <input
+          id="league-name"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          maxLength={24}
+          placeholder="e.g. The Office"
+          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-base"
+        />
+        <button type="submit" disabled={busy || value.trim().length < 2} className="rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
+          {busy ? '…' : 'Create'}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+    </form>
   );
 }
