@@ -3,7 +3,10 @@ import { dict, seeds } from '../src/engine/node-dict';
 import { generateDaily } from '../src/engine/generator';
 import { answerTable } from './tables';
 import { ApiError, deletePlayer, saveName, submitDaily, type Deps, type KV } from './leaderboard';
-import { createLeague, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, publicLeagues, setLeaguePublic } from './leagues';
+import {
+  createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues, reportChat,
+  setLeaguePublic,
+} from './leagues';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
@@ -110,5 +113,64 @@ describe('public rooms', () => {
     await rejects(setLeaguePublic(deps, { playerId: B, id: priv.id, public: true }), 403);
     await setLeaguePublic(deps, { playerId: A, id: priv.id, public: true });
     expect((await publicLeagues(deps, C)).rooms.map((r) => r.name)).toEqual(['Word Nerds', 'Secret Club']);
+  });
+});
+
+describe('deleting a room', () => {
+  it('is for the host only, and removes it for every member', async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
+    await joinLeague(deps, { playerId: B, id });
+    await rejects(deleteLeague(deps, { playerId: B, id }), 403);
+    await deleteLeague(deps, { playerId: A, id });
+    await rejects(leagueInfo(deps, id), 404);
+    expect((await myLeagues(deps, A)).leagues).toEqual([]);
+    expect((await myLeagues(deps, B)).leagues).toEqual([]);
+  });
+});
+
+describe('room chat', () => {
+  it('is for members, masks offensive words, limits speed, and shows no player ids', async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
+    await joinLeague(deps, { playerId: B, id });
+    const { message } = await postChat(deps, { playerId: A, id, text: '  hello   everyone ' });
+    expect(message).toMatchObject({ name: 'Ann', text: 'hello everyone', mine: true });
+    await rejects(postChat(deps, { playerId: A, id, text: 'again!' }), 429);
+    clock += 3000;
+    const masked = await postChat(deps, { playerId: A, id, text: 'what the shit' });
+    expect(masked.message.text).toBe('what the ••••');
+    await rejects(postChat(deps, { playerId: C, id, text: 'let me in' }), 403);
+    await rejects(postChat(deps, { playerId: B, id, text: '   ' }), 400);
+    await rejects(postChat(deps, { playerId: B, id, text: 'x'.repeat(301) }), 400);
+    const seen = await getChat(deps, id, B);
+    expect(seen.messages.map((m) => [m.name, m.mine])).toEqual([['Ann', false], ['Ann', false]]);
+    expect(JSON.stringify(seen)).not.toContain(A);
+    // Unread for Bo, not for Ann.
+    const [ann] = (await myLeagues(deps, A)).leagues;
+    const [bo] = (await myLeagues(deps, B)).leagues;
+    expect(ann.latestChat).toBe(0);
+    expect(bo.latestChat).toBeGreaterThan(0);
+  });
+
+  it('lets people delete their own messages, the host delete any, and report to the owner', async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
+    await joinLeague(deps, { playerId: B, id });
+    await joinLeague(deps, { playerId: C, id });
+    const bo = (await postChat(deps, { playerId: B, id, text: 'hi from Bo' })).message;
+    const cy = (await postChat(deps, { playerId: C, id, text: 'rude thing' })).message;
+    await rejects(deleteChat(deps, { playerId: B, id, message: cy.id }), 403);
+    await reportChat(deps, { playerId: B, id, message: cy.id });
+    expect(sent.at(-1)).toContain('Cy wrote: “rude thing”');
+    await deleteChat(deps, { playerId: A, id, message: cy.id }); // host
+    await deleteChat(deps, { playerId: B, id, message: bo.id }); // own
+    expect((await getChat(deps, id, A)).messages).toEqual([]);
+  });
+
+  it("removes a player's messages when they delete their data", async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
+    await joinLeague(deps, { playerId: B, id });
+    await postChat(deps, { playerId: B, id, text: 'bye' });
+    await postChat(deps, { playerId: A, id, text: 'hi' });
+    await deletePlayer(deps, { playerId: B });
+    expect((await getChat(deps, id, A)).messages.map((m) => m.text)).toEqual(['hi']);
   });
 });

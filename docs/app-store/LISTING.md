@@ -62,11 +62,12 @@ Data collected, none of it used for tracking:
 | User ID (leaderboard name, random player ID) | App Functionality | Yes |
 | Gameplay Content (words found, scores) | App Functionality | Yes |
 | Coarse Location (city/region from the connection) | Analytics | No |
+| Other User Content (room chat messages) | App Functionality | Yes |
 
 ## Review notes (for Apple's reviewer)
 Lettertown is a daily word game. No login is required: the player can optionally choose a
 leaderboard name. Tap Leaderboard → "delete my data" to delete all server data for a player.
-Tap any leaderboard name to report or hide it. Reported names are reviewed and renamed.
+Tap any leaderboard name or room chat message to report it or hide that player. Reports reach the owner immediately; hosts can delete messages and rooms, and offensive words in chat are masked automatically.
 
 ## Screenshots
 Ready in `docs/app-store/screenshots/`: `6.9/` (1290×2796) and `6.5/` (1242×2688).

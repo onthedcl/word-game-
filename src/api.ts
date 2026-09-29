@@ -21,6 +21,16 @@ export interface LeagueSummary {
   members: number;
   /** When the newest news item not caused by this player was posted (ms). */
   latestNews: number;
+  /** When the newest chat message from someone else was sent (ms). */
+  latestChat?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  at: number;
+  name: string;
+  text: string;
+  mine: boolean;
 }
 
 export interface LeagueView {
@@ -118,6 +128,12 @@ export const api = {
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
   leagueCreate: (playerId: string, name: string, isPublic: boolean) =>
     call<{ id: string; name: string; public: boolean }>('POST', '/api/league/create', { playerId, name, public: isPublic }),
+  deleteRoom: (playerId: string, id: string) => call<{ ok: true }>('POST', '/api/league/delete', { playerId, id }),
+  chat: (id: string, player: string) =>
+    call<{ messages: ChatMessage[]; host: boolean }>('GET', `/api/league/chat?id=${encodeURIComponent(id)}&player=${encodeURIComponent(player)}`),
+  sendChat: (playerId: string, id: string, text: string) => call<{ message: ChatMessage }>('POST', '/api/league/chat', { playerId, id, text }),
+  deleteChat: (playerId: string, id: string, message: string) => call<{ ok: true }>('POST', '/api/league/chat/delete', { playerId, id, message }),
+  reportChat: (playerId: string, id: string, message: string) => call<{ ok: true }>('POST', '/api/league/chat/report', { playerId, id, message }),
   publicRooms: (player: string) =>
     call<{ rooms: { id: string; name: string; members: number; joined: boolean }[] }>('GET', `/api/league/public?player=${encodeURIComponent(player)}`),
   setRoomPublic: (playerId: string, id: string, isPublic: boolean) =>

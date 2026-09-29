@@ -330,10 +330,18 @@ export default function App() {
     const t = setInterval(() => document.visibilityState === 'visible' && loadLeagues(), 60000);
     return () => clearInterval(t);
   }, [loadLeagues]);
-  const unreadLeagues = useMemo(
-    () => new Set(leagues.filter((l) => l.latestNews > (leagueSeen[l.id] ?? 0)).map((l) => l.id)),
-    [leagues, leagueSeen],
+  const [chatSeen, setChatSeen] = useStoredState<Record<string, number>>('hexicon:room-chat-seen', {});
+  const chatUnread = useMemo(
+    () => new Set(leagues.filter((l) => (l.latestChat ?? 0) > (chatSeen[l.id] ?? 0)).map((l) => l.id)),
+    [leagues, chatSeen],
   );
+  const unreadLeagues = useMemo(
+    () => new Set([...leagues.filter((l) => l.latestNews > (leagueSeen[l.id] ?? 0)).map((l) => l.id), ...chatUnread]),
+    [leagues, leagueSeen, chatUnread],
+  );
+  const markChatSeen = useCallback((id: string, at: number) => {
+    setChatSeen((s) => (s[id] && s[id] >= at ? s : { ...s, [id]: at }));
+  }, [setChatSeen]);
   const markLeagueSeen = useCallback((id: string, at: number) => {
     setLeagueSeen((s) => (s[id] && s[id] >= at ? s : { ...s, [id]: at }));
   }, [setLeagueSeen]);
@@ -859,6 +867,8 @@ export default function App() {
           onNotice={setNotice}
           onLeagueSeen={markLeagueSeen}
           unread={unreadLeagues}
+          chatUnread={chatUnread}
+          onChatSeen={markChatSeen}
         />
       </Modal>
 

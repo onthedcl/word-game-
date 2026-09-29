@@ -1,7 +1,7 @@
 // Private leagues: a named group of players with its own leaderboard for each daily
 // board, joined by invite link, plus a short news feed ("Sam passed you").
 import { ApiError, playerIdOf, readBoard, type Deps, type Entry } from './leaderboard';
-import { cleanName } from './names';
+import { cleanName, maskText } from './names';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 import { boardLocksAt, isDateKey, shiftDateKey } from '../src/engine/dates';
 
@@ -29,6 +29,7 @@ const LEAGUE_ID = /^[a-z0-9]{8}$/;
 const leagueKey = (id: string) => `leagues/${id}`;
 const mineKey = (playerId: string) => `player-leagues/${playerId}`;
 const newsKey = (id: string) => `league-news/${id}`;
+const chatKey = (id: string) => `league-chat/${id}`;
 
 function leagueIdOf(value: unknown): string {
   if (typeof value !== 'string' || !LEAGUE_ID.test(value)) throw new ApiError(400, 'Bad league');
@@ -140,27 +141,36 @@ async function removeMember(deps: Deps, id: string, playerId: string) {
   if (league?.members.includes(playerId)) {
     const members = league.members.filter((m) => m !== playerId);
     await deps.kv.setJSON(leagueKey(id), members.length ? { ...league, members } : null);
-    if (!members.length) await deps.kv.setJSON(newsKey(id), null);
+    if (!members.length) {
+      await deps.kv.setJSON(newsKey(id), null);
+      await deps.kv.setJSON(chatKey(id), null);
+    }
   }
   await deps.kv.setJSON(mineKey(playerId), (await myLeagueIds(deps, playerId)).filter((l) => l !== id));
 }
 
 /** When a player deletes their data: leave every league. */
 export async function leaveAllLeagues(deps: Deps, playerId: string) {
-  for (const id of await myLeagueIds(deps, playerId)) await removeMember(deps, id, playerId);
+  for (const id of await myLeagueIds(deps, playerId)) {
+    const chat = ((await deps.kv.get(chatKey(id), { type: 'json' })) as ChatMessage[] | null) ?? [];
+    if (chat.some((m) => m.from === playerId)) await deps.kv.setJSON(chatKey(id), chat.filter((m) => m.from !== playerId));
+    await removeMember(deps, id, playerId);
+  }
   await deps.kv.setJSON(mineKey(playerId), null);
 }
 
 export async function myLeagues(deps: Deps, rawPlayer: unknown) {
   const playerId = playerIdOf(rawPlayer);
-  const out: { id: string; name: string; members: number; latestNews: number }[] = [];
+  const out: { id: string; name: string; members: number; latestNews: number; latestChat: number }[] = [];
   for (const id of await myLeagueIds(deps, playerId)) {
     const league = (await deps.kv.get(leagueKey(id), { type: 'json' })) as League | null;
     if (!league) continue;
     const news = ((await deps.kv.get(newsKey(id), { type: 'json' })) as NewsItem[] | null) ?? [];
     // The player's own doings (starting, joining, passing someone) aren't news to them.
     const latest = news.find((n) => n.about?.[0] !== playerId)?.at ?? 0;
-    out.push({ id, name: league.name, members: league.members.length, latestNews: latest });
+    const chat = ((await deps.kv.get(chatKey(id), { type: 'json' })) as ChatMessage[] | null) ?? [];
+    const latestChat = [...chat].reverse().find((m) => m.from !== playerId)?.at ?? 0;
+    out.push({ id, name: league.name, members: league.members.length, latestNews: latest, latestChat });
   }
   return { leagues: out };
 }
@@ -209,4 +219,91 @@ export async function notePasses(deps: Deps, playerId: string, name: string, boa
       }
     }
   }
+}
+
+// ---- deleting a room -----------------------------------------------------------
+
+/** The host deletes the room for everyone: its leaderboard view, news and chat. Scores are kept. */
+export async function deleteLeague(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const id = leagueIdOf(body.id);
+  const league = await load(deps, id);
+  if (league.owner !== playerId) throw new ApiError(403, 'Only the host can delete this room');
+  for (const member of league.members) {
+    await deps.kv.setJSON(mineKey(member), (await myLeagueIds(deps, member)).filter((l) => l !== id));
+  }
+  for (const key of [leagueKey(id), newsKey(id), chatKey(id)]) await deps.kv.setJSON(key, null);
+  return { ok: true };
+}
+
+// ---- room chat -----------------------------------------------------------------
+
+export interface ChatMessage {
+  id: string;
+  at: number;
+  from: string;
+  name: string;
+  text: string;
+}
+
+const MAX_CHAT = 150;
+const MAX_CHAT_LENGTH = 300;
+const CHAT_GAP_MS = 2000;
+
+/** Chat messages are only shown with the sender's name, never their player id. */
+const publicMessage = (m: ChatMessage, playerId: string) => ({ id: m.id, at: m.at, name: m.name, text: m.text, mine: m.from === playerId });
+
+async function member(deps: Deps, rawId: unknown, rawPlayer: unknown) {
+  const playerId = playerIdOf(rawPlayer);
+  const id = leagueIdOf(rawId);
+  const league = await load(deps, id);
+  if (!league.members.includes(playerId)) throw new ApiError(403, "You're not in this room");
+  return { playerId, id, league };
+}
+
+const chatOf = async (deps: Deps, id: string) => ((await deps.kv.get(chatKey(id), { type: 'json' })) as ChatMessage[] | null) ?? [];
+
+export async function getChat(deps: Deps, rawId: unknown, rawPlayer: unknown) {
+  const { playerId, id, league } = await member(deps, rawId, rawPlayer);
+  return { messages: (await chatOf(deps, id)).map((m) => publicMessage(m, playerId)), host: league.owner === playerId };
+}
+
+export async function postChat(deps: Deps, body: Record<string, unknown>) {
+  const { playerId, id } = await member(deps, body.id, body.playerId);
+  const name = await playerName(deps, playerId);
+  const raw = typeof body.text === 'string' ? body.text.replace(/\s+/g, ' ').trim() : '';
+  if (!raw) throw new ApiError(400, 'Say something!');
+  if (raw.length > MAX_CHAT_LENGTH) throw new ApiError(400, `Keep it under ${MAX_CHAT_LENGTH} characters`);
+  const chat = await chatOf(deps, id);
+  const last = [...chat].reverse().find((m) => m.from === playerId);
+  if (last && deps.now() - last.at < CHAT_GAP_MS) throw new ApiError(429, 'Slow down a little');
+  const message: ChatMessage = { id: newId(deps), at: deps.now(), from: playerId, name, text: maskText(raw) };
+  await deps.kv.setJSON(chatKey(id), [...chat, message].slice(-MAX_CHAT));
+  return { message: publicMessage(message, playerId) };
+}
+
+/** Anyone can delete their own message; the host can delete any. */
+export async function deleteChat(deps: Deps, body: Record<string, unknown>) {
+  const { playerId, id, league } = await member(deps, body.id, body.playerId);
+  const chat = await chatOf(deps, id);
+  const target = chat.find((m) => m.id === body.message);
+  if (!target) return { ok: true };
+  if (target.from !== playerId && league.owner !== playerId) throw new ApiError(403, 'You can only delete your own messages');
+  await deps.kv.setJSON(chatKey(id), chat.filter((m) => m !== target));
+  return { ok: true };
+}
+
+/** A member reports a message: the owner is told right away, with the text. */
+export async function reportChat(deps: Deps, body: Record<string, unknown>) {
+  const { id, league } = await member(deps, body.id, body.playerId);
+  const target = (await chatOf(deps, id)).find((m) => m.id === body.message);
+  if (target) {
+    deps.notify?.({
+      title: 'Chat message reported',
+      message: `In “${league.name}”, ${target.name} wrote: “${target.text}”. Delete it from the room chat as host, or ask me to remove it.`,
+      tags: ['warning'],
+      urgent: true,
+    });
+  }
+  return { ok: true };
 }

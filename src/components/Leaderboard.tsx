@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
 import { readStored, writeStored } from '../storage';
+import { RoomChat } from './RoomChat';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
@@ -29,8 +30,12 @@ interface Props {
   onNotice(text: string): void;
   /** The player has seen a league's news up to this time. */
   onLeagueSeen(id: string, at: number): void;
-  /** Which leagues have news the player hasn't seen. */
+  /** Which leagues have news or chat the player hasn't seen. */
   unread: ReadonlySet<string>;
+  /** Which rooms have chat messages the player hasn't seen. */
+  chatUnread: ReadonlySet<string>;
+  /** The player has read a room's chat up to this time. */
+  onChatSeen(id: string, at: number): void;
 }
 
 interface NameFormProps {
@@ -110,12 +115,16 @@ function ago(at: number): string {
 
 export function Leaderboard({
   dateKey, playerId, name, onName, onClaim, onDelete, initialTab,
-  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread,
+  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread, chatUnread, onChatSeen,
 }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
   // Everyone, one of the player's leagues, or the "new league" form.
   const [scope, setScope] = useState<string>(initialLeague ?? 'everyone');
+  // Inside a room: its leaderboard or its chat.
+  const [roomTab, setRoomTab] = useState<'board' | 'chat'>('board');
+  const [confirmRoomDelete, setConfirmRoomDelete] = useState(false);
+  const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat';
   const [league, setLeague] = useState<LeagueView | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -174,6 +183,9 @@ export function Leaderboard({
     setReported((r) => [...r, n]);
   };
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const chatSeen = useCallback((at: number) => {
+    if (scope !== 'everyone' && scope !== 'new') onChatSeen(scope, at);
+  }, [scope, onChatSeen]);
   const [deleting, setDeleting] = useState(false);
 
   const tabBtn = (t: Tab, label: string) => (
@@ -242,7 +254,12 @@ export function Leaderboard({
               type="button"
               role="tab"
               aria-selected={scope === l.id}
-              onClick={() => setScope(l.id)}
+              onClick={() => {
+                setScope(l.id);
+                setRoomTab('board');
+                setInviteOpen(false);
+                setConfirmRoomDelete(false);
+              }}
               className={`relative shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm font-semibold ${
                 scope === l.id ? 'border-ink bg-ink text-bg' : 'border-line'
               }`}
@@ -340,6 +357,23 @@ export function Leaderboard({
                 )}
               </div>
             )}
+            <div className="mt-3 flex rounded-full border border-line p-0.5" role="tablist" aria-label="Room">
+              {(['board', 'chat'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={roomTab === t}
+                  onClick={() => setRoomTab(t)}
+                  className={`relative flex-1 rounded-full px-3 py-1 text-sm font-semibold ${roomTab === t ? 'bg-ink text-bg' : 'text-muted'}`}
+                >
+                  {t === 'board' ? '🏆 Leaderboard' : '💬 Chat'}
+                  {t === 'chat' && roomTab !== 'chat' && chatUnread.has(league.id) && (
+                    <span className="absolute top-1 right-3 size-2.5 rounded-full bg-bad" aria-label="new messages" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )
       ) : (
@@ -349,13 +383,23 @@ export function Leaderboard({
         </div>
       )}
 
-      {scope !== 'new' && board && (
+      {inChat && league && (
+        <RoomChat
+          roomId={league.id}
+          playerId={playerId}
+          hidden={hidden}
+          onHide={(n) => hide(n)}
+          onSeen={chatSeen}
+        />
+      )}
+
+      {!inChat && scope !== 'new' && board && (
         <p className="-mt-1 mb-2 flex items-center gap-1.5 text-xs text-muted">
           <span className={`inline-block size-2 rounded-full ${error ? 'bg-bad' : 'animate-pulse bg-good'}`} />
           {error ? 'Reconnecting…' : 'Live'}
         </p>
       )}
-      {scope === 'new' ? null : error && !board ? (
+      {scope === 'new' || inChat ? null : error && !board ? (
         <p className="py-6 text-center text-sm text-muted">
           Couldn't reach the leaderboard. {error}{' '}
           <button type="button" className="underline" onClick={() => setReload((r) => r + 1)}>Retry</button>
@@ -412,6 +456,8 @@ export function Leaderboard({
 
       {scope !== 'everyone' && scope !== 'new' && league && (
         <div className="mt-4">
+          {!inChat && (
+          <>
           <h3 className="mb-1 text-sm font-bold">Room news</h3>
           {league.news.length ? (
             <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
@@ -438,6 +484,46 @@ export function Leaderboard({
           >
             Leave this room
           </button>
+          </>
+          )}
+          {league.owner && (
+            <div className="mt-2">
+              {!confirmRoomDelete ? (
+                <button type="button" className="text-xs text-bad underline" onClick={() => setConfirmRoomDelete(true)}>
+                  Delete this room
+                </button>
+              ) : (
+                <div className="rounded-xl bg-bad/10 p-3 text-sm">
+                  <p className="mb-2">
+                    Are you sure? This deletes <b>{league.name}</b> for everyone: its leaderboard, news and chat. Everyone's
+                    scores stay on the main leaderboard.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded-lg bg-bad px-3 py-1.5 font-semibold text-white"
+                      onClick={async () => {
+                        try {
+                          await api.deleteRoom(playerId, league.id);
+                          onNotice(`${league.name} was deleted`);
+                          onLeaguesChanged();
+                          setScope('everyone');
+                        } catch (err) {
+                          onNotice(err instanceof Error ? err.message : 'Could not delete the room');
+                        }
+                        setConfirmRoomDelete(false);
+                      }}
+                    >
+                      Yes, delete it
+                    </button>
+                    <button type="button" className="rounded-lg border border-line px-3 py-1.5" onClick={() => setConfirmRoomDelete(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
