@@ -168,3 +168,14 @@ describe('share text', () => {
     expect(shareText(p, { ...base, streak: 5 })).toContain('🔥 5-day streak');
   });
 });
+
+describe('compliments', () => {
+  it('praise 7+ letter words always and 5-6 letter words now and then, never short ones', async () => {
+    const { complimentFor } = await import('../compliments');
+    expect(complimentFor('rest', () => 0)).toBeNull();
+    expect(complimentFor('chest', () => 0.9)).not.toBeNull(); // first one always
+    expect(complimentFor('chest', () => 0.9)).toBeNull(); // then about 1 in 3
+    expect(complimentFor('chests', () => 0.1)).not.toBeNull();
+    expect(complimentFor('torches', () => 0.9)).not.toBeNull();
+  });
+});

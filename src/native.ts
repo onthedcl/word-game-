@@ -48,3 +48,28 @@ export async function scheduleDailyReminder() {
     ],
   });
 }
+
+const REVIEW_KEY = 'hexicon:review-asked';
+const REVIEW_EVERY_MS = 120 * 24 * 3600 * 1000;
+
+/**
+ * Ask for an App Store rating with Apple's own sheet (custom rating prompts aren't allowed).
+ * Only in the app, at most every 4 months from our side; Apple also limits it to 3 a year.
+ */
+export async function maybeAskForReview(daysPlayed: number) {
+  if (!isNativeApp || daysPlayed < 3) return;
+  let last = 0;
+  try {
+    last = Number(localStorage.getItem(REVIEW_KEY) ?? 0);
+  } catch {
+    /* no storage */
+  }
+  if (Date.now() - last < REVIEW_EVERY_MS) return;
+  try {
+    localStorage.setItem(REVIEW_KEY, String(Date.now()));
+  } catch {
+    /* no storage */
+  }
+  const { InAppReview } = await import('@capacitor-community/in-app-review');
+  await InAppReview.requestReview();
+}

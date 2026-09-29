@@ -8,6 +8,7 @@ import { answerIndex, checkWord, progress, wordScore, type Routes } from '../eng
 import { TOP_RANK } from '../engine/scoring';
 import type { Puzzle } from '../engine/generator';
 import { haptics } from '../haptics';
+import { complimentFor } from '../compliments';
 
 interface Props {
   puzzle: Puzzle;
@@ -22,6 +23,8 @@ interface Props {
   statusNote?: React.ReactNode;
   /** Called after every submitted word, right or wrong. */
   onAttempt?(ok: boolean): void;
+  /** A 5+ letter word earned a compliment (the app may ask for a rating then). */
+  onLongWord?(): void;
   /** First game: offer to show an easy word to get started. */
   starter?: boolean;
   onStarterUsed?(): void;
@@ -30,7 +33,7 @@ interface Props {
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed,
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord,
 }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
@@ -140,8 +143,13 @@ export function PuzzleView({
       haptics.success();
     } else {
       const bestNote = points < answer.score ? ` (best spot: ${answer.score})` : '';
-      say(after.rank.index > before ? `${after.rank.name}! +${points}` : `+${points}${bestNote}`, 'good');
+      const praise = after.rank.index > before ? null : complimentFor(answer.word);
+      say(
+        after.rank.index > before ? `${after.rank.name}! +${points}` : praise ? `${praise} +${points}` : `+${points}${bestNote}`,
+        'good',
+      );
       haptics.success();
+      if (praise) onLongWord?.();
     }
   }
 

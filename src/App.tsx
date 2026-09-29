@@ -3,7 +3,7 @@ import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
 import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type Streak } from './api';
-import { isNativeApp, nativeShare, scheduleDailyReminder } from './native';
+import { isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { Podium } from './components/Podium';
 import { Modal } from './components/Modal';
@@ -609,6 +609,10 @@ export default function App() {
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
               onAttempt={onDailyAttempt}
+              onLongWord={() => {
+                // In the iPhone app, a good moment to ask for a rating (Apple's own sheet), once they're a regular.
+                setTimeout(() => maybeAskForReview(streak).catch(() => {}), 1800);
+              }}
               starter={!starterDone}
               onStarterUsed={() => setStarterDone(true)}
               onFound={(w, r) => {
