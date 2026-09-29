@@ -78,7 +78,8 @@ export async function createLeague(deps: Deps, body: Record<string, unknown>) {
     title: 'New room',
     message: `${who} started the ${isPublic ? 'public' : 'private'} room “${name}”`,
     tags: ['house'],
-    event: { kind: 'league', who, league: `${name}${isPublic ? ' (public)' : ''}` },
+    // The owner wants to hear about new rooms right away, not in the hourly digest.
+    urgent: true,
   });
   return { id, name, public: isPublic };
 }
