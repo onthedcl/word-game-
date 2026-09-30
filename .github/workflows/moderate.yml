@@ -63,6 +63,7 @@ jobs:
           fi
           auth=()
           [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
-          jq -n --arg topic "$KEY" --arg title "$title" --arg message "$msg" '{topic: $topic, title: $title, message: $message, tags: ["mag"]}' |
-            curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d @- https://ntfy.sh/ > /dev/null
+          body=$(jq -n --arg topic "$KEY" --arg title "$title" --arg message "$msg" '{topic: $topic, title: $title, message: $message, tags: ["mag"]}')
+          curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null ||
+            { echo "::warning::ntfy refused the token; sent without it. Check NTFY_TOKEN."; curl -fsS -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null; }
           echo "Done: sent to your phone."

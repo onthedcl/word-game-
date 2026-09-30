@@ -25,4 +25,6 @@ jobs:
              click: "https://onthedcl.github.io/word-game-/"}' "$GITHUB_EVENT_PATH")
           auth=()
           [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
-          curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null
+          # If the ntfy token is ever rejected, still deliver without it (GitHub's runners may post anonymously).
+          curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null ||
+            { echo "::warning::ntfy refused the token; sent without it. Check NTFY_TOKEN."; curl -fsS -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null; }
