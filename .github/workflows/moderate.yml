@@ -26,6 +26,9 @@ on:
       new_name:
         description: 'New name (rename only, optional)'
         required: false
+      code:
+        description: 'Code to set, 4 digits (send code / give back only, optional; made up if empty)'
+        required: false
 
 permissions:
   contents: read
@@ -42,8 +45,11 @@ jobs:
           ACTION: ${{ inputs.action }}
           TO: ${{ inputs.new_name }}
         run: |
-          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" \
-            '{key: $key, name: $name, action: $action} + (if $to == "" or $action != "rename" then {} else {to: $to} end)')
+          # The chosen code is read from the event file (not step env) and masked, so it never shows in this public log.
+          code_in=$(jq -r '.inputs.code // ""' "$GITHUB_EVENT_PATH"); [ -n "$code_in" ] && echo "::add-mask::$code_in"
+          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" --arg code "$code_in" \
+            '{key: $key, name: $name, action: $action} + (if $to == "" or $action != "rename" then {} else {to: $to} end)
+              + (if $code == "" or ($action != "send code" and $action != "give back") then {} else {code: $code} end)')
           res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
             https://word-game-leaderboard.danlagstein.workers.dev/api/admin/moderate)
           status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")

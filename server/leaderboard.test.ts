@@ -301,6 +301,15 @@ describe('names as logins', () => {
     await rejects(lostCode(deps, { name: 'Nobody' }), 404);
   });
 
+  it('let the owner choose the code', async () => {
+    await saveName(deps, { playerId: P1, name: 'Lisa' });
+    await rejects(moderateName(deps, { name: 'Lisa', action: 'give back', code: '70' }), 400);
+    expect(await moderateName(deps, { name: 'Lisa', action: 'give back', code: '7070' })).toMatchObject({ code: '7070' });
+    expect((await claimName(deps, { name: 'lisa', code: '7070' })).playerId).not.toBe(P1);
+    expect(await moderateName(deps, { name: 'Lisa', action: 'send code', code: '1234' })).toMatchObject({ code: '1234' });
+    await rejects(claimName(deps, { name: 'Lisa', code: '7070' }), 403);
+  });
+
   it('let the owner send a code or give an account back after a takeover', async () => {
     const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
     expect(await moderateName(deps, { name: 'castle', action: 'send code' })).toMatchObject({ code: pin });

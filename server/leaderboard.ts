@@ -578,12 +578,15 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (!owner) throw new ApiError(404, 'No player has that name');
+  // The owner can pick the code (4 digits); otherwise one is made up.
+  const chosen = typeof body.code === 'string' && /^\d{4}$/.test(body.code) ? body.code : null;
+  if (body.code && !chosen) throw new ApiError(400, 'A code is 4 digits');
   if (body.action === 'send code') {
-    const pin = owner.pin ?? newPin(deps);
-    if (!owner.pin) await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
+    const pin = chosen ?? owner.pin ?? newPin(deps);
+    if (pin !== owner.pin) await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
     return { ok: true, name, code: pin };
   }
-  if (body.action === 'give back') return giveBack(deps, name, owner.playerId);
+  if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
   if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
   if (body.action === 'block' || body.action === 'unblock') {
     const blocked = await blockedPlayers(deps.kv);
@@ -653,7 +656,7 @@ export const describeFunnel = (f: Funnel) =>
  * player and anyone who took the name) is signed out of it; the rightful player
  * gets back in with the name and the new code.
  */
-async function giveBack(deps: Deps, name: string, from: string) {
+async function giveBack(deps: Deps, name: string, from: string, code: string | null) {
   const to = deps.randomId();
   const move = async (fromKey: string, toKey: string) => {
     const value = await deps.kv.get(fromKey, { type: 'json' });
@@ -668,7 +671,7 @@ async function giveBack(deps: Deps, name: string, from: string) {
   }
   for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/']) await move(prefix + from, prefix + to);
   await movePlayerInLeagues(deps, from, to);
-  const pin = newPin(deps);
+  const pin = code ?? newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: to, pin } satisfies NameOwner);
   return { ok: true, name, code: pin };
 }
