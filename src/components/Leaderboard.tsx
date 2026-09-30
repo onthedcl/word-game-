@@ -37,6 +37,8 @@ interface Props {
   chatUnread: ReadonlySet<string>;
   /** The player has read a room's chat up to this time. */
   onChatSeen(id: string, at: number): void;
+  /** This player's current streak (days in a row), shown only to them. */
+  streak: number;
 }
 
 interface NameFormProps {
@@ -51,7 +53,8 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   const [value, setValue] = useState(name);
   const [taken, setTaken] = useState<string | null>(null);
   const [code, setCode] = useState('');
-  const [lost, setLost] = useState(false);
+  const [lost, setLost] = useState<'no' | 'asking' | 'sent'>('no');
+  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -90,14 +93,34 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
           </button>
         </div>
         {error && <p className="text-sm text-bad">{error}</p>}
-        {lost ? (
+        {lost === 'sent' ? (
           <p className="text-sm text-muted">Thanks, we’ve let the game’s owner know. They’ll help you get back in.</p>
+        ) : lost === 'asking' ? (
+          <div className="flex flex-col gap-2 rounded-lg border border-line p-2">
+            <label className="text-sm" htmlFor="lost-note">
+              We’ll let the game’s owner know. Anything that helps them know it’s you? (optional)
+            </label>
+            <input
+              id="lost-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value.slice(0, 140))}
+              placeholder="e.g. your first name, or who invited you"
+              className="rounded-lg border border-line bg-bg px-3 py-2 text-base"
+            />
+            <button
+              type="button"
+              className="self-start rounded-lg bg-ink px-3 py-1.5 text-sm font-semibold text-bg"
+              onClick={() => { setLost('sent'); api.lostCode(taken, note).catch(() => {}); }}
+            >
+              Let the owner know
+            </button>
+          </div>
         ) : (
-          <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setLost(true); api.lostCode(taken).catch(() => {}); }}>
+          <button type="button" className="self-start text-sm text-muted underline" onClick={() => setLost('asking')}>
             Can’t find your code?
           </button>
         )}
-        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); setCode(''); setLost(false); }}>
+        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); setCode(''); setLost('no'); setNote(''); }}>
           That’s not me, pick a different name
         </button>
       </form>
@@ -137,7 +160,7 @@ function ago(at: number): string {
 
 export function Leaderboard({
   dateKey, playerId, name, onName, onClaim, onDelete, initialTab,
-  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread, chatUnread, onChatSeen,
+  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread, chatUnread, onChatSeen, streak,
 }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -206,6 +229,7 @@ export function Leaderboard({
   };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [code, setCode] = useState(() => readStored(PIN_KEY, ''));
   const chatSeen = useCallback((at: number) => {
     if (scope !== 'everyone' && scope !== 'new') onChatSeen(scope, at);
   }, [scope, onChatSeen]);
@@ -241,18 +265,33 @@ export function Leaderboard({
         </div>
       ) : inChat ? null : (
         <div className="mb-3 text-sm text-muted">
-          Playing as <b className="text-ink">{name}</b>{' '}
+          Playing as <b className="text-ink">{name}</b>
+          {streak > 0 && (
+            <span className="ml-1.5 font-semibold text-ink" title="Days in a row you’ve found at least one word">
+              · {streakAnimal(streak).emoji} {streak}-day streak
+            </span>
+          )}{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
           {' · '}
-          <button type="button" className="underline" onClick={() => setShowCode((v) => !v)}>my code</button>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              setShowCode((v) => !v);
+              // Fetch it fresh, so players from before codes existed get theirs set up now.
+              api.me(playerId).then((r) => { if (r.pin) { writeStored(PIN_KEY, r.pin); setCode(r.pin); } }, () => {});
+            }}
+          >
+            my code
+          </button>
           {' · '}
           <button type="button" className="underline" onClick={() => setConfirmDelete(true)}>delete my data</button>
           {showCode && (
             <p className="mt-2 rounded-xl bg-bg p-3 text-ink">
-              {readStored(PIN_KEY, '') ? (
-                <>Your code is <b className="tracking-widest">{readStored(PIN_KEY, '')}</b>. To play on another device, type your name there, then this code. Keep it to yourself.</>
+              {code ? (
+                <>Your code is <b className="tracking-widest">{code}</b>. To play on another device, type your name there, then this code. Keep it to yourself.</>
               ) : (
-                <>Your code isn’t ready yet. Check again when you’re online.</>
+                <>Getting your code… (you need to be online)</>
               )}
             </p>
           )}
@@ -459,12 +498,6 @@ export function Leaderboard({
                   <span className="min-w-0 flex-1 truncate">
                     {r.name}
                     {r.you && ' (you)'}
-                    {(r.streak ?? 0) >= 2 && (
-                      <span className="ml-1.5 text-sm font-semibold text-muted" title={`${r.streak}-day streak`}>
-                        {streakAnimal(r.streak!).emoji}
-                        {r.streak}
-                      </span>
-                    )}
                   </span>
                   <span className="hidden text-xs text-muted sm:inline">{r.rankName} · {r.words}w{r.pangrams ? ' · 🌟' : ''}</span>
                   <span className="w-12 text-right font-bold tabular-nums">{r.score}</span>

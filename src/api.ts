@@ -10,8 +10,6 @@ export interface BoardRow {
   pangrams: number;
   rankName: string;
   you: boolean;
-  /** Days in a row this player has found a word (still going). */
-  streak?: number;
 }
 
 /** A found word, with the route it was traced along when known (the server scores that route). */
@@ -119,7 +117,7 @@ export const api = {
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string; pin: string }>('POST', '/api/name', { playerId, name }),
   claim: (name: string, code: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name, code }),
-  lostCode: (name: string) => call<{ ok: true }>('POST', '/api/lost-code', { name }),
+  lostCode: (name: string, note = '') => call<{ ok: true }>('POST', '/api/lost-code', { name, note }),
   me: (player: string) => call<{ name: string | null; pin: string | null; streak?: Streak | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),

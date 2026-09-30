@@ -16,16 +16,13 @@ jobs:
     steps:
       - name: Send to ntfy
         env:
-          # Passed through env (never pasted into the script) so player names can't inject shell.
           TOPIC: ${{ secrets.NTFY_TOPIC }}
           TOKEN: ${{ secrets.NTFY_TOKEN }}
-          TITLE: ${{ github.event.client_payload.title }}
-          MESSAGE: ${{ github.event.client_payload.message }}
-          TAGS: ${{ github.event.client_payload.tags }}
         run: |
-          body=$(jq -n --arg topic "$TOPIC" --arg title "$TITLE" --arg message "$MESSAGE" --arg tags "$TAGS" \
-            '{topic: $topic, title: $title, message: $message, tags: ($tags | split(",") | map(select(. != ""))),
-              click: "https://onthedcl.github.io/word-game-/"}')
+          # The message is read from the event file, not step env, so it never shows in this public log.
+          body=$(jq --arg topic "$TOPIC" '.client_payload as $p |
+            {topic: $topic, title: $p.title, message: $p.message, tags: (($p.tags // "") | split(",") | map(select(. != ""))),
+             click: "https://onthedcl.github.io/word-game-/"}' "$GITHUB_EVENT_PATH")
           auth=()
           [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
           curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null

@@ -1,6 +1,6 @@
 // Private leagues: a named group of players with its own leaderboard for each daily
 // board, joined by invite link, plus a short news feed ("Sam passed you").
-import { ApiError, playerIdOf, readBoard, type Deps, type Entry } from './leaderboard';
+import { ApiError, blockedPlayers, playerIdOf, readBoard, type Deps, type Entry } from './leaderboard';
 import { cleanName, maskText } from './names';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 import { boardLocksAt, isDateKey, shiftDateKey } from '../src/engine/dates';
@@ -94,9 +94,10 @@ export async function leagueInfo(deps: Deps, rawId: unknown) {
 export async function publicLeagues(deps: Deps, rawPlayer: unknown) {
   const playerId = typeof rawPlayer === 'string' ? rawPlayer : '';
   const rooms: { id: string; name: string; members: number; joined: boolean }[] = [];
+  const blocked = await blockedPlayers(deps.kv);
   for (const { key } of (await deps.kv.list({ prefix: 'leagues/' })).blobs) {
     const league = (await deps.kv.get(key, { type: 'json' })) as League | null;
-    if (!league?.public) continue;
+    if (!league?.public || (blocked.has(league.owner) && league.owner !== playerId)) continue;
     rooms.push({ id: key.slice('leagues/'.length), name: league.name, members: league.members.length, joined: league.members.includes(playerId) });
   }
   rooms.sort((a, b) => b.members - a.members || a.name.localeCompare(b.name));
@@ -164,6 +165,23 @@ export async function movePlayerInLeagues(deps: Deps, from: string, to: string) 
   }
   await deps.kv.setJSON(mineKey(to), ids);
   await deps.kv.setJSON(mineKey(from), null);
+}
+
+/** Owner look-up: the rooms a player is in and what they've said lately. */
+export async function roomsSummary(deps: Deps, playerId: string): Promise<string[]> {
+  const lines: string[] = [];
+  const said: ChatMessage[] = [];
+  const rooms: string[] = [];
+  for (const id of await myLeagueIds(deps, playerId)) {
+    const league = (await deps.kv.get(leagueKey(id), { type: 'json' })) as League | null;
+    if (!league) continue;
+    rooms.push(`${league.name}${league.owner === playerId ? ' (host)' : ''}, ${league.members.length} members`);
+    said.push(...(await chatOf(deps, id)).filter((m) => m.from === playerId));
+  }
+  lines.push(`Rooms: ${rooms.length ? rooms.join('; ') : 'none'}`);
+  said.sort((a, b) => b.at - a.at);
+  lines.push(`Chat messages: ${said.length}${said.length ? `. Latest: ${said.slice(0, 3).map((m) => `“${m.text}”`).join(' ')}` : ''}`);
+  return lines;
 }
 
 /** When a player deletes their data: leave every league. */
@@ -282,7 +300,9 @@ const chatOf = async (deps: Deps, id: string) => ((await deps.kv.get(chatKey(id)
 
 export async function getChat(deps: Deps, rawId: unknown, rawPlayer: unknown) {
   const { playerId, id, league } = await member(deps, rawId, rawPlayer);
-  return { messages: (await chatOf(deps, id)).map((m) => publicMessage(m, playerId)), host: league.owner === playerId };
+  const blocked = await blockedPlayers(deps.kv);
+  const shown = (await chatOf(deps, id)).filter((m) => m.from === playerId || !blocked.has(m.from));
+  return { messages: shown.map((m) => publicMessage(m, playerId)), host: league.owner === playerId };
 }
 
 export async function postChat(deps: Deps, body: Record<string, unknown>) {

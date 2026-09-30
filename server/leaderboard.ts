@@ -3,10 +3,10 @@
 import { rankFor, scorePath, TOP_RANK } from '../src/engine/scoring';
 import { CENTER, isValidRoute } from '../src/engine/hexgrid';
 import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
-import { cleanName } from './names';
+import { cleanName, maskText } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
-import { leaveAllLeagues, movePlayerInLeagues, notePasses } from './leagues';
+import { leaveAllLeagues, movePlayerInLeagues, notePasses, roomsSummary } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
@@ -139,25 +139,28 @@ function checkDailyDate(value: unknown, now: number): string {
 
 /** A leaderboard from the entries under `prefix`, optionally only for some players (a league). */
 export async function readBoard(kv: KV, prefix: string, playerId: string | null, only?: ReadonlySet<string>) {
-  const blobs = (await kv.list({ prefix })).blobs.filter((b) => !only || only.has(b.key.slice(prefix.length)));
+  const blocked = await blockedPlayers(kv);
+  // Blocked players still see themselves; nobody else sees them.
+  const shown = (id: string) => (!only || only.has(id)) && (!blocked.has(id) || id === playerId);
+  const blobs = (await kv.list({ prefix })).blobs.filter((b) => shown(b.key.slice(prefix.length)));
   const rows = (
     await Promise.all(blobs.map(async ({ key }) => ({ key, entry: (await kv.get(key, { type: 'json' })) as Entry | null })))
   ).filter((r): r is { key: string; entry: Entry } => !!r.entry);
   rows.sort((a, b) => b.entry.score - a.entry.score || a.entry.updatedAt - b.entry.updatedAt);
-  const toRow = (r: (typeof rows)[number], i: number) => {
+  const all = rows.map((r, i) => {
     const { name, score, words, pangrams, rankName } = r.entry;
-    return { position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId, key: r.key };
-  };
-  const all = rows.map(toRow);
-  // Each shown player's streak, if it's still going as of this board's day (or today, for Blitz).
-  const day = parseBoardId(prefix.split('/')[1] ?? '')?.dateKey ?? new Date().toISOString().slice(0, 10);
-  const withStreak = async ({ key, ...row }: (typeof all)[number]) => {
-    const s = (await kv.get(`streak/${key.slice(prefix.length)}`, { type: 'json' })) as Streak | null;
-    return { ...row, streak: s && s.last >= shiftDateKey(day, -1) ? s.count : 0 };
-  };
-  const top = await Promise.all(all.slice(0, TOP_N).map(withStreak));
-  const you = all.find((r) => r.you);
-  return { total: rows.length, top, you: you ? await withStreak(you) : null };
+    return { position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId };
+  });
+  return { total: rows.length, top: all.slice(0, TOP_N), you: all.find((r) => r.you) ?? null };
+}
+
+// ---- blocking (owner only) -----------------------------------------------------
+
+const BLOCKED_KEY = 'blocked-players';
+
+/** Players the owner has blocked: hidden from everyone else's leaderboards and room chat. */
+export async function blockedPlayers(kv: KV): Promise<Set<string>> {
+  return new Set(((await kv.get(BLOCKED_KEY, { type: 'json' })) as string[] | null) ?? []);
 }
 
 // ---- daily --------------------------------------------------------------------
@@ -182,18 +185,52 @@ export interface Streak {
   count: number;
   best: number;
   last: string;
+  /** 2 once counted from the player's whole history (streaks started out counting from launch day). */
+  v?: number;
 }
 
-export const streakOf = async (deps: Deps, playerId: string) =>
-  ((await deps.kv.get(`streak/${playerId}`, { type: 'json' })) as Streak | null) ?? null;
+const STREAK_VERSION = 2;
+
+/** Work a streak out from every daily board the player has found a word on. */
+async function streakFromHistory(deps: Deps, playerId: string): Promise<Streak | null> {
+  const days = new Set<string>();
+  for (const { key } of (await deps.kv.list({ prefix: 'daily/' })).blobs) {
+    if (!key.endsWith(`/${playerId}`)) continue;
+    const day = parseBoardId(key.split('/')[1])?.dateKey;
+    const entry = day ? ((await deps.kv.get(key, { type: 'json' })) as Entry | null) : null;
+    if (day && entry && entry.words > 0) days.add(day);
+  }
+  if (!days.size) return null;
+  let count = 0;
+  let best = 0;
+  let prev = '';
+  for (const day of [...days].sort()) {
+    count = prev && shiftDateKey(prev, 1) === day ? count + 1 : 1;
+    best = Math.max(best, count);
+    prev = day;
+  }
+  return { count, best, last: prev, v: STREAK_VERSION };
+}
+
+/** The player's streak (last played day included); older records are recounted from history once. */
+export async function streakOf(deps: Deps, playerId: string): Promise<Streak | null> {
+  const key = `streak/${playerId}`;
+  const stored = (await deps.kv.get(key, { type: 'json' })) as Streak | null;
+  if (stored?.v === STREAK_VERSION) return stored;
+  const counted = await streakFromHistory(deps, playerId);
+  if (!counted) return stored;
+  const streak = { ...counted, best: Math.max(counted.best, stored?.best ?? 0) };
+  await deps.kv.setJSON(key, streak);
+  return streak;
+}
 
 /** Count a day toward the player's streak (idempotent within a day). */
 async function bumpStreak(deps: Deps, playerId: string, dateKey: string): Promise<Streak> {
   const key = `streak/${playerId}`;
-  const prev = (await deps.kv.get(key, { type: 'json' })) as Streak | null;
+  const prev = await streakOf(deps, playerId);
   if (prev && prev.last >= dateKey) return prev;
   const count = prev && prev.last === shiftDateKey(dateKey, -1) ? prev.count + 1 : 1;
-  const next = { count, best: Math.max(count, prev?.best ?? 0), last: dateKey };
+  const next = { count, best: Math.max(count, prev?.best ?? 0), last: dateKey, v: STREAK_VERSION };
   await deps.kv.setJSON(key, next);
   return next;
 }
@@ -372,13 +409,17 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
 /** A player can't find their code: the owner is told right away and can help with the Moderate workflow. */
 export async function lostCode(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
+  // Optional words from the player so the owner can tell it's them (masked like chat, never stored).
+  const note = typeof body.note === 'string' ? maskText(body.note.replace(/\s+/g, ' ').trim().slice(0, 140)) : '';
   if (!(await ownerOf(deps, name))) throw new ApiError(404, 'No player has that name yet');
   const key = `lost-code/${name.toLowerCase()}/${new Date(deps.now()).toISOString().slice(0, 10)}`;
-  if (!(await deps.kv.get(key, { type: 'json' }))) {
-    await deps.kv.setJSON(key, { at: deps.now() });
+  // Up to three pings a day per name (so a note added later still arrives), never a flood.
+  const sent = ((await deps.kv.get(key, { type: 'json' })) as { count: number } | null)?.count ?? 0;
+  if (sent < 3) {
+    await deps.kv.setJSON(key, { at: deps.now(), count: sent + 1 });
     deps.notify?.({
       title: 'Lost code',
-      message: `Someone playing as “${name}” can’t find their code. If you know it’s really them, run Moderate with action “send code”.`,
+      message: `Someone playing as “${name}” is locked out and can’t find their code.${note ? ` They say: “${note}”.` : ''} If it’s really them, run Moderate → “send code”.`,
       tags: ['key'],
       urgent: true,
     });
@@ -386,18 +427,25 @@ export async function lostCode(deps: Deps, body: Record<string, unknown>) {
   return { ok: true };
 }
 
+/**
+ * Every named player needs a code to move to another device; names from before codes
+ * existed get one here. Null if someone else owns the name.
+ */
+async function ensureCode(deps: Deps, playerId: string, name: string): Promise<string | null> {
+  const owner = (await deps.kv.get(nameKey(name), { type: 'json' })) as NameOwner | null;
+  if (owner && owner.playerId !== playerId) return null;
+  if (owner?.pin) return owner.pin;
+  const pin = newPin(deps);
+  await deps.kv.setJSON(nameKey(name), { playerId, pin } satisfies NameOwner);
+  return pin;
+}
+
 /** The player's own details (only their device knows the player id). */
 export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
   if (!player) return { name: null, pin: null, streak: await streakOf(deps, id) };
-  let owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
-  // Every named player needs a code to move to another device; older names may not have one yet.
-  if (!owner || (owner.playerId === id && !owner.pin)) {
-    owner = { playerId: id, pin: newPin(deps) };
-    await deps.kv.setJSON(nameKey(player.name), owner);
-  }
-  return { name: player.name, pin: owner.playerId === id ? owner.pin : null, streak: await streakOf(deps, id) };
+  return { name: player.name, pin: await ensureCode(deps, id, player.name), streak: await streakOf(deps, id) };
 }
 
 /** Words this player has found on a daily board (to restore progress on another device). */
@@ -462,6 +510,8 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
     ((await deps.kv.get(`first-seen/${playerId}`, { type: 'json' })) ? { days: 1 } : { days: 0 });
   const days = history.days + 1;
   await deps.kv.setJSON(`player-days/${playerId}`, { days, last: day });
+
+  if (player?.name) await ensureCode(deps, playerId, player.name);
 
   const today = (await deps.kv.list({ prefix: `seen-v2/${day}/` })).blobs.length;
   const where = describePlace(place);
@@ -534,6 +584,14 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
     return { ok: true, name, code: pin };
   }
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId);
+  if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
+  if (body.action === 'block' || body.action === 'unblock') {
+    const blocked = await blockedPlayers(deps.kv);
+    if (body.action === 'block') blocked.add(owner.playerId);
+    else blocked.delete(owner.playerId);
+    await deps.kv.setJSON(BLOCKED_KEY, [...blocked]);
+    return { ok: true, name, blocked: body.action === 'block' };
+  }
   const to = body.to ? nameOf(body.to) : `Player ${String(Math.floor(deps.random() * 9000) + 1000)}`;
   const taken = await ownerOf(deps, to);
   if (taken && taken.playerId !== owner.playerId) throw new ApiError(409, 'That new name is taken');
@@ -613,4 +671,28 @@ async function giveBack(deps: Deps, name: string, from: string) {
   const pin = newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: to, pin } satisfies NameOwner);
   return { ok: true, name, code: pin };
+}
+
+/** Owner-only: what the server knows about a player, to send to the owner's phone. Never an IP. */
+async function lookUp(deps: Deps, name: string, playerId: string): Promise<string> {
+  const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  const lines = [player?.name ?? name];
+  const played: { day: string; entry: Entry }[] = [];
+  for (const { key } of (await deps.kv.list({ prefix: 'daily/' })).blobs) {
+    if (!key.endsWith(`/${playerId}`)) continue;
+    const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+    if (entry) played.push({ day: key.split('/')[1], entry });
+  }
+  played.sort((a, b) => a.day.localeCompare(b.day));
+  const visits = (await deps.kv.get(`player-days/${playerId}`, { type: 'json' })) as { days: number; last?: string } | null;
+  lines.push(`First board played: ${played[0]?.day ?? 'none'} · opened the game on ${visits?.days ?? 0} days${visits?.last ? `, last ${visits.last}` : ''}`);
+  lines.push(`Daily boards: ${played.length ? played.slice(-7).map((p) => `${p.day.slice(5)} ${p.entry.score} pts/${p.entry.words} words`).join(', ') : 'none'}`);
+  const streak = await streakOf(deps, playerId);
+  lines.push(`Streak: ${streak ? `${streak.count} days to ${streak.last} (best ${streak.best})` : 'none'}`);
+  const blitz = (await deps.kv.get(`blitz-best/${playerId}`, { type: 'json' })) as Entry | null;
+  if (blitz) lines.push(`Blitz best: ${blitz.score} pts`);
+  lines.push(...(await roomsSummary(deps, playerId)));
+  const reports = (await deps.kv.list({ prefix: `reports/${name.toLowerCase()}/` })).blobs.length;
+  lines.push(`Reported: ${reports} ${reports === 1 ? 'time' : 'times'} · Blocked: ${(await blockedPlayers(deps.kv)).has(playerId) ? 'yes' : 'no'}`);
+  return lines.join('\n');
 }

@@ -293,11 +293,10 @@ describe('names as logins', () => {
     expect((await progressOf(deps, DATE, P1)).found).toHaveLength(5);
   });
 
-  it('tell the owner when someone lost their code, once a day', async () => {
+  it('tell the owner when someone lost their code', async () => {
     await saveName(deps, { playerId: P1, name: 'Castle' });
     sent = [];
     await lostCode(deps, { name: 'castle' });
-    await lostCode(deps, { name: 'Castle' });
     expect(sent.filter((m) => m.startsWith('Lost code'))).toHaveLength(1);
     await rejects(lostCode(deps, { name: 'Nobody' }), 404);
   });
@@ -440,19 +439,67 @@ describe('onboarding funnel', () => {
   });
 });
 
-describe('streaks on the leaderboard', () => {
-  it('show each player’s current streak next to their row', async () => {
-    const tables: Record<string, ReturnType<typeof answerTable>> = {};
-    const day = (d: string) => (tables[d] ??= answerTable(generateDaily(dict, seeds, d)));
+describe('streaks from history', () => {
+  const tables: Record<string, ReturnType<typeof answerTable>> = {};
+  const day = (d: string) => (tables[d] ??= answerTable(generateDaily(dict, seeds, d)));
+  const play = async (id: string, name: string, d: string) => {
+    clock = Date.parse(`${d}T15:00:00Z`);
+    await submitDaily(deps, { playerId: id, name, date: d, words: Object.keys(day(d).words).slice(0, 1) });
+  };
+  beforeEach(() => {
     deps.answers = async (key) => day(key.split('/')[1]);
-    for (const d of ['2026-09-26', '2026-09-27', '2026-09-28']) {
-      clock = Date.parse(`${d}T15:00:00Z`);
-      await submitDaily(deps, { playerId: P1, name: 'Ann', date: d, words: Object.keys(day(d).words).slice(0, 1) });
-    }
-    await submitDaily(deps, { playerId: P2, name: 'Bo', date: '2026-09-28', words: Object.keys(day('2026-09-28').words).slice(0, 5) });
+  });
+
+  it('count every day played, including days from before streaks were tracked', async () => {
+    for (const d of ['2026-09-26', '2026-09-27', '2026-09-28', '2026-09-29']) await play(P1, 'Ann', d);
+    // Streaks only started being kept on the 29th: the old record says 1 day.
+    await deps.kv.setJSON(`streak/${P1}`, { count: 1, best: 1, last: '2026-09-29' });
+    expect(await me(deps, P1)).toMatchObject({ streak: { count: 4, best: 4, last: '2026-09-29' } });
+    await play(P1, 'Ann', '2026-09-30');
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 5, last: '2026-09-30' });
+  });
+
+  it('start over after a missed day, keeping the best', async () => {
+    for (const d of ['2026-09-26', '2026-09-27', '2026-09-28', '2026-09-30', '2026-10-01']) await play(P1, 'Ann', d);
+    await deps.kv.setJSON(`streak/${P1}`, null);
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 2, best: 3 });
+  });
+
+  it('keep streaks and player ids off everyone’s leaderboard rows', async () => {
+    await play(P1, 'Ann', '2026-09-28');
+    await play(P2, 'Bo', '2026-09-28');
     const board = await getDaily(deps, '2026-09-28', P1);
-    expect(board.top.map((r) => [r.name, r.streak])).toEqual([['Bo', 1], ['Ann', 3]]);
-    expect(board.you).toMatchObject({ name: 'Ann', streak: 3 });
-    expect(JSON.stringify(board)).not.toContain(P2); // no player ids leak
+    expect(board.top[0]).not.toHaveProperty('streak');
+    expect(JSON.stringify(board)).not.toContain(P2);
+  });
+});
+
+describe('owner tools', () => {
+  it('block a player: hidden from everyone else, still visible to themselves, and unblock', async () => {
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: words.slice(0, 2) });
+    await submitDaily(deps, { playerId: P2, name: 'Poop', date: DATE, words: words.slice(0, 5) });
+    await moderateName(deps, { name: 'poop', action: 'block' });
+    expect((await getDaily(deps, DATE, P1)).top.map((r) => r.name)).toEqual(['Ann']);
+    expect((await getDaily(deps, DATE, P2)).top.map((r) => r.name)).toEqual(['Poop', 'Ann']);
+    await moderateName(deps, { name: 'Poop', action: 'unblock' });
+    expect((await getDaily(deps, DATE, P1)).total).toBe(2);
+  });
+
+  it('look a player up without ever including ids or addresses', async () => {
+    await submitDaily(deps, { playerId: P2, name: 'Whyyy', date: DATE, words: words.slice(0, 3) });
+    await reportName(deps, { playerId: P1, name: 'Whyyy' });
+    const { report } = await moderateName(deps, { name: 'whyyy', action: 'look up' });
+    expect(report).toContain('Whyyy');
+    expect(report).toContain(`First board played: ${DATE}`);
+    expect(report).toContain('Reported: 1 time');
+    expect(report).not.toContain(P2);
+  });
+
+  it('pass a locked-out player’s note to the owner, a few times a day at most', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    sent = [];
+    for (let i = 0; i < 5; i++) await lostCode(deps, { name: 'castle', note: 'it’s Dan from work' });
+    expect(sent).toHaveLength(3);
+    expect(sent[0]).toContain('They say: “it’s Dan from work”');
   });
 });

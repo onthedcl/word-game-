@@ -37,6 +37,9 @@
     <li><b>Approximate location</b> (city, region and country), worked out by our server host from your connection when
       you open the game. It is used only to let the game's owner know roughly where people are playing from. We do not
       store your IP address or your precise location.</li>
+    <li><b>A 4-digit code</b> for your name, so only you can continue as that name on another device.</li>
+    <li><b>A note, if you write one</b>, when you ask for help getting back into your name. It is sent to the game's
+      owner so they can tell it's you, and is not stored.</li>
   </ul>
   <p>Your device also keeps your progress and settings in its own storage so the game works offline.</p>
 
@@ -51,8 +54,8 @@
   <h2>Who handles it</h2>
   <ul>
     <li><b>Cloudflare</b> runs the leaderboard server and stores the data above.</li>
-    <li><b>GitHub</b> hosts the game. Owner notifications are relayed through GitHub Actions, whose logs keep the
-      notification text (names, rough locations, scores) for up to 90 days.</li>
+    <li><b>GitHub</b> hosts the game. Owner notifications are relayed through GitHub Actions, which keeps each
+      relay request, including the notification text (names, rough locations, scores), for up to 90 days.</li>
     <li><b>ntfy.sh</b> delivers those notifications to the owner's phone.</li>
   </ul>
   <p>Each handles the data only to provide their service to us.</p>

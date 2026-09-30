@@ -8,6 +8,10 @@ name: Moderate
 # - give back: someone took over a name. Moves the player's scores, streak and rooms to a
 #   fresh account with a new code (sent to your phone). Whoever had the name is signed out;
 #   give the rightful player the new code and they type their name, then the code.
+# - look up: what the game knows about a player (first day, scores, streak, rooms, recent chat,
+#   reports). Sent to your phone, never printed here. Never includes IP addresses.
+# - block / unblock: a blocked player disappears from everyone else's leaderboards, room chat
+#   and the public room list. They can still play and still see themselves, so nothing tips them off.
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +21,7 @@ on:
       action:
         description: 'What to do'
         type: choice
-        options: [rename, send code, give back]
+        options: [rename, look up, block, unblock, send code, give back]
         default: rename
       new_name:
         description: 'New name (rename only, optional)'
@@ -43,17 +47,22 @@ jobs:
           res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
             https://word-game-leaderboard.danlagstein.workers.dev/api/admin/moderate)
           status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")
-          if [ "$ACTION" = rename ] || [ "$status" != 200 ]; then
-            # Rename results and errors hold no secrets.
-            jq 'del(.code)' <<<"$json" 2>/dev/null || echo "$json"
+          if [ "$status" != 200 ] || [ "$ACTION" = rename ] || [ "$ACTION" = block ] || [ "$ACTION" = unblock ]; then
+            # These results and errors hold nothing private.
+            jq 'del(.code, .report)' <<<"$json" 2>/dev/null || echo "$json"
             echo "HTTP $status"; [ "$status" = 200 ]; exit
           fi
-          code=$(jq -r .code <<<"$json"); echo "::add-mask::$code"
           player=$(jq -r .name <<<"$json")
-          msg="Code for $player: $code. They type their name, then this code. Send it only to them."
-          [ "$ACTION" = "give back" ] && msg="$player was moved to a fresh account; whoever else had it is signed out. New code: $code. They type their name, then this code."
+          if [ "$ACTION" = "look up" ]; then
+            title="Player: $player"; msg=$(jq -r .report <<<"$json")
+          else
+            code=$(jq -r .code <<<"$json"); echo "::add-mask::$code"
+            title="Player code"
+            msg="Code for $player: $code. They type their name, then this code. Send it only to them."
+            [ "$ACTION" = "give back" ] && msg="$player was moved to a fresh account; whoever else had it is signed out. New code: $code. They type their name, then this code."
+          fi
           auth=()
           [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
-          jq -n --arg topic "$KEY" --arg title "Player code" --arg message "$msg" '{topic: $topic, title: $title, message: $message, tags: ["key"]}' |
+          jq -n --arg topic "$KEY" --arg title "$title" --arg message "$msg" '{topic: $topic, title: $title, message: $message, tags: ["mag"]}' |
             curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d @- https://ntfy.sh/ > /dev/null
-          echo "Done: the code was sent to your phone."
+          echo "Done: sent to your phone."

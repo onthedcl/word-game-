@@ -21,7 +21,7 @@ import { dailyBoardId, parseBoardId } from './engine/rerolls';
 import { answerIndex, progress } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { GAME_URL, shareText } from './engine/share';
-import { isNewAnimal, streakAnimal } from './engine/streak';
+import { isNewAnimal, streakAnimal, streakGreeting } from './engine/streak';
 import { useUpdateCheck } from './updates';
 import { haptics } from './haptics';
 import { Wordmark } from './components/Wordmark';
@@ -201,7 +201,7 @@ export default function App() {
     greeted.current = true;
     api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name, dateKeyFor()).catch(() => {});
   }, [online, me, name]);
-  const [, setPin] = useStoredState<string>(PIN_KEY, '');
+  const [pin, setPin] = useStoredState<string>(PIN_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
       if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');
@@ -427,8 +427,12 @@ export default function App() {
   // Days in a row with a word found. The server keeps it (so it follows the player across
   // devices); this device's own history covers players without a name.
   const [serverStreak, setServerStreak] = useState<Streak | null>(null);
+  // Whether the server's count is in (or there's none to wait for), so the daily hello shows the right number.
+  const [streakChecked, setStreakChecked] = useState(false);
   useEffect(() => {
-    if (online && name) api.me(me).then((r) => r.streak && setServerStreak(r.streak), () => {});
+    if (online === null) return;
+    if (!online || !name) return setStreakChecked(true);
+    api.me(me).then((r) => r.streak && setServerStreak(r.streak), () => {}).finally(() => setStreakChecked(true));
   }, [online, name, me]);
   const streak = useMemo(() => {
     const today = dateKeyFor();
@@ -441,6 +445,23 @@ export default function App() {
     if (dailyFound.found.length && !played(today)) local++;
     return Math.max(alive(serverStreak), local);
   }, [serverStreak, dailyFound.found.length]);
+
+  // Once a day, on opening: a hello with the player's streak and a pep talk. Players who haven't
+  // seen their code yet get that first (once), since it's how they play on another device.
+  useEffect(() => {
+    if (!streakChecked || dialog || notice || mode !== 'daily') return;
+    if (name && pin && !readStored('hexicon:code-intro', false)) {
+      writeStored('hexicon:code-intro', true);
+      setNotice(`🔑 Your code is ${pin}. Type your name and this code to play on another device (Leaderboard → my code).`);
+      return;
+    }
+    const today = dateKeyFor();
+    const key = `hexicon:hello:${today}`;
+    if (streak < 1 || readStored(key, false)) return;
+    writeStored(key, true);
+    const playedToday = readStored<{ found: string[] }>(dailyKey(dailyBoardId(today)), { found: [] }).found.length > 0;
+    setNotice(streakGreeting(streak, playedToday, Math.random()));
+  }, [streakChecked, dialog, notice, mode, name, pin, streak]);
 
   // A new streak animal: celebrate it once, the day it's reached.
   useEffect(() => {
@@ -616,7 +637,7 @@ export default function App() {
 
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(""), notice.length > 30 ? 4000 : 1800);
+    const t = setTimeout(() => setNotice(""), notice.length > 60 ? 6500 : notice.length > 30 ? 4000 : 1800);
     return () => clearTimeout(t);
   }, [notice]);
 
@@ -917,6 +938,7 @@ export default function App() {
           unread={unreadLeagues}
           chatUnread={chatUnread}
           onChatSeen={markChatSeen}
+          streak={streak}
         />
       </Modal>
 
