@@ -5,7 +5,7 @@ import { FoundWords } from './FoundWords';
 import { areAdjacent } from '../engine/hexgrid';
 import { findPaths } from '../engine/solver';
 import { answerIndex, checkWord, progress, wordScore, type Routes } from '../engine/game';
-import { TOP_RANK } from '../engine/scoring';
+import { scorePath, TOP_RANK } from '../engine/scoring';
 import type { Puzzle } from '../engine/generator';
 import { haptics } from '../haptics';
 import { complimentFor } from '../compliments';
@@ -23,8 +23,6 @@ interface Props {
   statusNote?: React.ReactNode;
   /** Called after every submitted word, right or wrong. */
   onAttempt?(ok: boolean): void;
-  /** Suggest a rejected word to the owner (only when there's a leaderboard server). */
-  onSuggest?(word: string): void;
   /** A 5+ letter word earned a compliment (the app may ask for a rating then). */
   onLongWord?(): void;
   /** First game: offer to show an easy word to get started. */
@@ -35,10 +33,8 @@ interface Props {
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord, onSuggest,
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord,
 }: Props) {
-  // A word just rejected as "Not a word" that the player could suggest.
-  const [suggestable, setSuggestable] = useState<string | null>(null);
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
   const { score, rank, complete } = progress(puzzle, answers, found, routes);
@@ -68,12 +64,8 @@ export function PuzzleView({
   }, [typed, puzzle.board]);
   const shownPath = typed ? typedPath : path;
   const word = typed || path.map((id) => puzzle.board.letters[id]).join('');
+  const liveScore = useMemo(() => scorePath(shownPath, puzzle.board).score, [shownPath, puzzle.board]);
 
-  useEffect(() => {
-    if (!suggestable) return;
-    const t = setTimeout(() => setSuggestable(null), 9000);
-    return () => clearTimeout(t);
-  }, [suggestable]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), toast.kind === 'info' ? 3500 : 1500);
@@ -133,11 +125,7 @@ export function PuzzleView({
     // Every submission starts the next word fresh, right or wrong.
     clear();
     onAttempt?.(result.ok);
-    if (!result.ok) {
-      setSuggestable(result.reason === 'Not a word' && onSuggest ? w.toLowerCase() : null);
-      return reject(result.reason, attempted);
-    }
-    setSuggestable(null);
+    if (!result.ok) return reject(result.reason, attempted);
     const { answer, route, score: points } = result;
     const before = rank.index;
     onFound(answer.word, route);
@@ -270,21 +258,16 @@ export function PuzzleView({
             <span key={i} className={ch === puzzle.centerLetter ? 'text-accent' : ''}>{ch}</span>
           ))}
           <span className="ml-0.5 h-[1.1em] w-0.5 animate-blink bg-accent" />
+          {/* What the word would score, live as it's traced (premiums and pangram bonus included). */}
+          {shownPath.length > 0 && (
+            <span
+              className="ml-2 rounded-full bg-surface px-2 py-0.5 text-sm font-semibold tracking-normal text-muted normal-case tabular-nums"
+              aria-label={`Worth ${liveScore} points`}
+            >
+              +{liveScore}
+            </span>
+          )}
         </div>
-
-        {suggestable && !toast && (
-          <button
-            type="button"
-            onClick={() => {
-              onSuggest?.(suggestable);
-              setSuggestable(null);
-              say('Thanks! We’ll take a look', 'info');
-            }}
-            className="absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold shadow"
-          >
-            Is “{suggestable.toUpperCase()}” a word? Suggest it
-          </button>
-        )}
 
         {starter && !found.length && !toast && !disabled && (
           <button

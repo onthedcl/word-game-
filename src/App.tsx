@@ -201,7 +201,7 @@ export default function App() {
     greeted.current = true;
     api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name, dateKeyFor()).catch(() => {});
   }, [online, me, name]);
-  const [pin, setPin] = useStoredState<string>(PIN_KEY, '');
+  const [, setPin] = useStoredState<string>(PIN_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
       if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');
@@ -219,8 +219,8 @@ export default function App() {
     [me, setName, setPin],
   );
   /** Continue as an existing player (by name). The page reloads as that player. */
-  const claimName = useCallback(async (n: string) => {
-    const r = await api.claim(n);
+  const claimName = useCallback(async (n: string, code: string) => {
+    const r = await api.claim(n, code);
     setPlayerId(r.playerId);
     writeStored(NAME_KEY, r.name);
     writeStored(PIN_KEY, r.pin);
@@ -308,10 +308,10 @@ export default function App() {
   }, [online, name, me, setName, setPin]);
   // Keep the address carrying this player, so "Add to Home Screen" keeps their progress.
   useEffect(() => syncCarryParam(me, !!name), [me, name]);
-  // Players who picked a name before PINs existed: fetch theirs so the leaderboard can show it.
+  // Keep this device's code current (Leaderboard → my code), e.g. for names picked before codes existed.
   useEffect(() => {
-    if (online && name && !pin) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
-  }, [online, name, pin, me, setPin]);
+    if (online && name) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
+  }, [online, name, me, setPin]);
 
   // The first visit after a day closes: show where this player finished yesterday (once).
   // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
@@ -834,7 +834,6 @@ export default function App() {
                 if (online && !dailyFound.found.length && boardOpen) api.event(me, 'first-word', dateKey).catch(() => {});
               }}
               keyboard={dialog === null}
-              onSuggest={online ? (w) => void api.suggest(me, w).catch(() => {}) : undefined}
               statusExtra={
                 <span className="flex items-center gap-1.5">
                 {standing && (
@@ -865,7 +864,6 @@ export default function App() {
               }
               disabled={blitz.phase === 'over'}
               keyboard={dialog === null}
-              onSuggest={online ? (w) => void api.suggest(me, w).catch(() => {}) : undefined}
               statusExtra={timer || (
                 <button type="button" onClick={startBlitz} className="rounded-full bg-ink px-3 py-1 text-sm font-semibold text-bg">Play again</button>
               )}

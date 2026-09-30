@@ -1,2 +1,23 @@
 # Extra words accepted as bonus words, one per line (added by the owner, e.g. via the Add words workflow).
 lites
+rainforest
+rainforests
+seatbelt
+seatbelts
+voiceover
+voiceovers
+realtor
+realtors
+ramen
+ramens
+chai
+chais
+hitman
+hitmen
+namaste
+biryani
+biryanis
+perp
+perps
+mohawk
+mohawks

@@ -3,7 +3,7 @@ import { isHomeScreenApp } from '../storage';
 
 interface Props {
   onSave(name: string): Promise<void>;
-  onClaim(name: string): Promise<void>;
+  onClaim(name: string, code: string): Promise<void>;
   onSkip(): void;
   onRules(): void;
 }

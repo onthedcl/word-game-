@@ -118,7 +118,8 @@ export const api = {
   hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
   saveName: (playerId: string, name: string) => call<{ ok: true; name: string; pin: string }>('POST', '/api/name', { playerId, name }),
-  claim: (name: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name }),
+  claim: (name: string, code: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name, code }),
+  lostCode: (name: string) => call<{ ok: true }>('POST', '/api/lost-code', { name }),
   me: (player: string) => call<{ name: string | null; pin: string | null; streak?: Streak | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
@@ -146,7 +147,6 @@ export const api = {
   myLeagues: (player: string) => call<{ leagues: LeagueSummary[] }>('GET', `/api/league/mine?player=${encodeURIComponent(player)}`),
   league: (id: string, date: string, player: string) =>
     call<LeagueView>('GET', `/api/league?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
-  suggest: (playerId: string, word: string) => call<{ ok: true }>('POST', '/api/suggest', { playerId, word }),
   /** First word of the day (counts players without a name in the owner's onboarding numbers). */
   event: (playerId: string, kind: 'first-word', date: string) => call<{ ok: true }>('POST', '/api/event', { playerId, kind, date }),
   report: (playerId: string, name: string) => call<{ ok: true }>('POST', '/api/report', { playerId, name }),

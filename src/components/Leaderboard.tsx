@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
-import { readStored, writeStored } from '../storage';
+import { PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
 import { streakAnimal } from '../engine/streak';
 
@@ -15,7 +15,7 @@ interface Props {
   playerId: string;
   name: string;
   onName(name: string): Promise<void>;
-  onClaim(name: string): Promise<void>;
+  onClaim(name: string, code: string): Promise<void>;
   /** Erase this player's data (server and device). */
   onDelete(): Promise<void>;
   initialTab: Tab;
@@ -43,13 +43,15 @@ interface NameFormProps {
   name: string;
   cta: string;
   onSave(name: string): Promise<void>;
-  /** Continue as the player who already has this name (e.g. on a new device). */
-  onClaim?(name: string): Promise<void>;
+  /** Continue as the player who already has this name (e.g. on a new device), with their code. */
+  onClaim?(name: string, code: string): Promise<void>;
 }
 
 export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   const [value, setValue] = useState(name);
   const [taken, setTaken] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [lost, setLost] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -68,16 +70,35 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
 
   if (taken) {
     return (
-      <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken)); }}>
+      <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, code)); }}>
         <p className="text-sm">
-          <b>“{taken}”</b> is already on the leaderboard. Is that you?
+          <b>“{taken}”</b> is already on the leaderboard. If that’s you, enter your 4-digit code. It’s on your
+          other device under <b>Leaderboard → my code</b>.
         </p>
-        <button type="submit" disabled={busy} className="rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
-          {busy ? '…' : `Yes, continue as ${taken}`}
-        </button>
+        <div className="flex gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="Code"
+            aria-label="Your 4-digit code"
+            className="w-24 rounded-lg border border-line bg-bg px-3 py-2 text-base tracking-widest"
+          />
+          <button type="submit" disabled={busy || code.length !== 4} className="flex-1 rounded-lg bg-ink px-4 py-2 font-semibold text-bg disabled:opacity-50">
+            {busy ? '…' : `Continue as ${taken}`}
+          </button>
+        </div>
         {error && <p className="text-sm text-bad">{error}</p>}
-        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); }}>
-          No, pick a different name
+        {lost ? (
+          <p className="text-sm text-muted">Thanks, we’ve let the game’s owner know. They’ll help you get back in.</p>
+        ) : (
+          <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setLost(true); api.lostCode(taken).catch(() => {}); }}>
+            Can’t find your code?
+          </button>
+        )}
+        <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); setCode(''); setLost(false); }}>
+          That’s not me, pick a different name
         </button>
       </form>
     );
@@ -184,6 +205,7 @@ export function Leaderboard({
     setReported((r) => [...r, n]);
   };
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const chatSeen = useCallback((at: number) => {
     if (scope !== 'everyone' && scope !== 'new') onChatSeen(scope, at);
   }, [scope, onChatSeen]);
@@ -222,7 +244,18 @@ export function Leaderboard({
           Playing as <b className="text-ink">{name}</b>{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
           {' · '}
+          <button type="button" className="underline" onClick={() => setShowCode((v) => !v)}>my code</button>
+          {' · '}
           <button type="button" className="underline" onClick={() => setConfirmDelete(true)}>delete my data</button>
+          {showCode && (
+            <p className="mt-2 rounded-xl bg-bg p-3 text-ink">
+              {readStored(PIN_KEY, '') ? (
+                <>Your code is <b className="tracking-widest">{readStored(PIN_KEY, '')}</b>. To play on another device, type your name there, then this code. Keep it to yourself.</>
+              ) : (
+                <>Your code isn’t ready yet. Check again when you’re online.</>
+              )}
+            </p>
+          )}
           {confirmDelete && (
             <div className="mt-2 rounded-xl bg-bg p-3 text-ink">
               <p className="mb-2">Delete your name, scores and progress from DPIYF Lettertown? This can't be undone.</p>

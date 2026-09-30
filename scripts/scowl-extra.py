@@ -16,7 +16,8 @@ for line in open(sys.argv[4] if len(sys.argv) > 4 else 'scowl-pre.txt'):
     if not levels or min(levels) > MAX: continue
     rest=parts[1:]
     if rest and re.fullmatch(r'[A-Z_](?: [A-Z_])*', rest[0]):
-        if 'A' not in rest[0].split(): continue   # not an American spelling
+        codes = rest[0].split()
+        if 'A' not in codes and '_' not in codes: continue   # not an American spelling (_ = every spelling)
         rest=rest[1:]
     if not rest: continue
     lemma_part = rest[0]

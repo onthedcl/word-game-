@@ -27,6 +27,8 @@ airlock
 airlocks
 airshow
 airshows
+airstrike
+airstrikes
 aliased
 aliasing
 allegoric
@@ -135,6 +137,8 @@ beefburger
 beefburgers
 beefiness
 benedictine
+berk
+berks
 beryllia
 beseecher
 beseechers
@@ -187,6 +191,8 @@ blowlamp
 blowlamps
 blowtorched
 blowtorching
+bobbysoxer
+bobbysoxers
 bobsleigh
 bobsleighs
 bodge
@@ -270,6 +276,7 @@ bullseyes
 bullshat
 bumbag
 bumbags
+buncoes
 bunkoes
 burglarproofed
 burglarproofing
@@ -291,6 +298,7 @@ cafetieres
 cagoule
 cagoules
 calculative
+camelhair
 camerawork
 camiknickers
 camouflager
@@ -386,6 +394,7 @@ chundered
 chundering
 chunders
 chunkiness
+chutzpahes
 chyron
 chyrons
 ciabatta
@@ -634,6 +643,8 @@ dumbo
 dumbos
 dumpsite
 dumpsites
+dumpster
+dumpsters
 dunno
 dustcart
 dustcarts
@@ -689,6 +700,8 @@ epidurals
 equatable
 equestrianism
 equilaterals
+escalope
+escalopes
 escollopes
 esophaguses
 ethnologically
@@ -716,6 +729,7 @@ faff
 faffed
 faffing
 faffs
+falafels
 fallibleness
 falterings
 fanboy
@@ -920,6 +934,8 @@ hacktivist
 hacktivists
 haikus
 hairdriers
+hairdryer
+hairdryers
 hairgrip
 hairgrips
 hairspray
@@ -990,6 +1006,7 @@ homeworkers
 homeworking
 homewrecker
 homewreckers
+homeys
 homies
 homoeopaths
 honeylocust
@@ -1106,6 +1123,7 @@ jerrybuilt
 jestingly
 jihadist
 jihadists
+jinnis
 jinrikshas
 jitterbugger
 jitterbuggers
@@ -1138,6 +1156,8 @@ kinda
 kissagrams
 kissoff
 kissoffs
+kissogram
+kissograms
 kleptocracies
 kleptocracy
 knackering
@@ -1227,6 +1247,8 @@ loudhailer
 loudhailers
 lovechild
 lovechildren
+lovey
+loveys
 loyaller
 loyallest
 lubed
@@ -1243,6 +1265,7 @@ lunchboxes
 lungeing
 lurgy
 luvvies
+luvvy
 luxuriation
 lychgate
 lychgates
@@ -1333,6 +1356,8 @@ millennials
 millepedes
 milligrammes
 millionnaires
+milometer
+milometers
 mindbogglingly
 minibar
 minibars
@@ -1497,6 +1522,7 @@ occidentals
 oecus
 officiator
 officiators
+offline
 offshoring
 offsite
 oiks
@@ -1505,6 +1531,7 @@ oilfields
 olfactories
 omnibusses
 omnivorousness
+online
 onscreen
 onsite
 opcode
@@ -1576,6 +1603,10 @@ passivised
 passivises
 passivising
 passivization
+passivize
+passivized
+passivizes
+passivizing
 passphrase
 passphrases
 paterfamiliases
@@ -1652,6 +1683,7 @@ pillowslips
 pipework
 pitta
 pittas
+pizzazz
 pizzicatos
 placings
 plastique
@@ -1894,6 +1926,7 @@ scampis
 scariness
 schmoozer
 schmoozers
+schnappses
 schnapses
 schnozes
 schooldays
@@ -1920,6 +1953,7 @@ scrumping
 scrumps
 scrumpy
 scrunchies
+scrunchy
 scubaed
 scubaing
 seahorse
@@ -2285,6 +2319,8 @@ tranquillised
 tranquillisers
 tranquillises
 tranquillising
+transgender
+transgenders
 transitioned
 transitioning
 transitives

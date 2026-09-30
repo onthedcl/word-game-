@@ -9,8 +9,7 @@ export type DigestEvent =
   | { kind: 'blitz'; who: string; score: number; best: boolean }
   | { kind: 'allwords'; who: string; words: number; score: number }
   | { kind: 'league'; who: string; league: string }
-  | { kind: 'league-join'; who: string; league: string }
-  | { kind: 'suggest'; word: string };
+  | { kind: 'league-join'; who: string; league: string };
 
 export interface Notification {
   title: string;
@@ -71,12 +70,6 @@ export function buildDigest(batch: Notification[]): Notification | null {
   for (const e of of('league')) lines.push(`🏘️ New room: ${e.league} (by ${e.who})`);
   const joins = of('league-join');
   if (joins.length) lines.push(`🤝 Room joins: ${joins.map((e) => `${e.who} → ${e.league}`).join(', ')}`);
-  const suggested = of('suggest');
-  if (suggested.length) {
-    const counts = new Map<string, number>();
-    for (const e of suggested) counts.set(e.word, (counts.get(e.word) ?? 0) + 1);
-    lines.push(`📝 Word suggestions: ${[...counts].map(([w, n]) => (n > 1 ? `${w} ×${n}` : w)).join(', ')} (add with the Add words workflow)`);
-  }
   for (const e of of('renamed')) lines.push(`✏️ ${e.from} is now ${e.who}`);
   const moved = of('device');
   if (moved.length) lines.push(`📱 Picked up on another device: ${[...new Set(moved.map((e) => e.who))].join(', ')}`);

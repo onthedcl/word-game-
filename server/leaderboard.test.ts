@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, describeFunnel, suggestWord, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, lostCode, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -43,7 +43,7 @@ beforeEach(() => {
     },
     blitzSeeds: async () => POOL,
     now: () => clock,
-    randomId: () => `game-${++ids}-xxxxxxxx`,
+    randomId: () => `game-${++ids}-xxxxxxxxxxxx`,
     random: () => 0,
   };
 });
@@ -253,33 +253,71 @@ describe('names as logins', () => {
     expect(await me(deps, P1)).toMatchObject({ name: 'Castle', pin: r.pin });
   });
 
-  it('let a player continue on another device with just their name, and restore their words', async () => {
-    await saveName(deps, { playerId: P1, name: 'Castle' });
+  it('let a player continue on another device with their name and code, and restore their words', async () => {
+    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
     const [a, b] = puzzle.answers;
     await submitDaily(deps, { playerId: P1, name: 'Castle', date: DATE, words: [{ w: a.word, p: a.path }, b.word] });
-    const claimed = await claimName(deps, { name: 'castle' });
-    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle' });
-    // Any number of times, from any device, with or without an old PIN.
-    expect((await claimName(deps, { name: 'Castle', pin: '0000' })).playerId).toBe(P1);
+    const claimed = await claimName(deps, { name: 'castle', code: pin });
+    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle', pin });
     const { found } = await progressOf(deps, DATE, claimed.playerId);
     expect(found).toEqual([{ w: a.word, p: a.path }, b.word]);
-    await rejects(claimName(deps, { name: 'Nobody' }), 404);
+    await rejects(claimName(deps, { name: 'Nobody', code: pin }), 404);
   });
 
-  it('let names from before PINs be claimed too', async () => {
+  it('refuse a claim without the right code, and pause after five wrong tries', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' }); // code 0000 in tests
+    await rejects(claimName(deps, { name: 'Castle' }), 403);
+    for (let i = 0; i < 4; i++) await rejects(claimName(deps, { name: 'Castle', code: '1234' }), 403);
+    expect(sent.some((m) => m.startsWith('Wrong codes'))).toBe(true);
+    await rejects(claimName(deps, { name: 'Castle', code: '0000' }), 429);
+    clock += 61 * 60 * 1000;
+    expect((await claimName(deps, { name: 'Castle', code: '0000' })).playerId).toBe(P1);
+  });
+
+  it('give names from before codes a code the player can see on their own device', async () => {
     await deps.kv.setJSON(`players/${P1}`, { name: 'Dcl' });
     await rejects(saveName(deps, { playerId: P2, name: 'DCL' }), 409);
-    expect((await claimName(deps, { name: 'Dcl' })).playerId).toBe(P1);
-    expect((await claimName(deps, { name: 'dcl' })).playerId).toBe(P1);
+    await rejects(claimName(deps, { name: 'Dcl', code: '0000' }), 403);
+    const { pin } = await me(deps, P1);
+    expect(pin).toMatch(/^\d{4}$/);
+    expect((await claimName(deps, { name: 'dcl', code: pin! })).playerId).toBe(P1);
   });
 
   it('pick the real player when two pre-PIN players share a name', async () => {
     // The original Dcl played; later a fresh browser picked "Dcl" again with nothing found.
     await submitDaily(deps, { playerId: P1, name: 'Dcl', date: DATE, words: words.slice(0, 5) });
     await deps.kv.setJSON(`players/${P2}`, { name: 'Dcl' });
-    const claimed = await claimName(deps, { name: 'dcl' });
+    const { pin } = await me(deps, P1);
+    const claimed = await claimName(deps, { name: 'dcl', code: pin! });
     expect(claimed.playerId).toBe(P1);
     expect((await progressOf(deps, DATE, P1)).found).toHaveLength(5);
+  });
+
+  it('tell the owner when someone lost their code, once a day', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    sent = [];
+    await lostCode(deps, { name: 'castle' });
+    await lostCode(deps, { name: 'Castle' });
+    expect(sent.filter((m) => m.startsWith('Lost code'))).toHaveLength(1);
+    await rejects(lostCode(deps, { name: 'Nobody' }), 404);
+  });
+
+  it('let the owner send a code or give an account back after a takeover', async () => {
+    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
+    expect(await moderateName(deps, { name: 'castle', action: 'send code' })).toMatchObject({ code: pin });
+    await submitDaily(deps, { playerId: P1, name: 'Castle', date: DATE, words: words.slice(0, 3) });
+    deps.random = () => 0.5;
+    const back = await moderateName(deps, { name: 'Castle', action: 'give back' });
+    expect(back.code).toBe('5000');
+    // The old id (and whoever had it) no longer owns anything.
+    expect(await me(deps, P1)).toMatchObject({ name: null });
+    await rejects(claimName(deps, { name: 'Castle', code: pin }), 403);
+    const claimed = await claimName(deps, { name: 'Castle', code: '5000' });
+    expect(claimed.playerId).not.toBe(P1);
+    expect((await progressOf(deps, DATE, claimed.playerId)).found).toHaveLength(3);
+    const board = await getDaily(deps, DATE, claimed.playerId);
+    expect(board.you).toMatchObject({ name: 'Castle', words: 3 });
+    expect(board.total).toBe(1);
   });
 });
 
@@ -416,19 +454,5 @@ describe('streaks on the leaderboard', () => {
     expect(board.top.map((r) => [r.name, r.streak])).toEqual([['Bo', 1], ['Ann', 3]]);
     expect(board.you).toMatchObject({ name: 'Ann', streak: 3 });
     expect(JSON.stringify(board)).not.toContain(P2); // no player ids leak
-  });
-});
-
-describe('word suggestions', () => {
-  it('reach the owner once per player and word, and ignore junk', async () => {
-    await suggestWord(deps, { playerId: P1, word: 'LITES' });
-    await suggestWord(deps, { playerId: P1, word: 'lites' });
-    await suggestWord(deps, { playerId: P2, word: 'lites' });
-    await suggestWord(deps, { playerId: P2, word: 'shitty' }); // offensive: not passed on
-    await rejects(suggestWord(deps, { playerId: P1, word: 'no' }), 400);
-    expect(sent.filter((m) => m.startsWith('Word suggested'))).toEqual([
-      'Word suggested: Someone thinks “lites” should count',
-      'Word suggested: Someone thinks “lites” should count',
-    ]);
   });
 });

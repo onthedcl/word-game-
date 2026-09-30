@@ -4,7 +4,7 @@ import { generateDaily } from '../src/engine/generator';
 import { answerTable } from './tables';
 import { ApiError, deletePlayer, saveName, submitDaily, type Deps, type KV } from './leaderboard';
 import {
-  createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues, reportChat,
+  createLeague, movePlayerInLeagues, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues, reportChat,
   setLeaguePublic,
 } from './leagues';
 
@@ -172,5 +172,20 @@ describe('room chat', () => {
     await postChat(deps, { playerId: A, id, text: 'hi' });
     await deletePlayer(deps, { playerId: B });
     expect((await getChat(deps, id, A)).messages.map((m) => m.text)).toEqual(['hi']);
+  });
+});
+
+describe('giving an account back', () => {
+  it('moves rooms, hosting and chat to the new player id', async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'The Office' });
+    await joinLeague(deps, { playerId: B, id });
+    await postChat(deps, { playerId: A, id, text: 'hi' });
+    const NEW = 'player-new-cccccccccccc';
+    await movePlayerInLeagues(deps, A, NEW);
+    expect((await myLeagues(deps, NEW)).leagues.map((l) => l.id)).toEqual([id]);
+    expect((await myLeagues(deps, A)).leagues).toEqual([]);
+    const chat = (await getChat(deps, id, NEW)).messages;
+    expect(chat.map((m) => m.mine)).toEqual([true]);
+    await setLeaguePublic(deps, { playerId: NEW, id, public: true }); // still the host
   });
 });

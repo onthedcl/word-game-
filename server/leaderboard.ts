@@ -6,7 +6,7 @@ import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../s
 import { cleanName } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
-import { leaveAllLeagues, notePasses } from './leagues';
+import { leaveAllLeagues, movePlayerInLeagues, notePasses } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 
 export const BLITZ_SECONDS = 180;
@@ -337,19 +337,53 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
   return { ok: true, name, pin };
 }
 
+/** Wrong codes allowed per name before claiming is paused for an hour. */
+const CLAIM_TRIES = 5;
+const CLAIM_PAUSE_MS = 60 * 60 * 1000;
+
 /**
- * Continue as an existing player on this device: typing their name is enough.
- * (PINs turned out to lock real players out, so they're no longer checked.)
+ * Continue as an existing player on this device. Needs the name's 4-digit code,
+ * which the player sees on their own device (Leaderboard), so nobody else can
+ * take over a name just by typing it.
  */
 export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (!owner) throw new ApiError(404, 'No player has that name yet');
-  const pin = owner.pin ?? newPin(deps);
-  await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
+  const triesKey = `claim-tries/${name.toLowerCase()}`;
+  const tries = (await deps.kv.get(triesKey, { type: 'json' })) as { count: number; since: number } | null;
+  const fresh = tries && deps.now() - tries.since < CLAIM_PAUSE_MS ? tries : null;
+  if (fresh && fresh.count >= CLAIM_TRIES) throw new ApiError(429, 'Too many tries. Please wait an hour and try again.');
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (!owner.pin || code !== owner.pin) {
+    const count = (fresh?.count ?? 0) + 1;
+    await deps.kv.setJSON(triesKey, { count, since: fresh?.since ?? deps.now() });
+    if (count === CLAIM_TRIES) {
+      deps.notify?.({ title: 'Wrong codes', message: `Someone entered the wrong code for ${name} ${count} times`, tags: ['lock'], urgent: true });
+    }
+    throw new ApiError(403, 'That code doesn’t match');
+  }
+  if (tries) await deps.kv.setJSON(triesKey, null);
   const player = (await deps.kv.get(`players/${owner.playerId}`, { type: 'json' })) as { name: string } | null;
   deps.notify?.({ title: 'Back on another device', message: `${player?.name ?? name} picked up their game on another device`, tags: ['iphone'], event: { kind: 'device', who: player?.name ?? name } });
-  return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin };
+  return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin: owner.pin };
+}
+
+/** A player can't find their code: the owner is told right away and can help with the Moderate workflow. */
+export async function lostCode(deps: Deps, body: Record<string, unknown>) {
+  const name = nameOf(body.name);
+  if (!(await ownerOf(deps, name))) throw new ApiError(404, 'No player has that name yet');
+  const key = `lost-code/${name.toLowerCase()}/${new Date(deps.now()).toISOString().slice(0, 10)}`;
+  if (!(await deps.kv.get(key, { type: 'json' }))) {
+    await deps.kv.setJSON(key, { at: deps.now() });
+    deps.notify?.({
+      title: 'Lost code',
+      message: `Someone playing as “${name}” can’t find their code. If you know it’s really them, run Moderate with action “send code”.`,
+      tags: ['key'],
+      urgent: true,
+    });
+  }
+  return { ok: true };
 }
 
 /** The player's own details (only their device knows the player id). */
@@ -357,8 +391,13 @@ export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
   if (!player) return { name: null, pin: null, streak: await streakOf(deps, id) };
-  const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
-  return { name: player.name, pin: owner?.playerId === id ? owner.pin : null, streak: await streakOf(deps, id) };
+  let owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
+  // Every named player needs a code to move to another device; older names may not have one yet.
+  if (!owner || (owner.playerId === id && !owner.pin)) {
+    owner = { playerId: id, pin: newPin(deps) };
+    await deps.kv.setJSON(nameKey(player.name), owner);
+  }
+  return { name: player.name, pin: owner.playerId === id ? owner.pin : null, streak: await streakOf(deps, id) };
 }
 
 /** Words this player has found on a daily board (to restore progress on another device). */
@@ -489,6 +528,12 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (!owner) throw new ApiError(404, 'No player has that name');
+  if (body.action === 'send code') {
+    const pin = owner.pin ?? newPin(deps);
+    if (!owner.pin) await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
+    return { ok: true, name, code: pin };
+  }
+  if (body.action === 'give back') return giveBack(deps, name, owner.playerId);
   const to = body.to ? nameOf(body.to) : `Player ${String(Math.floor(deps.random() * 9000) + 1000)}`;
   const taken = await ownerOf(deps, to);
   if (taken && taken.playerId !== owner.playerId) throw new ApiError(409, 'That new name is taken');
@@ -544,17 +589,28 @@ export async function funnelFor(deps: Deps, day: string): Promise<Funnel> {
 export const describeFunnel = (f: Funnel) =>
   `📊 ${f.opened} opened → ${f.foundWord} found a word → ${f.onLeaderboard} on the leaderboard · ${f.cameBack} came back from yesterday`;
 
-// ---- word suggestions ----------------------------------------------------------
-
-/** A player thinks a rejected word should count; the owner sees it in the digest. */
-export async function suggestWord(deps: Deps, body: Record<string, unknown>) {
-  const playerId = playerIdOf(body.playerId);
-  const word = typeof body.word === 'string' ? body.word.toLowerCase() : '';
-  if (!/^[a-z]{4,15}$/.test(word)) throw new ApiError(400, 'Bad word');
-  const key = `suggest/${word}/${playerId}`;
-  if (!(await deps.kv.get(key, { type: 'json' })) && cleanName(word)) {
-    await deps.kv.setJSON(key, { at: deps.now() });
-    deps.notify?.({ title: 'Word suggested', message: `Someone thinks “${word}” should count`, tags: ['memo'], event: { kind: 'suggest', word } });
+/**
+ * Owner-only, after a takeover: move a player's scores, streak and rooms to a new
+ * private player id with a new code. Whoever was using the old id (the rightful
+ * player and anyone who took the name) is signed out of it; the rightful player
+ * gets back in with the name and the new code.
+ */
+async function giveBack(deps: Deps, name: string, from: string) {
+  const to = deps.randomId();
+  const move = async (fromKey: string, toKey: string) => {
+    const value = await deps.kv.get(fromKey, { type: 'json' });
+    if (value == null) return;
+    await deps.kv.setJSON(toKey, value);
+    await deps.kv.setJSON(fromKey, null);
+  };
+  for (const prefix of ['daily/', 'funnel/', 'seen-v2/']) {
+    for (const { key } of (await deps.kv.list({ prefix })).blobs.filter((b) => b.key.endsWith(`/${from}`))) {
+      await move(key, key.slice(0, -from.length) + to);
+    }
   }
-  return { ok: true };
+  for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/']) await move(prefix + from, prefix + to);
+  await movePlayerInLeagues(deps, from, to);
+  const pin = newPin(deps);
+  await deps.kv.setJSON(nameKey(name), { playerId: to, pin } satisfies NameOwner);
+  return { ok: true, name, code: pin };
 }

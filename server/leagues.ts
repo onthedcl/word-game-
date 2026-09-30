@@ -150,6 +150,22 @@ async function removeMember(deps: Deps, id: string, playerId: string) {
   await deps.kv.setJSON(mineKey(playerId), (await myLeagueIds(deps, playerId)).filter((l) => l !== id));
 }
 
+/** After a takeover the owner moves a player to a new id: carry their rooms, news and chat along. */
+export async function movePlayerInLeagues(deps: Deps, from: string, to: string) {
+  const swap = (p: string) => (p === from ? to : p);
+  const ids = await myLeagueIds(deps, from);
+  for (const id of ids) {
+    const league = (await deps.kv.get(leagueKey(id), { type: 'json' })) as League | null;
+    if (league) await deps.kv.setJSON(leagueKey(id), { ...league, owner: swap(league.owner), members: league.members.map(swap) });
+    const news = (await deps.kv.get(newsKey(id), { type: 'json' })) as NewsItem[] | null;
+    if (news) await deps.kv.setJSON(newsKey(id), news.map((n) => (n.about ? { ...n, about: n.about.map(swap) } : n)));
+    const chat = (await deps.kv.get(chatKey(id), { type: 'json' })) as ChatMessage[] | null;
+    if (chat) await deps.kv.setJSON(chatKey(id), chat.map((m) => ({ ...m, from: swap(m.from) })));
+  }
+  await deps.kv.setJSON(mineKey(to), ids);
+  await deps.kv.setJSON(mineKey(from), null);
+}
+
 /** When a player deletes their data: leave every league. */
 export async function leaveAllLeagues(deps: Deps, playerId: string) {
   for (const id of await myLeagueIds(deps, playerId)) {
