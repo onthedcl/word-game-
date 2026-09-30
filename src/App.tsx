@@ -5,6 +5,7 @@ import { Leaderboard, NameForm } from './components/Leaderboard';
 import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type LeagueSummary, type Streak } from './api';
 import { isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
+import { SetupAccount } from './components/SetupAccount';
 import { Podium } from './components/Podium';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
@@ -32,7 +33,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
+type Dialog = null | 'welcome' | 'rules' | 'setup' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -201,7 +202,7 @@ export default function App() {
     greeted.current = true;
     api.hello(me, location.hash === '#blitz' ? 'blitz' : 'daily', name, dateKeyFor()).catch(() => {});
   }, [online, me, name]);
-  const [pin, setPin] = useStoredState<string>(PIN_KEY, '');
+  const [, setPin] = useStoredState<string>(PIN_KEY, '');
   const saveName = useCallback(
     async (n: string) => {
       if (!looksLikeName(n)) throw new Error('Please use 2–16 letters or numbers');
@@ -308,10 +309,24 @@ export default function App() {
   }, [online, name, me, setName, setPin]);
   // Keep the address carrying this player, so "Add to Home Screen" keeps their progress.
   useEffect(() => syncCarryParam(me, !!name), [me, name]);
-  // Keep this device's code current (Leaderboard → my code), e.g. for names picked before codes existed.
+  // Keep this device's code current (Leaderboard → my code). Players who haven't chosen their
+  // own code yet (every code was reset to player-chosen ones) are asked to set up their account.
+  const [needsSetup, setNeedsSetup] = useState(false);
   useEffect(() => {
-    if (online && name) api.me(me).then((r) => r.pin && setPin(r.pin), () => {});
+    if (online && name) {
+      api.me(me).then((r) => {
+        if (r.pin) setPin(r.pin);
+        setNeedsSetup(!!r.name && r.codeChosen === false);
+      }, () => {});
+    }
   }, [online, name, me, setPin]);
+  // Once per visit, when nothing else is open.
+  const setupAsked = useRef(false);
+  useEffect(() => {
+    if (!needsSetup || dialog || setupAsked.current) return;
+    setupAsked.current = true;
+    setDialog('setup');
+  }, [needsSetup, dialog]);
 
   // The first visit after a day closes: show where this player finished yesterday (once).
   // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
@@ -446,22 +461,16 @@ export default function App() {
     return Math.max(alive(serverStreak), local);
   }, [serverStreak, dailyFound.found.length]);
 
-  // Once a day, on opening: a hello with the player's streak and a pep talk. Players who haven't
-  // seen their code yet get that first (once), since it's how they play on another device.
+  // Once a day, on opening: a hello with the player's streak and a pep talk.
   useEffect(() => {
     if (!streakChecked || dialog || notice || mode !== 'daily') return;
-    if (name && pin && !readStored('hexicon:code-intro', false)) {
-      writeStored('hexicon:code-intro', true);
-      setNotice(`🔑 Your code is ${pin}. Type your name and this code to play on another device (Leaderboard → my code).`);
-      return;
-    }
     const today = dateKeyFor();
     const key = `hexicon:hello:${today}`;
     if (streak < 1 || readStored(key, false)) return;
     writeStored(key, true);
     const playedToday = readStored<{ found: string[] }>(dailyKey(dailyBoardId(today)), { found: [] }).found.length > 0;
     setNotice(streakGreeting(streak, playedToday, Math.random()));
-  }, [streakChecked, dialog, notice, mode, name, pin, streak]);
+  }, [streakChecked, dialog, notice, mode, streak]);
 
   // A new streak animal: celebrate it once, the day it's reached.
   useEffect(() => {
@@ -1022,6 +1031,26 @@ export default function App() {
             writeStored('hexicon:asked-name', true);
             setDialog('rules');
           }}
+        />
+      </Modal>
+
+      <Modal open={dialog === 'setup'} title="Set up your account" onClose={closeDialog}>
+        <SetupAccount
+          playerId={me}
+          name={name}
+          onName={async (n) => {
+            await saveName(n);
+            if (boardOpen && dailyFound.found.length) {
+              await api.submitDaily({ playerId: me, name: n, date: boardId, words: submission(dailyFound) }).catch(() => {});
+            }
+          }}
+          onDone={(code) => {
+            setPin(code);
+            setNeedsSetup(false);
+            closeDialog();
+            setNotice(`All set! Your code is ${code}`);
+          }}
+          onLater={closeDialog}
         />
       </Modal>
 

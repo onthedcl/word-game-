@@ -323,12 +323,22 @@ export async function getBlitz(deps: Deps, playerId: string | null) {
 
 // ---- names --------------------------------------------------------------------
 
-// Names work like a login: each belongs to one player, and typing it on another
-// device picks up where they left off. (The PIN is still stored but not checked.)
+// Names work like a login: each belongs to one player, and their name plus 4-digit code
+// picks up where they left off on another device.
 interface NameOwner {
   playerId: string;
   pin: string | null;
+  /** The player picked this code themselves. Until then they're asked to, once they open the game. */
+  chosen?: boolean;
+  /** The owner gave this code out (Moderate workflow), so it works even though the player didn't pick it. */
+  issued?: boolean;
 }
+
+/**
+ * Only codes the player chose (or the owner handed out) let someone continue as a name.
+ * The codes made up automatically before players could choose were reset this way.
+ */
+const codeWorks = (owner: NameOwner) => !!owner.pin && (!!owner.chosen || !!owner.issued);
 
 const nameKey = (name: string) => `names/${name.toLowerCase()}`;
 const newPin = (deps: Deps) => String(Math.floor(deps.random() * 10000)).padStart(4, '0');
@@ -363,8 +373,12 @@ export async function saveName(deps: Deps, body: Record<string, unknown>) {
   const owner = await ownerOf(deps, name);
   if (owner && owner.playerId !== playerId) throw new ApiError(409, 'That name is taken');
   const prev = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
-  const pin = owner?.pin ?? newPin(deps);
-  await deps.kv.setJSON(nameKey(name), { playerId, pin } satisfies NameOwner);
+  // A new name keeps the player's code (and whether they chose it).
+  const old = prev ? ((await deps.kv.get(nameKey(prev.name), { type: 'json' })) as NameOwner | null) : null;
+  const record: NameOwner =
+    owner?.pin ? { ...owner, playerId } : old?.playerId === playerId && old.pin ? { ...old } : { playerId, pin: newPin(deps) };
+  const pin = record.pin;
+  await deps.kv.setJSON(nameKey(name), record);
   if (prev && prev.name.toLowerCase() !== name.toLowerCase()) await deps.kv.setJSON(nameKey(prev.name), null);
   await deps.kv.setJSON(`players/${playerId}`, { name });
   if (!prev) deps.notify?.({ title: 'Joined the leaderboard', message: `${name} picked their leaderboard name`, tags: ['trophy'], event: { kind: 'joined', who: name } });
@@ -391,8 +405,11 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const tries = (await deps.kv.get(triesKey, { type: 'json' })) as { count: number; since: number } | null;
   const fresh = tries && deps.now() - tries.since < CLAIM_PAUSE_MS ? tries : null;
   if (fresh && fresh.count >= CLAIM_TRIES) throw new ApiError(429, 'Too many tries. Please wait an hour and try again.');
+  if (!codeWorks(owner)) {
+    throw new ApiError(403, `“${name}” hasn’t set up a code yet. Open the game where you usually play to choose one.`);
+  }
   const code = typeof body.code === 'string' ? body.code.trim() : '';
-  if (!owner.pin || code !== owner.pin) {
+  if (code !== owner.pin) {
     const count = (fresh?.count ?? 0) + 1;
     await deps.kv.setJSON(triesKey, { count, since: fresh?.since ?? deps.now() });
     if (count === CLAIM_TRIES) {
@@ -423,7 +440,7 @@ export async function setCode(deps: Deps, body: Record<string, unknown>) {
   if (!player) throw new ApiError(403, 'Pick a leaderboard name first');
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
   if (owner && owner.playerId !== playerId) throw new ApiError(403, 'That name belongs to another player');
-  await deps.kv.setJSON(nameKey(player.name), { playerId, pin: code } satisfies NameOwner);
+  await deps.kv.setJSON(nameKey(player.name), { playerId, pin: code, chosen: true } satisfies NameOwner);
   return { ok: true, pin: code };
 }
 
@@ -465,8 +482,12 @@ async function ensureCode(deps: Deps, playerId: string, name: string): Promise<s
 export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
-  if (!player) return { name: null, pin: null, streak: await streakOf(deps, id) };
-  return { name: player.name, pin: await ensureCode(deps, id, player.name), streak: await streakOf(deps, id) };
+  if (!player) return { name: null, pin: null, codeChosen: false, streak: await streakOf(deps, id) };
+  const pin = await ensureCode(deps, id, player.name);
+  const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
+  // Players who haven't picked their own code yet are asked to, the next time they open the game.
+  const codeChosen = !!pin && !!owner?.chosen;
+  return { name: player.name, pin, codeChosen, streak: await streakOf(deps, id) };
 }
 
 /** Words this player has found on a daily board (to restore progress on another device). */
@@ -604,7 +625,8 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   if (body.code && !chosen) throw new ApiError(400, 'A code is 4 digits');
   if (body.action === 'send code') {
     const pin = chosen ?? owner.pin ?? newPin(deps);
-    if (pin !== owner.pin) await deps.kv.setJSON(nameKey(name), { playerId: owner.playerId, pin } satisfies NameOwner);
+    // A code the owner hands out works for claiming, even if it was one made up automatically.
+    await deps.kv.setJSON(nameKey(name), { ...owner, pin, issued: true, chosen: pin === owner.pin && !!owner.chosen } satisfies NameOwner);
     return { ok: true, name, code: pin };
   }
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
@@ -628,7 +650,7 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   if (blitz) await deps.kv.setJSON(`blitz-best/${id}`, { ...blitz, name: to });
   await deps.kv.setJSON(`players/${id}`, { name: to });
   await deps.kv.setJSON(nameKey(name), null);
-  await deps.kv.setJSON(nameKey(to), { playerId: id, pin: owner.pin ?? newPin(deps) } satisfies NameOwner);
+  await deps.kv.setJSON(nameKey(to), { ...owner, playerId: id, pin: owner.pin ?? newPin(deps) } satisfies NameOwner);
   return { ok: true, name: to };
 }
 
@@ -693,7 +715,7 @@ async function giveBack(deps: Deps, name: string, from: string, code: string | n
   for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/']) await move(prefix + from, prefix + to);
   await movePlayerInLeagues(deps, from, to);
   const pin = code ?? newPin(deps);
-  await deps.kv.setJSON(nameKey(name), { playerId: to, pin } satisfies NameOwner);
+  await deps.kv.setJSON(nameKey(name), { playerId: to, pin, issued: true } satisfies NameOwner);
   return { ok: true, name, code: pin };
 }
 

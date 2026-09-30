@@ -75,8 +75,8 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
     return (
       <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, code)); }}>
         <p className="text-sm">
-          <b>“{taken}”</b> is already on the leaderboard. If that’s you, enter your 4-digit code. It’s on your
-          other device under <b>Leaderboard → my code</b>.
+          <b>“{taken}”</b> is already on the leaderboard. If that’s you, enter the 4-digit code you chose. You can
+          also see it on your other device under <b>Leaderboard → my code</b>.
         </p>
         <div className="flex gap-2">
           <input

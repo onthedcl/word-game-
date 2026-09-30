@@ -253,33 +253,55 @@ describe('names as logins', () => {
     expect(await me(deps, P1)).toMatchObject({ name: 'Castle', pin: r.pin });
   });
 
-  it('let a player continue on another device with their name and code, and restore their words', async () => {
-    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
+  it('let a player continue on another device with their name and chosen code, and restore their words', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    await setCode(deps, { playerId: P1, code: '4719' });
     const [a, b] = puzzle.answers;
     await submitDaily(deps, { playerId: P1, name: 'Castle', date: DATE, words: [{ w: a.word, p: a.path }, b.word] });
-    const claimed = await claimName(deps, { name: 'castle', code: pin });
-    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle', pin });
+    const claimed = await claimName(deps, { name: 'castle', code: '4719' });
+    expect(claimed).toMatchObject({ playerId: P1, name: 'Castle', pin: '4719' });
     const { found } = await progressOf(deps, DATE, claimed.playerId);
     expect(found).toEqual([{ w: a.word, p: a.path }, b.word]);
-    await rejects(claimName(deps, { name: 'Nobody', code: pin }), 404);
+    await rejects(claimName(deps, { name: 'Nobody', code: '4719' }), 404);
+  });
+
+  it('reset: codes made up automatically stop working, and the player is asked to choose one', async () => {
+    const { pin } = await saveName(deps, { playerId: P1, name: 'Castle' });
+    expect(await me(deps, P1)).toMatchObject({ pin, codeChosen: false });
+    await rejects(claimName(deps, { name: 'Castle', code: pin }), 403);
+    await setCode(deps, { playerId: P1, code: '4719' });
+    expect(await me(deps, P1)).toMatchObject({ pin: '4719', codeChosen: true });
+    expect((await claimName(deps, { name: 'Castle', code: '4719' })).playerId).toBe(P1);
+  });
+
+  it('keep a chosen code when the player changes their name', async () => {
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    await setCode(deps, { playerId: P1, code: '4719' });
+    await saveName(deps, { playerId: P1, name: 'Tower' });
+    expect(await me(deps, P1)).toMatchObject({ name: 'Tower', pin: '4719', codeChosen: true });
+    expect((await claimName(deps, { name: 'tower', code: '4719' })).playerId).toBe(P1);
+    await rejects(claimName(deps, { name: 'Castle', code: '4719' }), 404);
   });
 
   it('refuse a claim without the right code, and pause after five wrong tries', async () => {
-    await saveName(deps, { playerId: P1, name: 'Castle' }); // code 0000 in tests
+    await saveName(deps, { playerId: P1, name: 'Castle' });
+    await setCode(deps, { playerId: P1, code: '4719' });
     await rejects(claimName(deps, { name: 'Castle' }), 403);
     for (let i = 0; i < 4; i++) await rejects(claimName(deps, { name: 'Castle', code: '1234' }), 403);
     expect(sent.some((m) => m.startsWith('Wrong codes'))).toBe(true);
-    await rejects(claimName(deps, { name: 'Castle', code: '0000' }), 429);
+    await rejects(claimName(deps, { name: 'Castle', code: '4719' }), 429);
     clock += 61 * 60 * 1000;
-    expect((await claimName(deps, { name: 'Castle', code: '0000' })).playerId).toBe(P1);
+    expect((await claimName(deps, { name: 'Castle', code: '4719' })).playerId).toBe(P1);
   });
 
-  it('give names from before codes a code the player can see on their own device', async () => {
+  it('give names from before codes a code, and a code the owner sends works', async () => {
     await deps.kv.setJSON(`players/${P1}`, { name: 'Dcl' });
     await rejects(saveName(deps, { playerId: P2, name: 'DCL' }), 409);
-    await rejects(claimName(deps, { name: 'Dcl', code: '0000' }), 403);
     const { pin } = await me(deps, P1);
     expect(pin).toMatch(/^\d{4}$/);
+    await rejects(claimName(deps, { name: 'dcl', code: pin! }), 403);
+    const { code } = await moderateName(deps, { name: 'Dcl', action: 'send code' });
+    expect(code).toBe(pin);
     expect((await claimName(deps, { name: 'dcl', code: pin! })).playerId).toBe(P1);
   });
 
@@ -287,8 +309,8 @@ describe('names as logins', () => {
     // The original Dcl played; later a fresh browser picked "Dcl" again with nothing found.
     await submitDaily(deps, { playerId: P1, name: 'Dcl', date: DATE, words: words.slice(0, 5) });
     await deps.kv.setJSON(`players/${P2}`, { name: 'Dcl' });
-    const { pin } = await me(deps, P1);
-    const claimed = await claimName(deps, { name: 'dcl', code: pin! });
+    await setCode(deps, { playerId: P1, code: '4719' });
+    const claimed = await claimName(deps, { name: 'dcl', code: '4719' });
     expect(claimed.playerId).toBe(P1);
     expect((await progressOf(deps, DATE, P1)).found).toHaveLength(5);
   });

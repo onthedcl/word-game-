@@ -119,7 +119,7 @@ export const api = {
   claim: (name: string, code: string) => call<{ ok: true; playerId: string; name: string; pin: string }>('POST', '/api/claim', { name, code }),
   lostCode: (name: string, note = '') => call<{ ok: true }>('POST', '/api/lost-code', { name, note }),
   setCode: (playerId: string, code: string) => call<{ ok: true; pin: string }>('POST', '/api/code', { playerId, code }),
-  me: (player: string) => call<{ name: string | null; pin: string | null; streak?: Streak | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
+  me: (player: string) => call<{ name: string | null; pin: string | null; codeChosen?: boolean; streak?: Streak | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
