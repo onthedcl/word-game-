@@ -230,6 +230,8 @@ export function Leaderboard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [code, setCode] = useState(() => readStored(PIN_KEY, ''));
+  const [newCode, setNewCode] = useState('');
+  const [codeError, setCodeError] = useState('');
   const chatSeen = useCallback((at: number) => {
     if (scope !== 'everyone' && scope !== 'new') onChatSeen(scope, at);
   }, [scope, onChatSeen]);
@@ -287,13 +289,41 @@ export function Leaderboard({
           {' · '}
           <button type="button" className="underline" onClick={() => setConfirmDelete(true)}>delete my data</button>
           {showCode && (
-            <p className="mt-2 rounded-xl bg-bg p-3 text-ink">
+            <div className="mt-2 rounded-xl bg-bg p-3 text-ink">
               {code ? (
-                <>Your code is <b className="tracking-widest">{code}</b>. To play on another device, type your name there, then this code. Keep it to yourself.</>
+                <p>Your code is <b className="tracking-widest">{code}</b>. To play on another device, type your name there, then this code. Keep it to yourself.</p>
               ) : (
-                <>Getting your code… (you need to be online)</>
+                <p>Getting your code… (you need to be online)</p>
               )}
-            </p>
+              {code && (
+                <form
+                  className="mt-2 flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setCodeError('');
+                    api.setCode(playerId, newCode).then(
+                      (r) => { writeStored(PIN_KEY, r.pin); setCode(r.pin); setNewCode(''); onNotice('Code changed'); },
+                      (err) => setCodeError(err instanceof Error ? err.message : 'Could not change your code'),
+                    );
+                  }}
+                >
+                  <label htmlFor="new-code" className="text-sm text-muted">Change it to</label>
+                  <input
+                    id="new-code"
+                    value={newCode}
+                    onChange={(e) => setNewCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="4 digits"
+                    className="w-24 rounded-lg border border-line bg-surface px-3 py-1.5 text-base tracking-widest"
+                  />
+                  <button type="submit" disabled={newCode.length !== 4} className="rounded-lg bg-ink px-3 py-1.5 text-sm font-semibold text-bg disabled:opacity-50">
+                    Save
+                  </button>
+                  {codeError && <p className="w-full text-sm text-bad">{codeError}</p>}
+                </form>
+              )}
+            </div>
           )}
           {confirmDelete && (
             <div className="mt-2 rounded-xl bg-bg p-3 text-ink">

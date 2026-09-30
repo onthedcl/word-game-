@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, lostCode, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, lostCode, setCode, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -299,6 +299,16 @@ describe('names as logins', () => {
     await lostCode(deps, { name: 'castle' });
     expect(sent.filter((m) => m.startsWith('Lost code'))).toHaveLength(1);
     await rejects(lostCode(deps, { name: 'Nobody' }), 404);
+  });
+
+  it('let a player pick their own code, but not an easy one', async () => {
+    await saveName(deps, { playerId: P1, name: 'Lisa' });
+    await rejects(setCode(deps, { playerId: P1, code: '12' }), 400);
+    for (const easy of ['1111', '1234', '9876']) await rejects(setCode(deps, { playerId: P1, code: easy }), 400);
+    await rejects(setCode(deps, { playerId: P2, code: '4719' }), 403); // no name yet
+    expect(await setCode(deps, { playerId: P1, code: '4719' })).toMatchObject({ pin: '4719' });
+    expect(await me(deps, P1)).toMatchObject({ pin: '4719' });
+    expect((await claimName(deps, { name: 'lisa', code: '4719' })).playerId).toBe(P1);
   });
 
   it('let the owner choose the code', async () => {

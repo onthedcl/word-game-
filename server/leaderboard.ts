@@ -406,6 +406,27 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
   return { ok: true, playerId: owner.playerId, name: player?.name ?? name, pin: owner.pin };
 }
 
+/** Too easy to guess: all one digit, or a straight run like 1234 / 9876. */
+function guessable(code: string): boolean {
+  const d = [...code].map(Number);
+  const steps = d.slice(1).map((x, i) => x - d[i]);
+  return steps.every((s) => s === 0) || steps.every((s) => s === 1) || steps.every((s) => s === -1);
+}
+
+/** A player picks their own 4-digit code (only their device knows their player id). */
+export async function setCode(deps: Deps, body: Record<string, unknown>) {
+  const playerId = playerIdOf(body.playerId);
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (!/^\d{4}$/.test(code)) throw new ApiError(400, 'Your code needs to be 4 digits');
+  if (guessable(code)) throw new ApiError(400, 'That one’s too easy to guess. Try another');
+  const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
+  if (!player) throw new ApiError(403, 'Pick a leaderboard name first');
+  const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
+  if (owner && owner.playerId !== playerId) throw new ApiError(403, 'That name belongs to another player');
+  await deps.kv.setJSON(nameKey(player.name), { playerId, pin: code } satisfies NameOwner);
+  return { ok: true, pin: code };
+}
+
 /** A player can't find their code: the owner is told right away and can help with the Moderate workflow. */
 export async function lostCode(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
