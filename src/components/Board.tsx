@@ -13,6 +13,8 @@ interface Props {
   pulse?: { id: number; ids: readonly number[]; kind: 'good' | 'bad' } | null;
   shakeKey: number;
   disabled?: boolean;
+  /** How many 60° turns the player has given the board (a hexagon looks the same every 60°). */
+  turns?: number;
   /** Pointer pressed on a tile. */
   onPress(id: number): void;
   /** Pointer dragged onto a tile while pressed. */
@@ -20,27 +22,32 @@ interface Props {
   onRelease(): void;
 }
 
-const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse }: {
-  id: number; letter: string; premium: keyof typeof PREMIUMS | null; selected: boolean; flash: boolean; pulse: 'good' | 'bad' | null;
+const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse, deg }: {
+  id: number; letter: string; premium: keyof typeof PREMIUMS | null; selected: boolean; flash: boolean; pulse: 'good' | 'bad' | null; deg: number;
 }) {
   const { x, y } = CENTERS[id];
   const key = id === CENTER;
   const cls = ['tile', key && 'key', premium && `prem-${premium}`, selected && 'selected', flash && 'flash', pulse && `pulse-${pulse}`]
     .filter(Boolean).join(' ');
   const label = `${letter.toUpperCase()}${premium ? `, ${PREMIUMS[premium].name}` : ''}${key ? ', key tile' : ''}`;
+  // Each tile turns back against the board's turn, so letters stay upright (a hexagon looks the same).
+  const upright = { transform: `rotate(${-deg}deg)`, transformOrigin: `${x}px ${y}px`, transformBox: 'view-box' } as const;
   return (
     <g className={cls} role="gridcell" aria-label={label} aria-selected={selected}>
+     <g className="tile-upright" style={upright}>
       {key && <polygon className="key-halo" points={hexCorners(x, y, SIZE + 3).map((p) => p.join(',')).join(' ')} />}
       <polygon points={hexCorners(x, y, SIZE - 3).map((p) => p.join(',')).join(' ')} />
       {key && <polygon className="key-shine" points={hexCorners(x, y, SIZE - 8).map((p) => p.join(',')).join(' ')} />}
       <text x={x} y={y + 2} className="letter">{letter.toUpperCase()}</text>
       <text x={x + 19} y={y + 25} className="value">{LETTER_VALUES[letter]}</text>
       {(premium || key) && <text x={x} y={y - 26} className="badge">{key ? 'KEY' : premium}</text>}
+     </g>
     </g>
   );
 });
 
-export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPress, onDrag, onRelease }: Props) {
+export function Board({ board, path, flashPath, pulse, shakeKey, disabled, turns = 0, onPress, onDrag, onRelease }: Props) {
+  const deg = turns * 60;
   const svg = useRef<SVGSVGElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -65,7 +72,10 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
   function tileAt(e: React.PointerEvent, radius: number): number | null {
     const ctm = svg.current?.getScreenCTM();
     if (!ctm) return null;
-    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const raw = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    // Undo the board's turn so the point lines up with the tiles' own positions.
+    const a = (-deg * Math.PI) / 180;
+    const pt = { x: raw.x * Math.cos(a) - raw.y * Math.sin(a), y: raw.x * Math.sin(a) + raw.y * Math.cos(a) };
     let best = -1;
     let bestDist = Infinity;
     CENTERS.forEach((c, id) => {
@@ -113,7 +123,7 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
           <stop offset="100%" stopColor="#e9a912" />
         </linearGradient>
       </defs>
-      <g>
+      <g className="board-turn" style={{ transform: `rotate(${deg}deg)`, transformOrigin: '0px 0px', transformBox: 'view-box' }}>
         {/* The key tile is drawn last so its glow sits on top of its neighbours. */}
         {[...TILES].sort((a, b) => Number(a.id === CENTER) - Number(b.id === CENTER)).map(({ id }) => (
           <Tile
@@ -125,11 +135,12 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, onPre
             premium={board.premiums[id]}
             selected={selected.has(id)}
             flash={flashing.has(id)}
+            deg={deg}
           />
         ))}
+        <polyline className="trace" points={points(path)} />
+        {flashPath && <polyline className="trace flash-line" points={points(flashPath)} />}
       </g>
-      <polyline className="trace" points={points(path)} />
-      {flashPath && <polyline className="trace flash-line" points={points(flashPath)} />}
     </svg>
     </div>
   );

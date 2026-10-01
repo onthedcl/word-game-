@@ -9,6 +9,9 @@ import { scorePath, TOP_RANK } from '../engine/scoring';
 import type { Puzzle } from '../engine/generator';
 import { haptics } from '../haptics';
 import { complimentFor } from '../compliments';
+import { readStored, writeStored } from '../storage';
+
+const ROTATION_KEY = 'hexicon:board-turns';
 
 interface Props {
   puzzle: Puzzle;
@@ -40,6 +43,13 @@ export function PuzzleView({
   const { score, rank, complete } = progress(puzzle, answers, found, routes);
 
   // Input: either a traced path or typed letters (with a route highlighted for them).
+  // How far the player has turned the board, kept on this device. Counting up (not wrapping
+  // at 6) keeps every turn going the same way.
+  const [turns, setTurnsState] = useState(() => readStored(ROTATION_KEY, 0) % 6);
+  const setTurns = (t: number) => {
+    setTurnsState(t);
+    writeStored(ROTATION_KEY, t % 6);
+  };
   const [path, setPathState] = useState<number[]>([]);
   const [typed, setTypedState] = useState('');
   const pathRef = useRef<number[]>([]);
@@ -303,7 +313,21 @@ export function PuzzleView({
             onPress={onPress}
             onDrag={onDrag}
             onRelease={onRelease}
+            turns={turns}
           />
+          {/* Turn the board 60° (a hexagon looks the same at each step) to see the letters afresh. */}
+          <button
+            type="button"
+            onClick={() => setTurns(turns + 1)}
+            aria-label="Rotate the board"
+            title="Rotate the board"
+            className="absolute right-0 bottom-0 z-10 grid h-11 w-11 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+              <path d="M20 4v5h-5" />
+            </svg>
+          </button>
           {banner && (
             <div key={banner.id} className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center" role="status">
               <div className="animate-banner rounded-2xl bg-key px-8 py-4 text-center text-key-ink shadow-2xl">
