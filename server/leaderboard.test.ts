@@ -526,6 +526,30 @@ describe('owner tools', () => {
     expect((await getDaily(deps, DATE, P1)).total).toBe(2);
   });
 
+  it('check play: flag a player who pastes a solver list, and stay quiet about normal play', async () => {
+    const answers = words.filter((w) => !answerTable(puzzle).words[w][2]);
+    // A normal player: a handful of words, in no particular order, a few minutes apart, with misses.
+    const normal = [answers[7], answers[2], answers[11], answers[0], answers[5]];
+    for (const [i, w] of normal.entries()) {
+      clock += 3 * 60000;
+      await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: normal.slice(0, i + 1), misses: i * 2 });
+    }
+    // The suspect: the whole board, alphabetically, in one go, never a miss.
+    clock += 60000;
+    const sorted = [...answers].sort();
+    await submitDaily(deps, { playerId: P2, name: 'Fart', date: DATE, words: sorted.slice(0, 20), misses: 0 });
+    clock += 30000;
+    await submitDaily(deps, { playerId: P2, name: 'Fart', date: DATE, words: sorted, misses: 0 });
+    const { report } = await moderateName(deps, { name: 'fart', action: 'check play' });
+    expect(report).toContain('alphabetical order');
+    expect(report).toContain('within one minute');
+    expect(report).toContain('almost never enters a wrong word');
+    expect(report).not.toContain(P2);
+    const ann = (await moderateName(deps, { name: 'Ann', action: 'check play' })).report;
+    expect(ann).toContain('Nothing unusual found.');
+    expect(ann).toContain('Tries that didn’t count'.replace('’', "'"));
+  });
+
   it('look a player up without ever including ids or addresses', async () => {
     await submitDaily(deps, { playerId: P2, name: 'Whyyy', date: DATE, words: words.slice(0, 3) });
     await reportName(deps, { playerId: P1, name: 'Whyyy' });

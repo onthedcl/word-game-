@@ -41,6 +41,8 @@ interface Progress {
 }
 
 /** What the leaderboard server scores: each word with its traced route (when known). */
+/** Where this device counts the tries on a board that weren't accepted. */
+const missesKey = (boardId: string) => `hexicon:misses:${boardId}`;
 const submission = (p: Progress) => p.found.map((w) => (p.routes?.[w] ? { w, p: p.routes[w] } : w));
 
 type Posted =
@@ -490,7 +492,7 @@ export default function App() {
     const key = `${name}|${found.length}`;
     if (!online || !name || !boardOpen || !found.length || posted.current === key) return;
     const t = setTimeout(() => {
-      api.submitDaily({ playerId: me, name, date: boardId, words: submission(dailyFound) }).then(
+      api.submitDaily({ playerId: me, name, date: boardId, words: submission(dailyFound), misses: readStored(missesKey(boardId), 0) }).then(
         (b) => {
           posted.current = key;
           noteStanding(b);
@@ -561,9 +563,14 @@ export default function App() {
       if (ok) {
         s.lastFound = Date.now();
         s.wrongStreak = 0;
-      } else if (++s.wrongStreak >= STUCK_WRONG_STREAK) triggerNudge();
+      } else {
+        // Tries that didn't count go with the next score update (the owner's play check uses them).
+        const key = missesKey(boardId);
+        writeStored(key, readStored(key, 0) + 1);
+        if (++s.wrongStreak >= STUCK_WRONG_STREAK) triggerNudge();
+      }
     },
-    [triggerNudge],
+    [triggerNudge, boardId],
   );
   useEffect(() => {
     if (mode !== 'daily' || nudgeUsed()) return;

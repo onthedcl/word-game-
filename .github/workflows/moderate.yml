@@ -10,6 +10,8 @@ name: Moderate
 #   give the rightful player the new code and they type their name, then the code.
 # - look up: what the game knows about a player (first day, scores, streak, rooms, recent chat,
 #   reports). Sent to your phone, never printed here. Never includes IP addresses.
+# - check play: is someone cheating? Compares their last few boards with everyone else's
+#   (words nobody else found, the order words came in, pace, wrong tries) and flags anything odd.
 # - block / unblock: a blocked player disappears from everyone else's leaderboards, room chat
 #   and the public room list. They can still play and still see themselves, so nothing tips them off.
 on:
@@ -21,7 +23,7 @@ on:
       action:
         description: 'What to do'
         type: choice
-        options: [rename, look up, block, unblock, send code, give back]
+        options: [rename, look up, check play, block, unblock, send code, give back]
         default: rename
       new_name:
         description: 'New name (rename only, optional)'
@@ -59,8 +61,8 @@ jobs:
             echo "HTTP $status"; [ "$status" = 200 ]; exit
           fi
           player=$(jq -r .name <<<"$json")
-          if [ "$ACTION" = "look up" ]; then
-            title="Player: $player"; msg=$(jq -r .report <<<"$json")
+          if [ "$ACTION" = "look up" ] || [ "$ACTION" = "check play" ]; then
+            title="$([ "$ACTION" = "look up" ] && echo Player || echo "Play check"): $player"; msg=$(jq -r .report <<<"$json")
           else
             code=$(jq -r .code <<<"$json"); echo "::add-mask::$code"
             title="Player code"

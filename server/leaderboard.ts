@@ -42,6 +42,8 @@ export interface Entry {
   updatedAt: number;
   /** The words found (with traced routes), so progress can follow the player to another device. */
   found?: Submitted[];
+  /** Tries that weren't accepted (not a word, too short, already found), as counted by the game. */
+  misses?: number;
 }
 
 export class ApiError extends Error {
@@ -67,6 +69,8 @@ function nameOf(value: unknown): string {
 interface Submitted {
   word: string;
   route: number[] | null;
+  /** When the server first heard of this word (for the owner's play check). */
+  at?: number;
 }
 
 function wordsOf(value: unknown): Submitted[] {
@@ -255,9 +259,14 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
     });
   }
   // Progress only moves forward; a stale device can't lower your score.
-  const found = mergeFound(prev?.found, submitted.filter((s) => Object.hasOwn(table.words, s.word)));
-  if (!prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name || found.length > (prev.found?.length ?? 0)) {
-    await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found });
+  const found = mergeFound(prev?.found, submitted.filter((s) => Object.hasOwn(table.words, s.word)), deps.now());
+  const sentMisses = Number.isInteger(body.misses) && (body.misses as number) >= 0 ? Math.min(body.misses as number, 100000) : 0;
+  const misses = Math.max(prev?.misses ?? 0, sentMisses);
+  if (
+    !prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name ||
+    found.length > (prev.found?.length ?? 0) || misses > (prev.misses ?? 0)
+  ) {
+    await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found, misses });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });
   await notePasses(deps, playerId, name, date, prev?.score ?? 0, Math.max(entry.score, prev?.score ?? 0));
@@ -498,9 +507,9 @@ export async function progressOf(deps: Deps, date: string | null, playerId: stri
   return { found: (entry?.found ?? []).map((s) => (s.route ? { w: s.word, p: s.route } : s.word)) };
 }
 
-function mergeFound(prev: Submitted[] | undefined, next: Submitted[]): Submitted[] {
+function mergeFound(prev: Submitted[] | undefined, next: Submitted[], now: number): Submitted[] {
   const out = new Map((prev ?? []).map((s) => [s.word, s]));
-  for (const s of next) if (!out.has(s.word)) out.set(s.word, s);
+  for (const s of next) if (!out.has(s.word)) out.set(s.word, { ...s, at: now });
   return [...out.values()];
 }
 
@@ -631,6 +640,7 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   }
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
   if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
+  if (body.action === 'check play') return { ok: true, name, report: await checkPlay(deps, name, owner.playerId) };
   if (body.action === 'block' || body.action === 'unblock') {
     const blocked = await blockedPlayers(deps.kv);
     if (body.action === 'block') blocked.add(owner.playerId);
@@ -740,5 +750,96 @@ async function lookUp(deps: Deps, name: string, playerId: string): Promise<strin
   lines.push(...(await roomsSummary(deps, playerId)));
   const reports = (await deps.kv.list({ prefix: `reports/${name.toLowerCase()}/` })).blobs.length;
   lines.push(`Reported: ${reports} ${reports === 1 ? 'time' : 'times'} · Blocked: ${(await blockedPlayers(deps.kv)).has(playerId) ? 'yes' : 'no'}`);
+  return lines.join('\n');
+}
+
+/** "4:05pm" in Pacific time (the game's day ends at midnight Pacific). */
+const pacificTime = (at: number) =>
+  new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }).format(at).replace(' ', '').toLowerCase();
+
+const median = (xs: number[]) => {
+  if (!xs.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+
+/**
+ * Owner-only: how a player's recent boards compare with everyone else's, with anything
+ * unusual flagged. Signs, not proof: a strong player can trip one; a cheater usually trips several.
+ */
+async function checkPlay(deps: Deps, name: string, playerId: string): Promise<string> {
+  const boards = (await deps.kv.list({ prefix: 'daily/' })).blobs
+    .filter((b) => b.key.endsWith(`/${playerId}`))
+    .map((b) => b.key.split('/')[1])
+    .sort()
+    .slice(-4);
+  const shown = ((await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null)?.name ?? name;
+  const lines = [`Play check: ${shown} (last ${boards.length} ${boards.length === 1 ? 'board' : 'boards'})`];
+  const flags = new Set<string>();
+  for (const board of boards) {
+    const table = await deps.answers(`daily/${board}`);
+    const rows: { id: string; entry: Entry }[] = [];
+    for (const { key } of (await deps.kv.list({ prefix: `daily/${board}/` })).blobs) {
+      const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+      if (entry) rows.push({ id: key.slice(key.lastIndexOf('/') + 1), entry });
+    }
+    const me = rows.find((r) => r.id === playerId)?.entry;
+    if (!me || !table) continue;
+    const others = rows.filter((r) => r.id !== playerId && r.entry.words > 0);
+    const words = (me.found ?? []).map((f) => f.word);
+    const total = countedWords(table);
+    const rank = 1 + rows.filter((r) => r.entry.score > me.score).length;
+    lines.push('');
+    lines.push(`${board.slice(5)}: #${rank} of ${rows.length} · ${me.words} words (${Math.round((100 * me.words) / total)}% of the board) · others' median ${Math.round(median(others.map((o) => o.entry.words)))}`);
+
+    // Words nobody else found, against how many such words other players usually have.
+    const seenBy = new Map<string, number>();
+    for (const r of rows) for (const f of r.entry.found ?? []) seenBy.set(f.word, (seenBy.get(f.word) ?? 0) + 1);
+    const onlyThem = words.filter((w) => seenBy.get(w) === 1);
+    const othersOnly = median(others.map((o) => (o.entry.found ?? []).filter((f) => seenBy.get(f.word) === 1).length));
+    lines.push(`Words nobody else found: ${onlyThem.length}${onlyThem.length ? ` (${onlyThem.slice(0, 6).join(', ')}${onlyThem.length > 6 ? '…' : ''})` : ''} · others' median ${othersOnly}`);
+    if (onlyThem.length >= 6 && onlyThem.length >= 3 * Math.max(1, othersOnly)) flags.add('finds many words nobody else finds');
+
+    // Copying from a solver's list tends to come out in alphabetical or length order.
+    if (words.length >= 15) {
+      const pairs = words.length - 1;
+      const abc = words.slice(1).filter((w, i) => w >= words[i]).length / pairs;
+      const byLength = words.slice(1).filter((w, i) => w.length >= words[i].length).length / pairs;
+      lines.push(`Order found: ${Math.round(abc * 100)}% alphabetical, ${Math.round(byLength * 100)}% shortest-first (people usually land near 50% and 60%)`);
+      if (abc >= 0.85) flags.add('words entered in alphabetical order');
+      if (byLength >= 0.92) flags.add('words entered shortest to longest');
+    }
+
+    // Timing: when they opened the game that day, and when words arrived.
+    const opened = (await deps.kv.get(`seen-v2/${board.slice(0, 10)}/${playerId}`, { type: 'json' })) as { at: number } | null;
+    const times = (me.found ?? []).map((f) => f.at).filter((t): t is number => typeof t === 'number').sort((a, b) => a - b);
+    const first = times[0];
+    const last = times.length ? times[times.length - 1] : me.updatedAt;
+    const start = first ?? opened?.at;
+    if (start) {
+      const minutes = Math.max(1, (last - start) / 60000);
+      const pace = words.length / minutes;
+      lines.push(`Time: ${opened ? `opened ${pacificTime(opened.at)}, ` : ''}${first ? `first word ${pacificTime(first)}, ` : ''}last ${pacificTime(last)} (${Math.round(minutes)} min, ${pace.toFixed(1)} words/min)`);
+      if (words.length >= 20 && pace > 6) flags.add('very fast pace');
+    }
+    if (times.length >= 10) {
+      let burst = 0;
+      for (let i = 0, j = 0; j < times.length; j++) {
+        while (times[j] - times[i] > 60000) i++;
+        burst = Math.max(burst, j - i + 1);
+      }
+      lines.push(`Most words in any one minute: ${burst}`);
+      if (burst >= 15) flags.add(`${burst} words within one minute`);
+    }
+    if (typeof me.misses === 'number' && words.length) {
+      lines.push(`Tries that didn't count: ${me.misses} (${(me.misses / words.length).toFixed(2)} per word found)`);
+      if (words.length >= 30 && me.misses / words.length < 0.1) flags.add('almost never enters a wrong word');
+    }
+  }
+  lines.push('');
+  lines.push(flags.size ? `⚠️ Unusual: ${[...flags].join('; ')}.` : 'Nothing unusual found.');
+  if (!lines.some((l) => l.startsWith('Most words'))) {
+    lines.push('Wrong tries and per-word times are recorded from now on, so later checks show more.');
+  }
   return lines.join('\n');
 }

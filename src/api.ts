@@ -111,7 +111,7 @@ export async function leaderboardOnline(): Promise<boolean> {
 
 export const api = {
   daily: (date: string, player: string) => call<Board>('GET', `/api/daily?date=${date}&player=${encodeURIComponent(player)}`),
-  submitDaily: (b: { playerId: string; name: string; date: string; words: Submitted[] }) =>
+  submitDaily: (b: { playerId: string; name: string; date: string; words: Submitted[]; misses?: number }) =>
     call<Board & { score: number; streak?: Streak | null }>('POST', '/api/daily', b),
   hello: (playerId: string, mode: 'daily' | 'blitz', name: string, date: string) =>
     call<{ ok: true }>('POST', '/api/hello', { playerId, mode, name: name || undefined, date }),
