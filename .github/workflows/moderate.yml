@@ -14,6 +14,7 @@ name: Moderate
 #   (words nobody else found, the order words came in, pace, wrong tries) and flags anything odd.
 # - block / unblock: a blocked player disappears from everyone else's leaderboards, room chat
 #   and the public room list. They can still play and still see themselves, so nothing tips them off.
+# - message: a note the player sees in a popup the next time they open the game.
 on:
   workflow_dispatch:
     inputs:
@@ -23,10 +24,13 @@ on:
       action:
         description: 'What to do'
         type: choice
-        options: [rename, look up, check play, block, unblock, send code, give back]
+        options: [rename, look up, check play, block, unblock, message, send code, give back]
         default: rename
       new_name:
         description: 'New name (rename only, optional)'
+        required: false
+      message:
+        description: 'Message to show the player next time they open the game (message only)'
         required: false
       code:
         description: 'Code to set, 4 digits (send code / give back only, optional; made up if empty)'
@@ -49,13 +53,15 @@ jobs:
         run: |
           # The chosen code is read from the event file (not step env) and masked, so it never shows in this public log.
           code_in=$(jq -r '.inputs.code // ""' "$GITHUB_EVENT_PATH"); [ -n "$code_in" ] && echo "::add-mask::$code_in"
-          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" --arg code "$code_in" \
+          text_in=$(jq -r '.inputs.message // ""' "$GITHUB_EVENT_PATH")
+          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" --arg code "$code_in" --arg text "$text_in" \
             '{key: $key, name: $name, action: $action} + (if $to == "" or $action != "rename" then {} else {to: $to} end)
-              + (if $code == "" or ($action != "send code" and $action != "give back") then {} else {code: $code} end)')
+              + (if $code == "" or ($action != "send code" and $action != "give back") then {} else {code: $code} end)
+              + (if $action == "message" then {text: $text} else {} end)')
           res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
             https://word-game-leaderboard.danlagstein.workers.dev/api/admin/moderate)
           status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")
-          if [ "$status" != 200 ] || [ "$ACTION" = rename ] || [ "$ACTION" = block ] || [ "$ACTION" = unblock ]; then
+          if [ "$status" != 200 ] || [ "$ACTION" = rename ] || [ "$ACTION" = block ] || [ "$ACTION" = unblock ] || [ "$ACTION" = message ]; then
             # These results and errors hold nothing private.
             jq 'del(.code, .report)' <<<"$json" 2>/dev/null || echo "$json"
             echo "HTTP $status"; [ "$status" = 200 ]; exit

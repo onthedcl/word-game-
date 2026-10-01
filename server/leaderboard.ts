@@ -496,7 +496,27 @@ export async function me(deps: Deps, playerId: string | null) {
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
   // Players who haven't picked their own code yet are asked to, the next time they open the game.
   const codeChosen = !!pin && !!owner?.chosen;
-  return { name: player.name, pin, codeChosen, streak: await streakOf(deps, id) };
+  return { name: player.name, pin, codeChosen, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
+}
+
+// ---- messages from the owner ----------------------------------------------------
+
+interface OwnerMessage {
+  text: string;
+  at: number;
+}
+
+const ownerMessageKey = (playerId: string) => `owner-message/${playerId}`;
+
+/** A note from the owner the player hasn't dismissed yet, shown when they next open the game. */
+async function ownerMessageFor(deps: Deps, playerId: string): Promise<OwnerMessage | null> {
+  return ((await deps.kv.get(ownerMessageKey(playerId), { type: 'json' })) as OwnerMessage | null) ?? null;
+}
+
+/** The player has read the owner's note. */
+export async function ownerMessageSeen(deps: Deps, body: Record<string, unknown>) {
+  await deps.kv.setJSON(ownerMessageKey(playerIdOf(body.playerId)), null);
+  return { ok: true };
 }
 
 /** Words this player has found on a daily board (to restore progress on another device). */
@@ -596,7 +616,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   const keys = [
     ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')), ...(await mine('funnel/')),
   ].map((b) => b.key);
-  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`);
+  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`, ownerMessageKey(playerId));
   for (const key of keys) await deps.kv.setJSON(key, null);
   await leaveAllLeagues(deps, playerId);
   return { ok: true };
@@ -641,6 +661,12 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
   if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
   if (body.action === 'check play') return { ok: true, name, report: await checkPlay(deps, name, owner.playerId) };
+  if (body.action === 'message') {
+    const text = typeof body.text === 'string' ? body.text.replace(/\s+/g, ' ').trim().slice(0, 500) : '';
+    if (!text) throw new ApiError(400, 'Write a message to send');
+    await deps.kv.setJSON(ownerMessageKey(owner.playerId), { text, at: deps.now() } satisfies OwnerMessage);
+    return { ok: true, name, sent: true };
+  }
   if (body.action === 'block' || body.action === 'unblock') {
     const blocked = await blockedPlayers(deps.kv);
     if (body.action === 'block') blocked.add(owner.playerId);

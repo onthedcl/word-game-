@@ -33,7 +33,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'setup' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
+type Dialog = null | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -314,21 +314,27 @@ export default function App() {
   // Keep this device's code current (Leaderboard → my code). Players who haven't chosen their
   // own code yet (every code was reset to player-chosen ones) are asked to set up their account.
   const [needsSetup, setNeedsSetup] = useState(false);
+  // A note from the game's owner, shown once before anything else.
+  const [ownerMessage, setOwnerMessage] = useState('');
   useEffect(() => {
     if (online && name) {
       api.me(me).then((r) => {
         if (r.pin) setPin(r.pin);
         setNeedsSetup(!!r.name && r.codeChosen === false);
+        if (r.ownerMessage) setOwnerMessage(r.ownerMessage.text);
       }, () => {});
     }
   }, [online, name, me, setPin]);
+  useEffect(() => {
+    if (ownerMessage && !dialog) setDialog('owner-message');
+  }, [ownerMessage, dialog]);
   // Once per visit, when nothing else is open.
   const setupAsked = useRef(false);
   useEffect(() => {
-    if (!needsSetup || dialog || setupAsked.current) return;
+    if (!needsSetup || dialog || ownerMessage || setupAsked.current) return;
     setupAsked.current = true;
     setDialog('setup');
-  }, [needsSetup, dialog]);
+  }, [needsSetup, dialog, ownerMessage]);
 
   // The first visit after a day closes: show where this player finished yesterday (once).
   // The top 3 get the podium and confetti; everyone else gets their place and the gap to the podium.
@@ -1039,6 +1045,29 @@ export default function App() {
             setDialog('rules');
           }}
         />
+      </Modal>
+
+      <Modal
+        open={dialog === 'owner-message'}
+        title="A message from the game’s owner"
+        onClose={() => {
+          api.messageSeen(me).catch(() => {});
+          setOwnerMessage('');
+          closeDialog();
+        }}
+      >
+        <p className="mb-4 whitespace-pre-line">{ownerMessage}</p>
+        <button
+          type="button"
+          className="w-full rounded-lg bg-ink px-4 py-2 font-semibold text-bg"
+          onClick={() => {
+            api.messageSeen(me).catch(() => {});
+            setOwnerMessage('');
+            closeDialog();
+          }}
+        >
+          OK
+        </button>
       </Modal>
 
       <Modal open={dialog === 'setup'} title="Set up your account" onClose={closeDialog}>

@@ -4,7 +4,7 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, lostCode, setCode, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, claimName, deletePlayer, lostCode, setCode, ownerMessageSeen, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
@@ -548,6 +548,15 @@ describe('owner tools', () => {
     const ann = (await moderateName(deps, { name: 'Ann', action: 'check play' })).report;
     expect(ann).toContain('Nothing unusual found.');
     expect(ann).toContain('Tries that didn’t count'.replace('’', "'"));
+  });
+
+  it('send a player a message they see once', async () => {
+    await saveName(deps, { playerId: P1, name: 'Fart' });
+    await rejects(moderateName(deps, { name: 'fart', action: 'message', text: '  ' }), 400);
+    await moderateName(deps, { name: 'fart', action: 'message', text: 'Cheating is the lowest of lows.' });
+    expect((await me(deps, P1)).ownerMessage).toMatchObject({ text: 'Cheating is the lowest of lows.' });
+    await ownerMessageSeen(deps, { playerId: P1 });
+    expect((await me(deps, P1)).ownerMessage).toBeNull();
   });
 
   it('look a player up without ever including ids or addresses', async () => {
