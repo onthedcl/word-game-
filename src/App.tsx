@@ -1049,7 +1049,7 @@ export default function App() {
 
       <Modal
         open={dialog === 'owner-message'}
-        title="A message from the game’s owner"
+        title="A message from Lettertown"
         onClose={() => {
           api.messageSeen(me).catch(() => {});
           setOwnerMessage('');

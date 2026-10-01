@@ -14,7 +14,7 @@ name: Moderate
 #   (words nobody else found, the order words came in, pace, wrong tries) and flags anything odd.
 # - block / unblock: a blocked player disappears from everyone else's leaderboards, room chat
 #   and the public room list. They can still play and still see themselves, so nothing tips them off.
-# - message: a note the player sees in a popup the next time they open the game.
+# - message: a note the player sees in a popup ("A message from Lettertown") the next time they open the game.
 on:
   workflow_dispatch:
     inputs:
