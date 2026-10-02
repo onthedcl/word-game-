@@ -569,6 +569,23 @@ describe('owner tools', () => {
     expect(report).toContain('Last seen from: 🇺🇸 Denver, CO');
   });
 
+  it('restore today: every word but the missed ones (their best), without adding a streak day', async () => {
+    const D = '2026-09-27';
+    const table = answerTable(generateDaily(dict, seeds, D));
+    deps.answers = async (key) => (key === `daily/${D}` ? table : null);
+    clock = Date.parse(`${D}T15:00:00Z`);
+    await saveName(deps, { playerId: P1, name: 'Dcl' });
+    await submitDaily(deps, { playerId: P2, name: 'Ann', date: D, words: Object.keys(table.words).slice(0, 3) });
+    await deps.kv.setJSON(`streak/${P1}`, { count: 5, best: 5, last: '2026-09-26', v: 2 });
+    const r = await moderateName(deps, { name: 'dcl', action: 'restore today', date: D, missed: '5,5,6,4' });
+    const counted = Object.keys(table.words).filter((w) => !table.words[w][2]).length;
+    expect(r).toMatchObject({ words: counted - 4, of: counted, position: 1, players: 2 });
+    expect(JSON.stringify(r)).not.toMatch(new RegExp(Object.keys(table.words).slice(0, 5).join('|')));
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 5, last: D });
+    expect((await progressOf(deps, D, P1)).found).toHaveLength(counted - 4);
+    await rejects(moderateName(deps, { name: 'dcl', action: 'restore today', date: D, missed: '3' }), 400);
+  });
+
   it('set a lost streak back', async () => {
     await saveName(deps, { playerId: P1, name: 'Dcl' });
     await rejects(moderateName(deps, { name: 'dcl', action: 'set streak', days: 0 }), 400);

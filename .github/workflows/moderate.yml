@@ -15,6 +15,8 @@ name: Moderate
 # - block / unblock: a blocked player disappears from everyone else's leaderboards, room chat
 #   and the public room list. They can still play and still see themselves, so nothing tips them off.
 # - set streak: put back a streak that was lost (enter the days, counting today if they've played today).
+# - restore today: rebuild today's progress after it was lost: every word except the ones they
+#   hadn't found, given as lengths (e.g. 5,5,6,4); the best word of each length is left out.
 # - message: a note the player sees in a popup ("A message from Lettertown") the next time they open the game.
 on:
   workflow_dispatch:
@@ -25,7 +27,7 @@ on:
       action:
         description: 'What to do'
         type: choice
-        options: [rename, look up, check play, block, unblock, message, send code, give back, set streak]
+        options: [rename, look up, check play, block, unblock, message, send code, give back, set streak, restore today]
         default: rename
       new_name:
         description: 'New name (rename only, optional)'
@@ -35,6 +37,9 @@ on:
         required: false
       days:
         description: 'Streak in days (set streak only)'
+        required: false
+      missed:
+        description: 'Lengths of the words they had not found, e.g. 5,5,6,4 (restore today only)'
         required: false
       code:
         description: 'Code to set, 4 digits (send code / give back only, optional; made up if empty)'
@@ -55,19 +60,21 @@ jobs:
           ACTION: ${{ inputs.action }}
           TO: ${{ inputs.new_name }}
           DAYS: ${{ inputs.days }}
+          MISSED: ${{ inputs.missed }}
         run: |
           # The chosen code is read from the event file (not step env) and masked, so it never shows in this public log.
           code_in=$(jq -r '.inputs.code // ""' "$GITHUB_EVENT_PATH"); [ -n "$code_in" ] && echo "::add-mask::$code_in"
           text_in=$(jq -r '.inputs.message // ""' "$GITHUB_EVENT_PATH")
-          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" --arg code "$code_in" --arg text "$text_in" --arg days "$DAYS" \
+          body=$(jq -n --arg key "$KEY" --arg name "$NAME" --arg action "$ACTION" --arg to "$TO" --arg code "$code_in" --arg text "$text_in" --arg days "$DAYS" --arg missed "$MISSED" \
             '{key: $key, name: $name, action: $action} + (if $to == "" or $action != "rename" then {} else {to: $to} end)
               + (if $code == "" or ($action != "send code" and $action != "give back") then {} else {code: $code} end)
               + (if $action == "message" then {text: $text} else {} end)
-              + (if $action == "set streak" then {days: ($days | tonumber? // 0)} else {} end)')
+              + (if $action == "set streak" then {days: ($days | tonumber? // 0)} else {} end)
+              + (if $action == "restore today" then {missed: $missed} else {} end)')
           res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
             https://word-game-leaderboard.danlagstein.workers.dev/api/admin/moderate)
           status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")
-          if [ "$status" != 200 ] || [ "$ACTION" = rename ] || [ "$ACTION" = block ] || [ "$ACTION" = unblock ] || [ "$ACTION" = message ] || [ "$ACTION" = "set streak" ]; then
+          if [ "$status" != 200 ] || [ "$ACTION" = rename ] || [ "$ACTION" = block ] || [ "$ACTION" = unblock ] || [ "$ACTION" = message ] || [ "$ACTION" = "set streak" ] || [ "$ACTION" = "restore today" ]; then
             # These results and errors hold nothing private.
             jq 'del(.code, .report)' <<<"$json" 2>/dev/null || echo "$json"
             echo "HTTP $status"; [ "$status" = 200 ]; exit

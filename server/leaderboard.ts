@@ -674,6 +674,36 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
   if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
   if (body.action === 'check play') return { ok: true, name, report: await checkPlay(deps, name, owner.playerId) };
+  if (body.action === 'restore today') {
+    // Rebuild a player's progress on today's board after it was lost: every counted word except
+    // the ones they say they hadn't found (given as lengths, e.g. "5,5,6,4"). For each, the
+    // highest-scoring word of that length is left out, so the score can't come out above theirs.
+    const today = typeof body.date === 'string' ? body.date : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(deps.now());
+    const boardId = checkDailyDate(dailyBoardId(today), deps.now());
+    const table = await tableFor(deps, `daily/${boardId}`);
+    const missed = (typeof body.missed === 'string' ? body.missed : '').split(/[\s,]+/).filter(Boolean).map(Number);
+    if (missed.some((n) => !Number.isInteger(n) || n < 4)) throw new ApiError(400, 'Give the lengths of the words they missed, e.g. 5,5,6,4');
+    const counted = Object.entries(table.words).filter(([, w]) => !w[2]).sort((a, b) => b[1][0] - a[1][0]).map(([w]) => w);
+    const left = new Set<string>();
+    for (const n of missed) {
+      const w = counted.find((c) => c.length === n && !left.has(c));
+      if (!w) throw new ApiError(400, `No ${n}-letter word left to leave out`);
+      left.add(w);
+    }
+    const key = `daily/${boardId}/${owner.playerId}`;
+    const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+    const found = mergeFound(prev?.found, counted.filter((w) => !left.has(w)).map((word) => ({ word, route: null })), deps.now());
+    const player = ((await deps.kv.get(`players/${owner.playerId}`, { type: 'json' })) as { name: string } | null)?.name ?? name;
+    const entry = score(table, found, player, deps.now());
+    await deps.kv.setJSON(key, { ...entry, found, misses: prev?.misses ?? 0 });
+    // Today was already part of their streak: mark it played without adding a day.
+    const s = await streakOf(deps, owner.playerId);
+    const dateKey = boardIdOf(boardId).dateKey;
+    if (s && s.last === shiftDateKey(dateKey, -1)) await deps.kv.setJSON(`streak/${owner.playerId}`, { ...s, last: dateKey, v: STREAK_VERSION });
+    const board = await readBoard(deps.kv, `daily/${boardId}/`, owner.playerId);
+    // Counts only: the words would spoil today's board in the public log.
+    return { ok: true, name: player, board: boardId, words: entry.words, of: countedWords(table), score: entry.score, position: board.you?.position, players: board.total };
+  }
   if (body.action === 'set streak') {
     // Put back a streak that was lost (e.g. data deleted by accident). It counts through today if
     // they've already found a word today, else through yesterday so finding one today extends it.
