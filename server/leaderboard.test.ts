@@ -559,6 +559,16 @@ describe('owner tools', () => {
     expect((await me(deps, P1)).ownerMessage).toBeNull();
   });
 
+  it('remember where a player last played from, and ping the owner when a blocked player comes back', async () => {
+    await saveName(deps, { playerId: P2, name: 'Fart' });
+    await moderateName(deps, { name: 'fart', action: 'block' });
+    sent = [];
+    await hello(deps, { playerId: P2, date: DATE }, { city: 'Denver', region: 'CO', country: 'US' });
+    expect(sent.some((m) => m.startsWith('Blocked player is back') && m.includes('Denver, CO'))).toBe(true);
+    const { report } = await moderateName(deps, { name: 'fart', action: 'look up' });
+    expect(report).toContain('Last seen from: 🇺🇸 Denver, CO');
+  });
+
   it('look a player up without ever including ids or addresses', async () => {
     await submitDaily(deps, { playerId: P2, name: 'Whyyy', date: DATE, words: words.slice(0, 3) });
     await reportName(deps, { playerId: P1, name: 'Whyyy' });

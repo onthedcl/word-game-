@@ -535,6 +535,9 @@ function mergeFound(prev: Submitted[] | undefined, next: Submitted[], now: numbe
 
 // ---- presence -----------------------------------------------------------------
 
+/** Where a player last opened the game from (city/region), for the owner. */
+const placeKey = (playerId: string) => `place/${playerId}`;
+
 /** Approximate location of a request, as worked out by the hosting platform (never the IP). */
 export interface Place {
   city?: string;
@@ -586,9 +589,19 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
 
   const today = (await deps.kv.list({ prefix: `seen-v2/${day}/` })).blobs.length;
   const where = describePlace(place);
+  // Remembered for the owner's look-ups (abuse, cheating). City or region only, never an IP.
+  if (where) await deps.kv.setJSON(placeKey(playerId), { where, at: deps.now() });
   const from = where ? ` from ${where}` : '';
   const count = `${today} ${today === 1 ? 'player' : 'players'} today`;
   const name = player?.name;
+  if ((await blockedPlayers(deps.kv)).has(playerId)) {
+    deps.notify?.({
+      title: 'Blocked player is back',
+      message: `${name ?? 'A blocked player'} opened the game${from || ' (location unknown)'}. They're still hidden from everyone else.`,
+      tags: ['no_entry'],
+      urgent: true,
+    });
+  }
   const message =
     days === 1
       ? `${name ?? 'A new player'} opened ${mode}${from} for the first time · ${count}`
@@ -616,7 +629,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   const keys = [
     ...(await mine('daily/')), ...(await mine('seen-v2/')), ...(await mine('seen/')), ...(await mine('funnel/')),
   ].map((b) => b.key);
-  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`, ownerMessageKey(playerId));
+  keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`, ownerMessageKey(playerId), placeKey(playerId));
   for (const key of keys) await deps.kv.setJSON(key, null);
   await leaveAllLeagues(deps, playerId);
   return { ok: true };
@@ -748,7 +761,7 @@ async function giveBack(deps: Deps, name: string, from: string, code: string | n
       await move(key, key.slice(0, -from.length) + to);
     }
   }
-  for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/']) await move(prefix + from, prefix + to);
+  for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/', 'place/']) await move(prefix + from, prefix + to);
   await movePlayerInLeagues(deps, from, to);
   const pin = code ?? newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: to, pin, issued: true } satisfies NameOwner);
@@ -768,6 +781,8 @@ async function lookUp(deps: Deps, name: string, playerId: string): Promise<strin
   played.sort((a, b) => a.day.localeCompare(b.day));
   const visits = (await deps.kv.get(`player-days/${playerId}`, { type: 'json' })) as { days: number; last?: string } | null;
   lines.push(`First board played: ${played[0]?.day ?? 'none'} · opened the game on ${visits?.days ?? 0} days${visits?.last ? `, last ${visits.last}` : ''}`);
+  const lastPlace = (await deps.kv.get(placeKey(playerId), { type: 'json' })) as { where: string; at: number } | null;
+  lines.push(`Last seen from: ${lastPlace ? `${lastPlace.where} (${new Date(lastPlace.at).toISOString().slice(0, 10)})` : 'not known yet (recorded from their next visit)'}`);
   lines.push(`Daily boards: ${played.length ? played.slice(-7).map((p) => `${p.day.slice(5)} ${p.entry.score} pts/${p.entry.words} words`).join(', ') : 'none'}`);
   const streak = await streakOf(deps, playerId);
   lines.push(`Streak: ${streak ? `${streak.count} days to ${streak.last} (best ${streak.best})` : 'none'}`);
