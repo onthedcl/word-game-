@@ -674,6 +674,18 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);
   if (body.action === 'look up') return { ok: true, name, report: await lookUp(deps, name, owner.playerId) };
   if (body.action === 'check play') return { ok: true, name, report: await checkPlay(deps, name, owner.playerId) };
+  if (body.action === 'set streak') {
+    // Put back a streak that was lost (e.g. data deleted by accident). It counts through today if
+    // they've already found a word today, else through yesterday so finding one today extends it.
+    const days = Number(body.days);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new ApiError(400, 'Days must be a whole number from 1');
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(deps.now());
+    const prev = await streakOf(deps, owner.playerId);
+    const last = prev?.last === today ? today : shiftDateKey(today, -1);
+    const streak: Streak = { count: days, best: Math.max(days, prev?.best ?? 0), last, v: STREAK_VERSION };
+    await deps.kv.setJSON(`streak/${owner.playerId}`, streak);
+    return { ok: true, name, streak: days, through: last };
+  }
   if (body.action === 'message') {
     const text = typeof body.text === 'string' ? body.text.replace(/\s+/g, ' ').trim().slice(0, 500) : '';
     if (!text) throw new ApiError(400, 'Write a message to send');

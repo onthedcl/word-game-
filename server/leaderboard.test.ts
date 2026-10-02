@@ -569,6 +569,16 @@ describe('owner tools', () => {
     expect(report).toContain('Last seen from: 🇺🇸 Denver, CO');
   });
 
+  it('set a lost streak back', async () => {
+    await saveName(deps, { playerId: P1, name: 'Dcl' });
+    await rejects(moderateName(deps, { name: 'dcl', action: 'set streak', days: 0 }), 400);
+    const r = await moderateName(deps, { name: 'dcl', action: 'set streak', days: 7 });
+    expect(r).toMatchObject({ streak: 7, through: '2026-09-25' });
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 7, best: 7, last: '2026-09-25' });
+    await submitDaily(deps, { playerId: P1, name: 'Dcl', date: DATE, words: words.slice(0, 1) });
+    expect((await me(deps, P1)).streak).toMatchObject({ count: 8, last: DATE });
+  });
+
   it('look a player up without ever including ids or addresses', async () => {
     await submitDaily(deps, { playerId: P2, name: 'Whyyy', date: DATE, words: words.slice(0, 3) });
     await reportName(deps, { playerId: P1, name: 'Whyyy' });
