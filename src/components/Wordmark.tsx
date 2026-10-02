@@ -9,8 +9,8 @@ const style: React.CSSProperties = {
 export function Wordmark() {
   return (
     <h1 aria-label="DPIYF Lettertown" className="flex flex-col leading-[0.95] font-black tracking-tight" style={style}>
-      <span aria-hidden className="text-base sm:text-lg">DPIYF</span>
-      <span aria-hidden className="text-[1.7rem] sm:text-3xl">Lettertown</span>
+      <span aria-hidden className="text-base max-[370px]:text-sm sm:text-lg">DPIYF</span>
+      <span aria-hidden className="text-[1.7rem] max-[370px]:text-[1.35rem] sm:text-3xl">Lettertown</span>
     </h1>
   );
 }

@@ -254,7 +254,7 @@ export function PuzzleView({
       </div>
 
       {/* Phones: the section is a size container, so the board can scale to fit the space left on screen. */}
-      <section className="min-h-0 w-full flex-1 max-lg:[container-type:size] lg:col-start-1" aria-label="Board">
+      <section className="min-h-0 w-full flex-1 max-lg:[container-type:size] short:[container-type:normal] lg:col-start-1" aria-label="Board">
        <div className="relative flex h-full flex-col items-center justify-center lg:justify-start">
         {/* Fixed-height entry line so tracing never shifts the layout. */}
         <div
@@ -302,7 +302,7 @@ export function PuzzleView({
         )}
 
         {/* As big as fits: full width, at most 480px, and short enough to leave room for the word line and buttons. */}
-        <div className="relative aspect-[440/400] w-[min(100cqw,480px,calc((100cqh-7.5rem)*1.1))] shrink-0 lg:aspect-auto lg:h-[400px] lg:w-full lg:max-w-[440px]">
+        <div className="relative aspect-[440/400] w-[min(100cqw,480px,calc((100cqh-7.5rem)*1.1))] shrink-0 short:w-[min(calc(100vw-2rem),380px)] lg:aspect-auto lg:h-[400px] lg:w-full lg:max-w-[440px]">
           <Board
             board={puzzle.board}
             path={shownPath}
@@ -321,7 +321,7 @@ export function PuzzleView({
             onClick={() => setTurns(turns + 1)}
             aria-label="Rotate the board"
             title="Rotate the board"
-            className="absolute right-0 bottom-0 z-10 grid h-11 w-11 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm active:scale-95"
+            className="absolute right-0 bottom-0 z-10 grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-ink shadow-sm active:scale-95"
           >
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M20 12a8 8 0 1 1-2.34-5.66" />

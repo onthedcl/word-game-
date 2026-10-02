@@ -35,6 +35,10 @@
   }
 }
 
+/* Short phone screens (small iPhones, zoomed display, big Safari bars): let the page scroll a little
+   rather than squeezing the board to a postage stamp. Desktop layouts are unaffected. */
+@custom-variant short (@media (max-height: 640px) and (max-width: 1023px));
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

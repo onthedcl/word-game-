@@ -750,7 +750,7 @@ export default function App() {
   return (
     // Phones: exactly one screen tall, no page scrolling. Desktop: normal page.
     // Safe-area padding keeps the iPhone app clear of the notch (it's zero in a browser tab).
-    <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 pt-[env(safe-area-inset-top)] lg:block lg:h-auto lg:overflow-visible lg:pb-8">
+    <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 pt-[env(safe-area-inset-top)] short:h-auto short:min-h-[100dvh] short:overflow-visible lg:block lg:h-auto lg:overflow-visible lg:pb-8">
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
         <div className="flex min-w-0 flex-1 items-end gap-2">
           <Wordmark />
@@ -806,8 +806,8 @@ export default function App() {
           <button type="button" className={iconBtn} onClick={onShare} disabled={!active} aria-label="Share"><ShareIcon />{label('Share')}</button>
           <button type="button" className={`${headerBtn} h-8 w-8 font-bold`} onClick={() => setDialog('rules')} aria-label="How to play">?</button>
           {/* Phones: no room beside the logo, so it sits right after the ? button. */}
-          <button type="button" onClick={() => openArchive()} className={`${pastBtn} h-8 px-2.5 sm:hidden`} aria-label="Past boards">
-            <CalendarIcon /> Past
+          <button type="button" onClick={() => openArchive()} className={`${pastBtn} h-8 justify-center px-2.5 max-[380px]:w-8 max-[380px]:px-0 sm:hidden`} aria-label="Past boards">
+            <CalendarIcon /> <span className="max-[380px]:hidden">Past</span>
           </button>
         </nav>
       </header>
