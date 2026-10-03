@@ -76,9 +76,12 @@ jobs:
       - name: Deploy leaderboard Worker
         if: env.CLOUDFLARE_API_TOKEN != ''
         working-directory: worker
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
         run: |
           npm install --no-audit --no-fund
-          npx wrangler deploy
+          # Sign-in project (a public setting, from Settings → Secrets and variables → Actions → Variables).
+          npx wrangler deploy --var "FIREBASE_PROJECT_ID:${FIREBASE_PROJECT_ID}"
       - name: Set the notification channel
         if: env.CLOUDFLARE_API_TOKEN != '' && env.NTFY_TOPIC != ''
         working-directory: worker
