@@ -35,6 +35,14 @@ jobs:
           VITE_API_BASE: https://word-game-leaderboard.danlagstein.workers.dev
       - name: Build leaderboard answer tables
         run: npx vite-node scripts/build-scores.ts dist/scores
+      - name: Keep the app preview (published separately from the app-store branch)
+        run: |
+          if git clone -q --depth 1 --branch gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" old-site && [ -d old-site/preview ]; then
+            cp -r old-site/preview dist/preview
+          else
+            echo "No preview to keep"
+          fi
+          rm -rf old-site
       - name: Publish dist/ to gh-pages
         working-directory: dist
         env:
