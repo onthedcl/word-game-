@@ -26,8 +26,12 @@ async function auth(): Promise<Auth> {
   return authPromise;
 }
 
-/** Phones and home-screen apps block sign-in popups, so they use a full-page redirect instead. */
-const useRedirect = () => matchMedia('(display-mode: standalone)').matches || /iPhone|iPad|Android/i.test(navigator.userAgent);
+/**
+ * A popup (opened straight from the tap) works in browsers, phones included; Safari's privacy
+ * rules break Firebase's full-page redirect there. Home-screen apps can't open popups, so they
+ * redirect (the email link always works as a fallback).
+ */
+const useRedirect = () => matchMedia('(display-mode: standalone)').matches;
 
 export type Provider = 'google' | 'apple';
 
