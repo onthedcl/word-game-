@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { appleAvailable, sendEmailLink, signInWith, type Provider } from '../auth';
+import { useEffect, useState } from 'react';
+import { appleAvailable, preloadSignIn, sendEmailLink, signInWith, type Provider } from '../auth';
 
 interface Props {
   /** A sign-in finished in place (popup): hand its token over. */
@@ -12,6 +12,7 @@ export function SignIn({ onToken }: Props) {
   const [sent, setSent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  useEffect(preloadSignIn, []);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);

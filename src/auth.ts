@@ -17,13 +17,22 @@ export const appleAvailable = signInAvailable && import.meta.env.VITE_SIGN_IN_AP
 
 const EMAIL_KEY = 'hexicon:signin-email';
 
+type AuthModule = typeof import('firebase/auth');
+let loaded: { auth: Auth; m: AuthModule } | null = null;
 let authPromise: Promise<Auth> | null = null;
 async function auth(): Promise<Auth> {
   authPromise ??= (async () => {
-    const [{ initializeApp }, { getAuth }] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
-    return getAuth(initializeApp(config));
+    const [{ initializeApp }, m] = await Promise.all([import('firebase/app'), import('firebase/auth')]);
+    const a = m.getAuth(initializeApp(config));
+    loaded = { auth: a, m };
+    return a;
   })();
   return authPromise;
+}
+
+/** Load sign-in ahead of the tap (Safari only allows a sign-in popup opened right at the tap). */
+export function preloadSignIn(): void {
+  if (signInAvailable) auth().catch(() => {});
 }
 
 /**
@@ -37,8 +46,8 @@ export type Provider = 'google' | 'apple';
 
 /** Sign in with Google or Apple. Resolves with an ID token, or null if the page is redirecting. */
 export async function signInWith(provider: Provider): Promise<string | null> {
-  const a = await auth();
-  const m = await import('firebase/auth');
+  // Already loaded: nothing is awaited before the popup opens, so it counts as part of the tap.
+  const { auth: a, m } = loaded ?? { auth: await auth(), m: await import('firebase/auth') };
   const p = provider === 'google' ? new m.GoogleAuthProvider() : new m.OAuthProvider('apple.com');
   if (provider === 'apple') (p as InstanceType<typeof m.OAuthProvider>).addScope('email');
   if (useRedirect()) {
