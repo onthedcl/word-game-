@@ -27,41 +27,55 @@ as before: app-only work lives in `ios/`, `capacitor.config.ts`, `src/native.ts`
 - [x] The website's "new version, tap to update" check is off in the app
 - [x] **iOS build** workflow (Actions tab) compiles the app on a GitHub Mac on every app change
 
+**Legal and safety (on the `app-store` branch)**
+- [x] Terms of Use with a zero-tolerance clause and Apple's required EULA terms: `public/terms.html`
+- [x] App-only "I agree" screen on first launch (the website doesn't show it)
+- [x] App-only: chat only in private, invite-only rooms (Apple 1.2: no chat between strangers)
+- [x] Privacy policy covers codes, wrong tries, kept rough location; links to the Terms
+- [x] Owner tools to act on reports within 24 hours (Moderate workflow: rename, block, message, look up)
+
 **The store listing**
 - [x] Name, subtitle, description, keywords, age rating, privacy answers, review notes:
       `docs/app-store/LISTING.md`
 - [x] Screenshots at both required iPhone sizes: `docs/app-store/screenshots/`
 
+## How the website stays safe
+
+App work lives on the **`app-store` branch**. The website only publishes from `main`, so nothing here reaches
+players until it's merged, and the app-only parts (Terms screen, private-only chat) switch on only inside the
+iPhone app, so merging later still leaves the website the same.
+
+## Decisions made
+- **Seller: an LLC** (protects you personally; the store shows the LLC as the seller)
+- **Free**, no ads, no purchases
+- **Chat in the app: private rooms only**
+- **Restyle the gold key tile** before launch (options in the chat; pick one)
+
 ## Your steps
 
-1. **Join the Apple Developer Program** ($99/year) at https://developer.apple.com/programs/enroll.
-   Enrol as an individual (quickest) or as a company (needs a D-U-N-S number; the seller name
-   shown in the store is the company's).
-2. **Trademark check** on the store name ("DPIYF Lettertown"): search https://tmsearch.uspto.gov
-   and the App Store. Closest existing brand found so far: *Letterland* (children's phonics).
-3. **Confirm the artwork is yours to use** (the logo and board art you supplied).
-4. **Register the bundle ID** in Certificates, Identifiers & Profiles → Identifiers → "+" →
-   App IDs → App. Use `com.dpiyf.lettertown`, or tell me a different one and I'll update
-   `capacitor.config.ts` and the Xcode project.
-5. **Create the app** in App Store Connect (https://appstoreconnect.apple.com → Apps → "+"):
-   pick the bundle ID, name "DPIYF Lettertown", primary language English, SKU `lettertown`.
-   Paste everything from `docs/app-store/LISTING.md` and upload the screenshots.
-6. **Get the build to Apple**. Either:
-   - *With a Mac*: install Xcode, then `npm ci && npm run build:app && npx cap open ios`. In
-     Xcode choose your team under Signing & Capabilities, run it on your iPhone, then
-     Product → Archive → Distribute App → App Store Connect.
-   - *Without a Mac*: create an App Store Connect API key (Users and Access → Integrations →
-     App Store Connect API) and add it as GitHub secrets; I can then make the iOS workflow
-     sign and upload builds for you.
-7. **TestFlight**: once the build appears in App Store Connect, add yourself and a few friends
-   as testers and play for a day or two.
-8. **Submit for review** with the review notes from `LISTING.md`. Reviews usually take a day or two.
+1. **Form an LLC** in your state (online, usually $50–$500 and a few days; a registered-agent service can be
+   your public address so your home address stays private). Then:
+   - Get a free **EIN** from the IRS (irs.gov, 10 minutes online).
+   - Open a business bank account (not needed for a free app, but keeps things separate).
+   - Get a free **D-U-N-S number** for the LLC (Apple's lookup page: developer.apple.com/enroll/duns-lookup).
+     This can take up to a week or two.
+2. **Get a support email** on a domain (e.g. support@yourdomain) for the store listing and Terms.
+3. **Trademark check** on "DPIYF Lettertown": search tmsearch.uspto.gov (class 9 and 41) and the App Store.
+   A quick web search found no app or game called "Lettertown". Optional: file your own trademark later
+   (about $350 per class).
+4. **Join the Apple Developer Program as the LLC** ($99/year) at developer.apple.com/programs/enroll.
+5. **Register the bundle ID** `com.dpiyf.lettertown` (Certificates, Identifiers & Profiles → Identifiers).
+6. **Create the app** in App Store Connect: name "DPIYF Lettertown", SKU `lettertown`, then paste everything
+   from `docs/app-store/LISTING.md` and upload the screenshots.
+7. **Create an App Store Connect API key** (Users and Access → Integrations → App Store Connect API, role
+   App Manager) and add four GitHub secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the whole .p8 file),
+   `APPLE_TEAM_ID`.
+8. **Upload a build**: Actions → **iOS release (TestFlight)** → Run workflow. No Mac needed.
+9. **TestFlight**: add yourself and friends as testers; play for a few days.
+10. **Submit for review** with the review notes from `LISTING.md`.
 
-## Worth deciding before launch
-
-- **Gold centre tile**: the required gold centre hexagon is the signature look of a well-known
-  word game. Restyling the key tile (colour or shape) would lower the risk of a look-and-feel complaint.
-- **Name protection**: names can currently be picked up on another device by typing them.
-  An optional player-chosen code would stop others playing as you.
-- **Rerolled boards** (`src/engine/rerolls.ts`) only reach the app with an app update, since
-  the app bundles its files. Avoid rerolls once the app is out, or ship an update.
+## Before submitting
+- Merge `app-store` into `main` (I'll check the website is unchanged first).
+- **Rerolled boards** (`src/engine/rerolls.ts`) only reach the app with an app update, since the app bundles its
+  files. Avoid rerolls once the app is out, or ship an update.
+- Re-take the screenshots after the key tile restyle.

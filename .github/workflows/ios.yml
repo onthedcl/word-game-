@@ -4,11 +4,11 @@ name: iOS build
 # Separate from Deploy, so it never affects the live website.
 on:
   push:
-    branches: [main]
+    branches: [main, app-store]
     paths:
       - 'ios/**'
       - 'capacitor.config.ts'
-      - 'src/native.ts'
+      - 'src/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/ios.yml'

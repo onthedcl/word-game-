@@ -47,27 +47,43 @@ word,puzzle,daily,hex,letters,anagram,vocabulary,brain,trace,pangram,leaderboard
 Primary: Games → Word. Secondary: Games → Puzzle.
 
 ## Age rating
-Answer "None" to every content question. For "Unrestricted web access": No. Leaderboard
-names are user-generated but filtered, reportable and hideable. Expected rating: 4+.
+Apple's questionnaire (2026): answer "None" to every content question (violence, profanity, mature themes...).
+- **User-generated content / messaging:** Yes. Players choose leaderboard names, and the app has chat
+  inside private, invite-only rooms. Content is filtered, reportable, and blockable; reports are acted on
+  within 24 hours.
+- **Unrestricted web access:** No. **Gambling, contests:** No. **In-app purchases / ads:** None.
+Expected rating: **13+** (because of chat). The Terms of Use also set the minimum age at 13.
 
 ## URLs
 - Privacy policy: https://onthedcl.github.io/word-game-/privacy.html
-- Support: https://github.com/onthedcl/word-game-/issues
+- Terms of Use (enter as the custom EULA, or use Apple's standard EULA and link this in the description):
+  https://onthedcl.github.io/word-game-/terms.html
+- Support: https://github.com/onthedcl/word-game-/issues (a support email from your LLC is better once you have one)
 - Marketing (optional): https://onthedcl.github.io/word-game-/
 
 ## App Privacy ("nutrition label")
-Data collected, none of it used for tracking:
+Tracking: **No** (nothing is used to track people across other companies' apps or websites).
+Data collected:
 | Data type | Used for | Linked to the user? |
 |---|---|---|
 | User ID (leaderboard name, random player ID) | App Functionality | Yes |
-| Gameplay Content (words found, scores) | App Functionality | Yes |
-| Coarse Location (city/region from the connection) | Analytics | No |
+| Gameplay Content (words found, scores, wrong tries, streak) | App Functionality (incl. fair play) | Yes |
 | Other User Content (room chat messages) | App Functionality | Yes |
+| Coarse Location (city/region from the connection; last one kept with the account) | Analytics, App Functionality (abuse/cheating) | Yes |
+Not collected: contact info, email, phone, precise location, contacts, photos, health, financial, browsing,
+search, purchases, diagnostics.
 
 ## Review notes (for Apple's reviewer)
-Lettertown is a daily word game. No login is required: the player can optionally choose a
-leaderboard name. Tap Leaderboard → "delete my data" to delete all server data for a player.
-Tap any leaderboard name or room chat message to report it or hide that player. Reports reach the owner immediately; hosts can delete messages and rooms, and offensive words in chat are masked automatically.
+Lettertown is a free daily word game with no login: players can optionally choose a leaderboard name and a
+4-digit code (to continue on another device). On first launch, players must agree to the Terms of Use, which
+have zero tolerance for objectionable content or abusive users.
+- Safety tools: offensive words are filtered in names and chat; tap any leaderboard name or chat message to
+  report it or hide (block) that player; reports reach the developer immediately and are acted on within 24
+  hours (rename, remove, or block the player from the service).
+- Chat exists only inside private rooms that players are invited to with a link. Public rooms show a shared
+  leaderboard but have no chat in the app.
+- Account deletion: Leaderboard → "delete my data" removes everything from the server immediately.
+- No purchases, ads or tracking.
 
 ## Screenshots
 Ready in `docs/app-store/screenshots/`: `6.9/` (1290×2796) and `6.5/` (1242×2688).

@@ -3,6 +3,7 @@ import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from 
 import { PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
 import { streakAnimal } from '../engine/streak';
+import { isNativeApp } from '../native';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
@@ -169,8 +170,10 @@ export function Leaderboard({
   // Inside a room: its leaderboard or its chat.
   const [roomTab, setRoomTab] = useState<'board' | 'chat'>('board');
   const [confirmRoomDelete, setConfirmRoomDelete] = useState(false);
-  const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat';
   const [league, setLeague] = useState<LeagueView | null>(null);
+  // The iPhone app keeps chat to private, invite-only rooms: Apple doesn't allow chat between strangers.
+  const chatOff = isNativeApp && !!league?.public;
+  const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat' && !chatOff;
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(!name);
@@ -455,11 +458,14 @@ export function Leaderboard({
                         await api.setRoomPublic(playerId, league.id, on).catch(() => setLeague({ ...league }));
                       }}
                     />
-                    List in public rooms (anyone can find and join it)
+                    List in public rooms (anyone can find and join it){isNativeApp ? '; chat stays off' : ''}
                   </label>
                 )}
               </div>
             )}
+            {chatOff ? (
+              <p className="mt-3 text-xs text-muted">Chat is available in private rooms.</p>
+            ) : (
             <div className="mt-3 flex rounded-full border border-line p-0.5" role="tablist" aria-label="Room">
               {(['board', 'chat'] as const).map((t) => (
                 <button
@@ -477,6 +483,7 @@ export function Leaderboard({
                 </button>
               ))}
             </div>
+            )}
           </div>
         )
       ) : (

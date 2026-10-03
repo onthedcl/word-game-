@@ -1,13 +1,17 @@
+import { isNativeApp } from '../native';
 const chip = 'inline-block rounded px-1.5 text-xs font-extrabold';
 const link = 'underline';
 
 /** Privacy policy, contact and credits for the word lists and code the game is built on. */
 function About() {
-  const base = import.meta.env.BASE_URL;
+  // In the iPhone app, open the pages on the website (in the browser) rather than inside the app.
+  const base = isNativeApp ? 'https://onthedcl.github.io/word-game-/' : import.meta.env.BASE_URL;
   return (
     <div className="mt-5 border-t border-line pt-3 text-sm text-muted">
       <p>
         <a className={link} href={`${base}privacy.html`} target="_blank" rel="noreferrer">Privacy policy</a>
+        {' · '}
+        <a className={link} href={`${base}terms.html`} target="_blank" rel="noreferrer">Terms of Use</a>
         {' · '}
         <a className={link} href="https://github.com/onthedcl/word-game-/issues" target="_blank" rel="noreferrer">Contact &amp; feedback</a>
       </p>

@@ -33,7 +33,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
+type Dialog = null | 'terms' | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -41,6 +41,11 @@ interface Progress {
 }
 
 /** What the leaderboard server scores: each word with its traced route (when known). */
+/** Accepted Terms of Use (iPhone app). Bump the version when the terms change materially. */
+const TERMS_KEY = 'hexicon:terms-v1';
+/** The public site, for links that must open in the browser from the app. */
+const SITE_URL = 'https://onthedcl.github.io/word-game-/';
+
 /** Where this device counts the tries on a board that weren't accepted. */
 const missesKey = (boardId: string) => `hexicon:misses:${boardId}`;
 const submission = (p: Progress) => p.found.map((w) => (p.routes?.[w] ? { w, p: p.routes[w] } : w));
@@ -187,12 +192,17 @@ export default function App() {
   // First visit: ask for a leaderboard name (if there's a leaderboard), otherwise show the rules.
   const [dialog, setDialog] = useState<Dialog>(null);
   const firstDialogShown = useRef(false);
-  useEffect(() => {
-    if (online === null || firstDialogShown.current) return;
-    firstDialogShown.current = true;
+  const openFirstDialog = useCallback(() => {
     if (online && !readStored(NAME_KEY, '') && !readStored('hexicon:asked-name', false)) setDialog('welcome');
     else if (!readStored('hexicon:seen-rules', false)) setDialog('rules');
   }, [online]);
+  useEffect(() => {
+    if (online === null || firstDialogShown.current) return;
+    firstDialogShown.current = true;
+    // The iPhone app asks players to accept the Terms of Use first (Apple requires it for apps with chat).
+    if (isNativeApp && !readStored(TERMS_KEY, false)) setDialog('terms');
+    else openFirstDialog();
+  }, [online, openFirstDialog]);
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
@@ -1088,6 +1098,32 @@ export default function App() {
           }}
           onLater={closeDialog}
         />
+      </Modal>
+
+      <Modal open={dialog === 'terms'} title="Welcome to Lettertown" onClose={() => {}}>
+        <div className="flex flex-col gap-3 text-sm">
+          <p>Before you play, please agree to our Terms of Use. The short version:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Be kind. There’s <b>zero tolerance</b> for offensive names or messages, harassment or bullying.</li>
+            <li>Tap any name or message to report it or hide that player. We act on reports within 24 hours.</li>
+            <li>Find your own words: no solvers or cheating.</li>
+          </ul>
+          <p className="text-muted">
+            Read the full <a className="underline" href={`${SITE_URL}terms.html`} target="_blank" rel="noreferrer">Terms of Use</a> and{' '}
+            <a className="underline" href={`${SITE_URL}privacy.html`} target="_blank" rel="noreferrer">Privacy policy</a>.
+          </p>
+          <button
+            type="button"
+            className="rounded-lg bg-ink px-4 py-2.5 font-semibold text-bg"
+            onClick={() => {
+              writeStored(TERMS_KEY, true);
+              setDialog(null);
+              openFirstDialog();
+            }}
+          >
+            I agree
+          </button>
+        </div>
       </Modal>
 
       <Modal open={dialog === 'rules'} title="How to play" onClose={closeDialog}>
