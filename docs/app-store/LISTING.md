@@ -16,7 +16,7 @@ on the live leaderboard, and claim the Key to the City.
 Lettertown is a daily word puzzle on a hexagonal board of letter tiles.
 
 Drag through neighbouring tiles to spell words of four letters or more. Every word has to pass
-through the gold key tile in the middle, and each tile can only be used once per word.
+through the shimmering key tile in the middle, and each tile can only be used once per word.
 
 WHY YOU'LL KEEP COMING BACK
 • One new board a day, the same for everyone. It starts easy on Monday and builds to a

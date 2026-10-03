@@ -40,10 +40,10 @@ From 2026-09-27, daily boards follow a weekly curve from **Monday (Easy)** to **
 ## Playing
 
 - **Tap** tiles one by one or **drag** across them; drag back onto the previous tile to undo a step. Tapping a tile already in the word cuts the word back to it.
-- **Drag** and **let go** to submit, or after tapping, **tap the last tile again** or press **Enter**. Delete and Clear are below the board. There is no shuffle, because tile positions are the game.
+- **Drag** and **let go** to submit, or after tapping, **tap the last tile again** or press **Enter**. Delete and Clear are below the board. The ↻ button turns the board 60° to see the letters afresh (words and routes don't change).
 - On a keyboard you can just type. The board highlights a route for the letters, and Backspace, Enter and Esc work.
 - Rejections shake the board and give a reason: *Too short*, *Tiles not adjacent*, *Missing center*, *Not on board*, *Already found*, *Not a word*.
-- **Hints** shows a Bee-style grid of how many words are left, by first letter and length.
+- **Hints** shows a grid of how many words are left, by first letter and length.
 - **Daily** is untimed and progress is saved in `localStorage` for each date. **Blitz** gives you a random board and 3 minutes, then shows every word you missed, and keeps your best score.
 - **Share** sends a spoiler-free challenge with your score, rank and leaderboard place, plus the link. For example: `DPIYF Lettertown 9/28 (Easy)` / `🏆 #2 of 7 today · 412 pts · Mayor` / `⬢⬢⬢⬢⬢⬢⬡` / `Can you beat me? https://onthedcl.github.io/word-game-/`.
 - Supported phones buzz lightly when you add a tile, find a word or make a mistake.

@@ -80,6 +80,19 @@ export function Rules() {
         <li><b>Drag</b> across tiles and <b>let go</b> to submit. Drag back to undo a step.</li>
         <li>Or <b>tap</b> tiles one by one, then tap the last tile again or press <b>Enter</b>.</li>
         <li>On a keyboard you can just type; the board shows a matching route.</li>
+        <li>As you trace, the word's <b>points</b> show next to it.</li>
+        <li><b>↻</b> turns the board to see the letters from a new angle. The words don't change.</li>
+      </ul>
+      <h3 className="mt-4 mb-1 font-bold">Extras</h3>
+      <ul className="list-disc space-y-1 pl-5 text-sm">
+        <li><b>💡 Hints</b>: how many words are left, by first letter and length.</li>
+        <li><b>📅 Past</b>: every earlier board, with the words you found and the ones you missed.</li>
+        <li><b>Streak</b>: find at least one word a day to keep it going. Every 5 days you get a new animal.</li>
+        <li>
+          <b>Leaderboard</b>: everyone's scores for today, plus <b>rooms</b>, your own leaderboards with friends.
+          Pick a name and a 4-digit <b>code</b>; your name and code let you carry on from another phone.
+        </li>
+        <li>The top three each day get the <b>podium</b> the next morning.</li>
       </ul>
       <p className="mt-4 text-sm text-muted">
         <b>Daily</b>: a new board at midnight, progress saved. Boards get harder through the week, from an easy

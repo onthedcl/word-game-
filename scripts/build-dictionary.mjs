@@ -123,8 +123,8 @@ function buildDawg(list) {
 const sorted = (s) => [...s].sort();
 const dawg = buildDawg(sorted(words));
 if (!FULL_ONLY) writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
-// Bonus words: every other ENABLE word (the public-domain equivalent of a
-// Scrabble word list). They're accepted and score points, but don't count
+// Bonus words: every other ENABLE word (a public-domain list of game-legal
+// words). They're accepted and score points, but don't count
 // toward a board's total, so finding every word stays achievable.
 const fullWords = enable.filter((w) => /^[a-z]+$/.test(w) && w.length >= MIN_LEN && !badSet.has(w));
 // Plus newer words ENABLE lacks (from SCOWL, size 60) and words the owner has added.

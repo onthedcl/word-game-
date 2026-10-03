@@ -49,7 +49,7 @@ iPhone app, so merging later still leaves the website the same.
 - **Seller: an LLC** (protects you personally; the store shows the LLC as the seller)
 - **Free**, no ads, no purchases
 - **Chat in the app: private rooms only**
-- **Restyle the gold key tile** before launch (options in the chat; pick one)
+- **Key tile restyled**: dark plum with light text and a shimmer; purple and green premium tiles (no more gold centre tile)
 
 ## Your steps
 
