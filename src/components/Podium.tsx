@@ -1,5 +1,7 @@
 // Yesterday's final top 3, with confetti, for a player who made the podium.
 import type { Board } from '../api';
+import { TipLink } from './TipLink';
+import { tipUrl } from '../tips';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 const PLACES = ['1st', '2nd', '3rd'];
@@ -109,6 +111,11 @@ export function Podium({ board, which, onShare, onClose }: Props) {
           Play today's
         </button>
       </div>
+      {tipUrl && (
+        <p className="mt-4 text-sm text-muted">
+          Loving Lettertown? <TipLink>Tip the town</TipLink>
+        </p>
+      )}
     </div>
   );
 }

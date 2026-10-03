@@ -47,7 +47,11 @@ iPhone app, so merging later still leaves the website the same.
 
 ## Decisions made
 - **Seller: an LLC** (protects you personally; the store shows the LLC as the seller)
-- **Free**, no ads, no purchases
+- **Free**, no ads, no purchases. A quiet **tip jar** (♥ Tip) appears on the website at good moments (Town Crier and
+  up, the podium) and in How to play. Inside the iPhone app Apple requires tips to go through its own in-app
+  purchase, so the link is hidden there; an in-app "tip jar" (consumable purchases, e.g. $1.99 / $4.99 / $9.99) can
+  be added later. Use a Ko-fi, Buy Me a Coffee or Stripe payment link for the website (repo variable `TIP_URL`).
+  Call them tips, not donations (Lettertown isn't a charity).
 - **Chat in the app: private rooms only**
 - **Key tile restyled**: dark plum with light text and a shimmer; purple and green premium tiles (no more gold centre tile)
 

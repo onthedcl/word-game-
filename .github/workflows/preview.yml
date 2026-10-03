@@ -36,6 +36,8 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
           VITE_SIGN_IN_APPLE: ${{ vars.SIGN_IN_APPLE }}
+          # Tip jar link (Ko-fi, Buy Me a Coffee or a Stripe payment link).
+          VITE_TIP_URL: ${{ vars.TIP_URL }}
       - name: Put dist/ into gh-pages/preview (leaving everything else as is)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

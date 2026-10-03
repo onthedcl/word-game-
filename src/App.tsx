@@ -7,6 +7,7 @@ import { appRules, isAppPreview, isNativeApp, maybeAskForReview, nativeShare, sc
 import { Welcome } from './components/Welcome';
 import { SetupAccount } from './components/SetupAccount';
 import { SignIn } from './components/SignIn';
+import { TipLink } from './components/TipLink';
 import { deleteSignIn, finishSignIn, returningFromSignIn, signInAvailable, signOutAccount } from './auth';
 import { Podium } from './components/Podium';
 import { Modal } from './components/Modal';
@@ -807,7 +808,7 @@ export default function App() {
     <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 pt-[env(safe-area-inset-top)] short:h-auto short:min-h-[100dvh] short:overflow-visible lg:block lg:h-auto lg:overflow-visible lg:pb-8">
       {isAppPreview && (
         <div className="-mx-4 shrink-0 bg-[#5b3c9e] py-1 text-center text-xs font-semibold text-white">
-          App preview · same scores and leaderboard as the real game
+          App preview · real scores, same leaderboard
         </div>
       )}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
@@ -922,6 +923,7 @@ export default function App() {
               found={dailyFound.found}
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
+              tip={<TipLink>Tip</TipLink>}
               onAttempt={onDailyAttempt}
               onLongWord={() => {
                 // In the iPhone app, a good moment to ask for a rating (Apple's own sheet), once they're a regular.

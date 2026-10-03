@@ -24,6 +24,8 @@ interface Props {
   keyboard: boolean;
   statusExtra?: React.ReactNode;
   statusNote?: React.ReactNode;
+  /** Tip-jar link for the score bar (shown only at a high rank). */
+  tip?: React.ReactNode;
   /** Called after every submitted word, right or wrong. */
   onAttempt?(ok: boolean): void;
   /** A 5+ letter word earned a compliment (the app may ask for a rating then). */
@@ -36,7 +38,7 @@ interface Props {
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord,
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, tip, onAttempt, starter, onStarterUsed, onLongWord,
 }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
@@ -236,7 +238,7 @@ export function PuzzleView({
     // Phones: a column that fills the screen, with the board taking whatever height is left.
     <div className="flex min-h-0 flex-1 flex-col gap-2 lg:grid lg:flex-none lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-3">
       <div className="lg:col-start-1">
-        <RankBar score={score} maxScore={puzzle.maxScore} rank={rank} extra={statusExtra} note={statusNote} />
+        <RankBar score={score} maxScore={puzzle.maxScore} rank={rank} extra={statusExtra} note={statusNote} tip={tip} />
       </div>
       <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
         <FoundWords

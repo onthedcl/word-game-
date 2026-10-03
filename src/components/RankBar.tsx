@@ -7,9 +7,11 @@ interface Props {
   extra?: React.ReactNode;
   /** Shown at the right end of the "points to next rank" line. */
   note?: React.ReactNode;
+  /** A quiet tip-jar link, shown only once the player is doing really well (Town Crier and up). */
+  tip?: React.ReactNode;
 }
 
-export function RankBar({ score, maxScore, rank, extra, note }: Props) {
+export function RankBar({ score, maxScore, rank, extra, note, tip }: Props) {
   const thresholds = rankThresholds(maxScore);
   const cur = thresholds[rank.index];
   const within = rank.next ? Math.min(1, (score - cur.points) / Math.max(1, rank.next.points - cur.points)) : 1;
@@ -45,7 +47,10 @@ export function RankBar({ score, maxScore, rank, extra, note }: Props) {
               ? `Find every word for the ${rank.next.name}` // bonus points got them there, but the top rank needs every word
               : `${rank.next.points - score} points to ${rank.next.name}`}
         </p>
-        {note}
+        <span className="flex shrink-0 items-center gap-2">
+          {tip && rank.index >= 4 && tip}
+          {note}
+        </span>
       </div>
     </section>
   );
