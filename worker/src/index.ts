@@ -12,6 +12,8 @@ import {
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
+import { linkAccount } from '../../server/accounts';
+import { verifyFirebaseToken } from '../../server/firebaseToken';
 import {
   createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues,
   reportChat, setLeaguePublic,
@@ -33,6 +35,8 @@ interface Env {
    * pings go through GitHub Actions (.github/workflows/notify.yml), whose servers ntfy accepts.
    */
   GH_NOTIFY_TOKEN?: string;
+  /** Firebase project whose sign-ins (Apple, Google, email link) are accepted. Empty until set up. */
+  FIREBASE_PROJECT_ID?: string;
 }
 
 const NOTIFY_REPO = 'onthedcl/word-game-';
@@ -85,6 +89,9 @@ export class Leaderboard extends DurableObject<Env> {
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
+      verifyIdToken: this.env.FIREBASE_PROJECT_ID
+        ? (token) => verifyFirebaseToken(token, this.env.FIREBASE_PROJECT_ID!)
+        : undefined,
       notify: this.env.NTFY_TOPIC
         ? (n) => this.ctx.waitUntil(n.urgent ? this.sendNotification(n) : this.queueNotification(n))
         : undefined,
@@ -175,6 +182,8 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await claimName(deps, body));
         case 'POST /api/lost-code':
           return json(await lostCode(deps, body));
+        case 'POST /api/account/link':
+          return json(await linkAccount(deps, body));
         case 'POST /api/code':
           return json(await setCode(deps, body));
         case 'POST /api/message-seen':

@@ -6,6 +6,8 @@ import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../s
 import { cleanName, maskText } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
+import type { Identity } from './firebaseToken';
+import { accountOf, moveAccount, unlinkAccount } from './accounts';
 import { leaveAllLeagues, movePlayerInLeagues, notePasses, roomsSummary } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 
@@ -31,6 +33,8 @@ export interface Deps {
   random(): number;
   /** Send the owner a notification (fire and forget). */
   notify?(n: Notification): void;
+  /** Check a sign-in token (Firebase Authentication); absent until sign-in is set up. */
+  verifyIdToken?(token: string): Promise<Identity | null>;
 }
 
 export interface Entry {
@@ -414,6 +418,10 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const tries = (await deps.kv.get(triesKey, { type: 'json' })) as { count: number; since: number } | null;
   const fresh = tries && deps.now() - tries.since < CLAIM_PAUSE_MS ? tries : null;
   if (fresh && fresh.count >= CLAIM_TRIES) throw new ApiError(429, 'Too many tries. Please wait an hour and try again.');
+  // A name saved to an account can only be picked up by signing in to that account.
+  if (await accountOf(deps, owner.playerId)) {
+    throw new ApiError(403, `“${name}” is saved to an account. Sign in with the same Apple, Google or email to continue as them.`);
+  }
   if (!codeWorks(owner)) {
     throw new ApiError(403, `“${name}” hasn’t set up a code yet. Open the game where you usually play to choose one.`);
   }
@@ -496,7 +504,8 @@ export async function me(deps: Deps, playerId: string | null) {
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
   // Players who haven't picked their own code yet are asked to, the next time they open the game.
   const codeChosen = !!pin && !!owner?.chosen;
-  return { name: player.name, pin, codeChosen, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
+  const account = await accountOf(deps, id);
+  return { name: player.name, pin, codeChosen, account, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
 }
 
 // ---- messages from the owner ----------------------------------------------------
@@ -632,6 +641,7 @@ export async function deletePlayer(deps: Deps, body: Record<string, unknown>) {
   keys.push(`players/${playerId}`, `blitz-best/${playerId}`, `player-days/${playerId}`, `first-seen/${playerId}`, `streak/${playerId}`, ownerMessageKey(playerId), placeKey(playerId));
   for (const key of keys) await deps.kv.setJSON(key, null);
   await leaveAllLeagues(deps, playerId);
+  await unlinkAccount(deps, playerId);
   return { ok: true };
 }
 
@@ -805,6 +815,7 @@ async function giveBack(deps: Deps, name: string, from: string, code: string | n
   }
   for (const prefix of ['players/', 'blitz-best/', 'player-days/', 'first-seen/', 'streak/', 'place/']) await move(prefix + from, prefix + to);
   await movePlayerInLeagues(deps, from, to);
+  await moveAccount(deps, from, to);
   const pin = code ?? newPin(deps);
   await deps.kv.setJSON(nameKey(name), { playerId: to, pin, issued: true } satisfies NameOwner);
   return { ok: true, name, code: pin };
