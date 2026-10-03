@@ -1,36 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #fbf8f1;
+  /* Lettertown: soft lilac whites, violet for highlights, green for your traced path. */
+  --bg: #f8f6fb;
   --surface: #ffffff;
-  --ink: #1d1b16;
-  --muted: #6f6a5f;
-  --line: #e4ded0;
-  --tile: #efe9dc;
-  --key: #f5c33b;
-  --key-ink: #1d1b16;
+  --ink: #1f1a2b;
+  --muted: #6c6578;
+  --line: #e3dcec;
+  --tile: #ece6f2;
+  --key: #6a45b8;
+  --key-ink: #ffffff;
   --dl: #c9ecd9;
   --tl: #6a45b8;
   --dw: #e0d2f5;
-  --accent: #d9901a;
-  --trace: rgb(217 144 26 / 0.55);
+  --accent: #2f9a6a;
+  --trace: rgb(47 154 106 / 0.55);
   --good: #2f8f5b;
   --bad: #c2413b;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16150f;
-    --surface: #211f18;
-    --ink: #f2eee3;
-    --muted: #a29c8d;
-    --line: #353127;
-    --tile: #312d23;
-    --key: #e8b52c;
+    --bg: #14111b;
+    --surface: #1e1928;
+    --ink: #f1edf8;
+    --muted: #a49cb3;
+    --line: #322b3f;
+    --tile: #2a2436;
+    --key: #8b6fd6;
     --dl: #2c5a46;
     --tl: #6b4cc2;
     --dw: #4a3a70;
-    --trace: rgb(245 195 59 / 0.55);
+    --accent: #4cc28a;
+    --trace: rgb(95 211 154 / 0.55);
     color-scheme: dark;
   }
 }
@@ -91,8 +93,8 @@
     to { transform: translateY(0); opacity: 1; }
   }
   @keyframes nudge {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(245 190 40 / 0); }
-    50% { transform: scale(1.14); box-shadow: 0 0 0 6px rgb(245 190 40 / 0.45); }
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(106 69 184 / 0); }
+    50% { transform: scale(1.14); box-shadow: 0 0 0 6px rgb(106 69 184 / 0.4); }
   }
   @keyframes blink {
     50% { opacity: 0; }

@@ -11,7 +11,7 @@ const STEPS = [
   { place: 1, height: 'h-24' },
   { place: 3, height: 'h-12' },
 ];
-const CONFETTI_COLORS = ['#e0a526', '#2f855a', '#3b82f6', '#e76f8a', '#f2c94c', '#8b5cf6'];
+const CONFETTI_COLORS = ['#6a45b8', '#2f9a6a', '#8fe8bd', '#b9a3ee', '#e0d2f5', '#f2c94c'];
 
 interface Props {
   board: Board;
