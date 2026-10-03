@@ -1,0 +1,45 @@
+name: App preview
+
+# Publishes the app-store branch as a web preview at https://onthedcl.github.io/word-game-/preview/
+# (with the app-only rules switched on), next to the live game. It only adds or replaces the
+# preview/ folder; the live game's files are never touched.
+on:
+  push:
+    branches: [app-store]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/preview/
+          VITE_API_BASE: https://word-game-leaderboard.danlagstein.workers.dev
+          VITE_APP_PREVIEW: '1'
+      - name: Put dist/ into gh-pages/preview (leaving everything else as is)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site
+          rm -rf site/preview
+          cp -r dist site/preview
+          cd site
+          git add -A preview
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Preview ${GITHUB_SHA::7}" || { echo "No changes"; exit 0; }
+          git push -q origin gh-pages
+          echo "Preview: https://onthedcl.github.io/${{ github.event.repository.name }}/preview/"

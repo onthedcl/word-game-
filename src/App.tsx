@@ -3,7 +3,7 @@ import { PuzzleView } from './components/PuzzleView';
 import { BulbIcon, CalendarIcon, ShareIcon, TrophyIcon } from './components/Icons';
 import { Leaderboard, NameForm } from './components/Leaderboard';
 import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Board, type LeagueSummary, type Streak } from './api';
-import { isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
+import { appRules, isAppPreview, isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { SetupAccount } from './components/SetupAccount';
 import { Podium } from './components/Podium';
@@ -200,7 +200,7 @@ export default function App() {
     if (online === null || firstDialogShown.current) return;
     firstDialogShown.current = true;
     // The iPhone app asks players to accept the Terms of Use first (Apple requires it for apps with chat).
-    if (isNativeApp && !readStored(TERMS_KEY, false)) setDialog('terms');
+    if (appRules && !readStored(TERMS_KEY, false)) setDialog('terms');
     else openFirstDialog();
   }, [online, openFirstDialog]);
   const [notice, setNotice] = useState('');
@@ -761,6 +761,11 @@ export default function App() {
     // Phones: exactly one screen tall, no page scrolling. Desktop: normal page.
     // Safe-area padding keeps the iPhone app clear of the notch (it's zero in a browser tab).
     <div className="mx-auto flex h-[100dvh] max-w-5xl flex-col overflow-hidden px-4 pt-[env(safe-area-inset-top)] short:h-auto short:min-h-[100dvh] short:overflow-visible lg:block lg:h-auto lg:overflow-visible lg:pb-8">
+      {isAppPreview && (
+        <div className="-mx-4 shrink-0 bg-[#5b3c9e] py-1 text-center text-xs font-semibold text-white">
+          App preview · same scores and leaderboard as the real game
+        </div>
+      )}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line py-2 lg:py-3">
         <div className="flex min-w-0 flex-1 items-end gap-2">
           <Wordmark />

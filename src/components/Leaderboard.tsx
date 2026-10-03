@@ -3,7 +3,7 @@ import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from 
 import { PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
 import { streakAnimal } from '../engine/streak';
-import { isNativeApp } from '../native';
+import { appRules } from '../native';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
@@ -172,7 +172,7 @@ export function Leaderboard({
   const [confirmRoomDelete, setConfirmRoomDelete] = useState(false);
   const [league, setLeague] = useState<LeagueView | null>(null);
   // The iPhone app keeps chat to private, invite-only rooms: Apple doesn't allow chat between strangers.
-  const chatOff = isNativeApp && !!league?.public;
+  const chatOff = appRules && !!league?.public;
   const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat' && !chatOff;
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -458,7 +458,7 @@ export function Leaderboard({
                         await api.setRoomPublic(playerId, league.id, on).catch(() => setLeague({ ...league }));
                       }}
                     />
-                    List in public rooms (anyone can find and join it){isNativeApp ? '; chat stays off' : ''}
+                    List in public rooms (anyone can find and join it){appRules ? '; chat stays off' : ''}
                   </label>
                 )}
               </div>

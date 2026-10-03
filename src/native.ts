@@ -4,6 +4,13 @@ import { Capacitor } from '@capacitor/core';
 
 export const isNativeApp = Capacitor.isNativePlatform();
 
+/**
+ * App-only rules (Terms screen, chat only in private rooms): on in the iPhone app, and in the
+ * web preview of the app (built with VITE_APP_PREVIEW=1) so they can be tried in a browser.
+ */
+export const appRules = isNativeApp || import.meta.env.VITE_APP_PREVIEW === '1';
+export const isAppPreview = import.meta.env.VITE_APP_PREVIEW === '1';
+
 type Impact = 'light' | 'medium' | 'heavy';
 
 /** Taptic Engine feedback in the app (web browsers on iPhone can't vibrate). */
