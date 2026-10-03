@@ -46,7 +46,7 @@ export function Rules() {
       <div className="mb-4 overflow-hidden rounded-xl">
         <img
           src={`${import.meta.env.BASE_URL}share.jpg`}
-          alt="Lettertown: a hex board of letter tiles with a gold key tile in the middle"
+          alt="Lettertown: a hex board of letter tiles with a key tile in the middle"
           width={1024}
           height={1024}
           className="aspect-[1024/880] w-full scale-[1.06] object-cover object-[50%_10%]"
@@ -55,7 +55,7 @@ export function Rules() {
       <ul className="list-disc space-y-2 pl-5">
         <li>Make words of <b>4+ letters</b> by linking <b>neighbouring tiles</b>.</li>
         <li>You can use <b>each tile only once</b> in a word, but the board has repeat letters, so a letter can appear more than once.</li>
-        <li>Every word must <b>include the gold key tile</b> in the middle, as its first, last or any letter.</li>
+        <li>Every word must <b>include the dark key tile</b> in the middle, as its first, last or any letter.</li>
         <li>
           Each letter has a point value (shown on the tile; rarer letters score more). <span className={`${chip} bg-dl`}>DL</span> doubles a letter,{' '}
           <span className={`${chip} bg-tl text-white`}>TL</span> triples it, <span className={`${chip} bg-dw`}>DW</span>{' '}
