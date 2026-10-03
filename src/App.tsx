@@ -767,7 +767,7 @@ export default function App() {
                 setLeaderboardLeague(unreadLeagues.values().next().value ?? null);
                 setDialog('leaderboard');
               }}
-              className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#ffd65a] to-[#f2b01e] px-3 py-1 text-sm font-extrabold text-[#3b2a00] shadow ring-[1.5px] ring-[#1f5fd6] active:scale-95"
+              className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#8b6fd6] to-[#5b3c9e] px-3 py-1 text-sm font-extrabold text-white shadow ring-[1.5px] ring-[#8fe8bd] active:scale-95"
             >
               <TrophyIcon /> Leaderboard
               {unreadLeagues.size > 0 && (

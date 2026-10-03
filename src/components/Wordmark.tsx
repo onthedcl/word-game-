@@ -1,7 +1,7 @@
-// Bubbly yellow-on-blue title in the style of the DPIYF Lettertown logo art.
+// Bubbly mint-on-plum title in the Lettertown colors.
 const style: React.CSSProperties = {
-  color: '#f7c21a',
-  WebkitTextStroke: '0.17em #1f5fd6',
+  color: '#8fe8bd',
+  WebkitTextStroke: '0.17em #4b2f86',
   paintOrder: 'stroke fill',
   filter: 'drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff) drop-shadow(0 2px 2px rgb(0 0 0 / 0.3))',
 };

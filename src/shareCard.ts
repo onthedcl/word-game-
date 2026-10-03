@@ -11,12 +11,12 @@ export function tileHeat(found: readonly string[], routes: Routes, answers: Map<
   return heat;
 }
 
-// Cream → gold → orange → ember, by share of the busiest tile.
+// Pale lilac → lilac → violet → deep plum, by share of the busiest tile.
 const STOPS: [number, [number, number, number]][] = [
-  [0, [236, 227, 207]],
-  [0.35, [246, 196, 69]],
-  [0.7, [232, 117, 42]],
-  [1, [184, 59, 26]],
+  [0, [236, 230, 242]],
+  [0.35, [201, 182, 240]],
+  [0.7, [122, 82, 199]],
+  [1, [63, 45, 110]],
 ];
 function heatColor(t: number): string {
   for (let i = 1; i < STOPS.length; i++) {
@@ -27,7 +27,7 @@ function heatColor(t: number): string {
       return `rgb(${c0.map((v, j) => Math.round(v + (c1[j] - v) * k)).join(',')})`;
     }
   }
-  return 'rgb(184,59,26)';
+  return 'rgb(63,45,110)';
 }
 
 export interface CardInfo {
@@ -48,16 +48,16 @@ export function drawShareCard(heat: readonly number[], info: CardInfo): Blob | n
   if (!ctx) return null;
   const font = (px: number, weight = 800) => `${weight} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
 
-  ctx.fillStyle = '#f5efe2';
+  ctx.fillStyle = '#f6f2fb';
   ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#c28a12';
+  ctx.fillStyle = '#6a45b8';
   ctx.font = font(34, 900);
   ctx.fillText('DPIYF', W / 2, 110);
-  ctx.fillStyle = '#2b2317';
+  ctx.fillStyle = '#1f1a2b';
   ctx.font = font(84, 900);
   ctx.fillText(info.title, W / 2, 195);
-  ctx.fillStyle = '#6b665c';
+  ctx.fillStyle = '#6c6578';
   ctx.font = font(38, 600);
   ctx.fillText(info.subtitle, W / 2, 255);
 
@@ -75,7 +75,7 @@ export function drawShareCard(heat: readonly number[], info: CardInfo): Blob | n
     ctx.fillStyle = heatColor(heat[id] / max);
     ctx.fill();
     ctx.lineWidth = id === CENTER ? 10 : 4;
-    ctx.strokeStyle = id === CENTER ? '#2b2317' : 'rgba(43,35,23,0.18)';
+    ctx.strokeStyle = id === CENTER ? '#1f1a2b' : 'rgba(31,26,43,0.18)';
     ctx.stroke();
     if (id === CENTER) {
       ctx.font = font(54, 400);
@@ -83,12 +83,12 @@ export function drawShareCard(heat: readonly number[], info: CardInfo): Blob | n
     }
   }
 
-  ctx.fillStyle = '#2b2317';
+  ctx.fillStyle = '#1f1a2b';
   info.lines.forEach((line, i) => {
     ctx.font = font(i === 0 ? 56 : 40, i === 0 ? 900 : 700);
     ctx.fillText(line, W / 2, 1050 + i * 64 + (i ? 12 : 0));
   });
-  ctx.fillStyle = '#6b665c';
+  ctx.fillStyle = '#6c6578';
   ctx.font = font(32, 600);
   ctx.fillText(info.footer, W / 2, H - 70);
 
