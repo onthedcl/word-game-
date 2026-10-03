@@ -679,6 +679,8 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
     const pin = chosen ?? owner.pin ?? newPin(deps);
     // A code the owner hands out works for claiming, even if it was one made up automatically.
     await deps.kv.setJSON(nameKey(name), { ...owner, pin, issued: true, chosen: pin === owner.pin && !!owner.chosen } satisfies NameOwner);
+    // A code from the owner also lifts any lock from too many wrong tries.
+    await deps.kv.setJSON(`claim-tries/${name.toLowerCase()}`, null);
     return { ok: true, name, code: pin };
   }
   if (body.action === 'give back') return giveBack(deps, name, owner.playerId, chosen);

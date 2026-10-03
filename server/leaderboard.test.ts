@@ -333,6 +333,15 @@ describe('names as logins', () => {
     expect((await claimName(deps, { name: 'lisa', code: '4719' })).playerId).toBe(P1);
   });
 
+  it('lift a wrong-tries lock when the owner sends the code', async () => {
+    await saveName(deps, { playerId: P1, name: 'Dcl' });
+    await setCode(deps, { playerId: P1, code: '4719' });
+    for (let i = 0; i < 5; i++) await rejects(claimName(deps, { name: 'dcl', code: '1111' }), 403);
+    await rejects(claimName(deps, { name: 'dcl', code: '4719' }), 429);
+    await moderateName(deps, { name: 'Dcl', action: 'send code' });
+    expect((await claimName(deps, { name: 'dcl', code: '4719' })).playerId).toBe(P1);
+  });
+
   it('let the owner choose the code', async () => {
     await saveName(deps, { playerId: P1, name: 'Lisa' });
     await rejects(moderateName(deps, { name: 'Lisa', action: 'give back', code: '70' }), 400);
