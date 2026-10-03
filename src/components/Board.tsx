@@ -35,9 +35,8 @@ const Tile = memo(function Tile({ id, letter, premium, selected, flash, pulse, d
   return (
     <g className={cls} role="gridcell" aria-label={label} aria-selected={selected}>
      <g className="tile-upright" style={upright}>
-      {key && <polygon className="key-halo" points={hexCorners(x, y, SIZE + 3).map((p) => p.join(',')).join(' ')} />}
       <polygon points={hexCorners(x, y, SIZE - 3).map((p) => p.join(',')).join(' ')} />
-      {key && <polygon className="key-shimmer" points={hexCorners(x, y, SIZE - 3).map((p) => p.join(',')).join(' ')} />}
+      {key && <polygon className="key-ring" points={hexCorners(x, y, SIZE - 4).map((p) => p.join(',')).join(' ')} />}
       <text x={x} y={y + 2} className="letter">{letter.toUpperCase()}</text>
       <text x={x + 19} y={y + 25} className="value">{LETTER_VALUES[letter]}</text>
       {(premium || key) && <text x={x} y={y - 26} className="badge">{key ? 'KEY' : premium}</text>}
@@ -117,24 +116,10 @@ export function Board({ board, path, flashPath, pulse, shakeKey, disabled, turns
       onPointerCancel={() => (dragging.current = false)}
     >
       <defs>
-        {/* The key tile: deep plum, with a band of light sweeping across it now and then. */}
+        {/* The key tile: deep plum (a little lighter in dark mode), ringed by a gently pulsing outline. */}
         <linearGradient id="key-dark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3f2d6e" />
-          <stop offset="100%" stopColor="#1d1536" />
-        </linearGradient>
-        <linearGradient id="key-shimmer" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0.35" stopColor="#fff" stopOpacity="0" />
-          <stop offset="0.5" stopColor="#fff" stopOpacity="0.32" />
-          <stop offset="0.65" stopColor="#fff" stopOpacity="0" />
-          {/* Animated with SVG (not a CSS filter), which iPhone Safari draws reliably. */}
-          <animateTransform
-            attributeName="gradientTransform"
-            type="translate"
-            values="-1 -1; -1 -1; 1 1"
-            keyTimes="0; 0.6; 1"
-            dur="4.5s"
-            repeatCount="indefinite"
-          />
+          <stop offset="0%" style={{ stopColor: 'var(--key-top)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--key-bottom)' }} />
         </linearGradient>
       </defs>
       <g className="board-turn" style={{ transform: `rotate(${deg}deg)`, transformOrigin: '0px 0px', transformBox: 'view-box' }}>
