@@ -14,15 +14,15 @@ export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
       <div className="mb-4 overflow-hidden rounded-xl">
         <img
           src={`${import.meta.env.BASE_URL}share.jpg`}
-          alt="Lettertown: a hex board of letter tiles with a gold key tile in the middle"
+          alt="Lettertown: a hex board of letter tiles with a key tile in the middle"
           width={1024}
           height={1024}
           className="aspect-[1024/880] w-full scale-[1.06] object-cover object-[50%_10%]"
         />
       </div>
       <p className="mb-3">
-        Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the
-        gold <b>key</b> tile. Drag and let go to submit. Boards are easiest on Monday and get harder each day, up to
+        Find words by linking neighbouring tiles, using each tile only once per word. Every word must include the{' '}
+        <b>key</b> tile in the middle. Drag and let go to submit. Boards are easiest on Monday and get harder each day, up to
         Sunday's toughest.
       </p>
       <p className="mb-4 text-sm text-muted">

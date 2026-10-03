@@ -7,7 +7,7 @@ import type { Puzzle } from './generator';
 export type Rejection =
   | 'Too short'
   | 'Tiles not adjacent'
-  | 'Must use the gold tile'
+  | 'Must use the key tile'
   | 'Not on board'
   | 'Already found'
   | 'Not a word';
@@ -43,12 +43,12 @@ export function checkWord(
     if (path.map((id) => puzzle.board.letters[id]).join('') !== word || !isValidRoute(path)) {
       return { ok: false, reason: 'Tiles not adjacent' };
     }
-    if (!path.includes(CENTER)) return { ok: false, reason: 'Must use the gold tile' };
+    if (!path.includes(CENTER)) return { ok: false, reason: 'Must use the key tile' };
   } else {
     if (!findPaths(word, puzzle.board, { limit: 1 }).length) return { ok: false, reason: 'Not on board' };
   }
   const route = path ? [...path] : findPaths(word, puzzle.board, { requireCenter: true, limit: 1 })[0];
-  if (!route) return { ok: false, reason: 'Must use the gold tile' };
+  if (!route) return { ok: false, reason: 'Must use the key tile' };
   if (found.has(word)) return { ok: false, reason: 'Already found' };
   const answer = answers.get(word);
   if (!answer) return { ok: false, reason: 'Not a word' };

@@ -9,9 +9,9 @@
   --tile: #efe9dc;
   --key: #f5c33b;
   --key-ink: #1d1b16;
-  --dl: #bfe0f2;
-  --tl: #3d8fcf;
-  --dw: #f4b6c2;
+  --dl: #c9ecd9;
+  --tl: #6a45b8;
+  --dw: #e0d2f5;
   --accent: #d9901a;
   --trace: rgb(217 144 26 / 0.55);
   --good: #2f8f5b;
@@ -27,9 +27,9 @@
     --line: #353127;
     --tile: #312d23;
     --key: #e8b52c;
-    --dl: #2d5670;
-    --tl: #3b82c4;
-    --dw: #8a3e52;
+    --dl: #2c5a46;
+    --tl: #6b4cc2;
+    --dw: #4a3a70;
     --trace: rgb(245 195 59 / 0.55);
     color-scheme: dark;
   }
@@ -123,30 +123,31 @@ button { cursor: pointer; }
 .tile.prem-TL polygon { fill: var(--tl); }
 .tile.prem-TL text { fill: #fff; }
 .tile.prem-DW polygon { fill: var(--dw); }
-.tile.key polygon { fill: url(#key-gold); stroke: #d69a0c; stroke-width: 2.5; transition: none; }
+.tile.key polygon { fill: url(#key-dark); stroke: #8b6fd6; stroke-width: 2.5; transition: none; }
 .tile.key .letter { font-size: 37px; font-weight: 850; }
-.tile.key .key-shine { fill: none; stroke: rgb(255 255 255 / 0.55); stroke-width: 1.5; pointer-events: none; }
-.tile.key text { fill: var(--key-ink); }
-/* The key tile's glow: a soft gold halo behind it that breathes. Only opacity is animated:
+.tile.key .key-shimmer { fill: url(#key-shimmer); stroke: none; pointer-events: none; }
+.tile.key text { fill: #f6f1ff; }
+/* The key tile's glow: a soft violet halo behind it that breathes. Only opacity is animated:
    an animated CSS filter on an SVG shape makes iPhone Safari sometimes stop drawing the tile. */
-.tile.key .key-halo { fill: #f5be28; stroke: #f5be28; stroke-width: 8; stroke-linejoin: round; opacity: .3; pointer-events: none; animation: key-halo 2.8s ease-in-out infinite; }
+.tile.key .key-halo { fill: #8b6fd6; stroke: #8b6fd6; stroke-width: 8; stroke-linejoin: round; opacity: .3; pointer-events: none; animation: key-halo 2.8s ease-in-out infinite; }
 @keyframes key-halo {
   0%, 100% { opacity: .22; }
   50% { opacity: .55; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tile.key .key-halo { animation: none; opacity: .4; }
+  .tile.key .key-shimmer { display: none; }
 }
 .board-turn, .tile-upright { transition: transform .4s cubic-bezier(.3,.8,.3,1); }
 @media (prefers-reduced-motion: reduce) {
   .board-turn, .tile-upright { transition: none; }
 }
-.tile.selected polygon:not(.key-halo) { stroke: var(--accent); stroke-width: 5; }
-.tile.flash polygon:not(.key-halo) { stroke: var(--good); stroke-width: 5; }
+.tile.selected polygon:not(.key-halo):not(.key-shimmer) { stroke: var(--accent); stroke-width: 5; }
+.tile.flash polygon:not(.key-halo):not(.key-shimmer) { stroke: var(--good); stroke-width: 5; }
 .tile.pulse-good, .tile.pulse-bad { transform-box: fill-box; transform-origin: center; }
 .tile.pulse-good { animation: tile-pop .42s ease-out; }
-.tile.pulse-good polygon:not(.key-halo) { animation: tile-good .5s ease-out; }
-.tile.pulse-bad polygon:not(.key-halo) { animation: tile-bad .5s ease-out; }
+.tile.pulse-good polygon:not(.key-halo):not(.key-shimmer) { animation: tile-good .5s ease-out; }
+.tile.pulse-bad polygon:not(.key-halo):not(.key-shimmer) { animation: tile-bad .5s ease-out; }
 @keyframes tile-pop { 40% { transform: scale(1.1); } }
 @keyframes tile-good { from { fill: var(--good); stroke: var(--good); } }
 @keyframes tile-bad { from { fill: var(--bad); stroke: var(--bad); } }

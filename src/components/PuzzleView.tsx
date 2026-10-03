@@ -344,7 +344,7 @@ export function PuzzleView({
           <button type="button" className={`${btn} border-ink bg-ink text-bg`} onClick={submit} disabled={disabled}>Enter</button>
         </div>
         <p className="mt-2 hidden max-w-[420px] text-center text-sm text-muted lg:block">
-          Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Each tile once per word, and every word must include the gold <b>key</b> tile.
+          Drag across tiles and let go to submit, or tap tiles one by one and tap the last one again. Each tile once per word, and every word must include the dark <b>key</b> tile in the middle.
         </p>
        </div>
       </section>

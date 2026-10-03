@@ -68,7 +68,7 @@ describe('checkWord', () => {
     expect(reason(plain.word, plain.path, new Set([plain.word]))).toBe('Already found');
 
     const outer = findRoute(false);
-    expect(reason(spell(outer), outer)).toBe('Must use the gold tile');
+    expect(reason(spell(outer), outer)).toBe('Must use the key tile');
 
     const far = NEIGHBORS.findIndex((n, id) => id !== CENTER && !n.includes(CENTER));
     const broken = [far, CENTER, ...NEIGHBORS[CENTER].filter((n) => n !== far).slice(0, 2)];
