@@ -6,6 +6,8 @@ import { api, ApiRejected, leaderboardOnline, looksLikeName, NameTaken, type Boa
 import { appRules, isAppPreview, isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } from './native';
 import { Welcome } from './components/Welcome';
 import { SetupAccount } from './components/SetupAccount';
+import { SignIn } from './components/SignIn';
+import { deleteSignIn, finishSignIn, returningFromSignIn, signInAvailable, signOutAccount } from './auth';
 import { Podium } from './components/Podium';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
@@ -33,7 +35,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'terms' | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
+type Dialog = null | 'signin' | 'terms' | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -243,15 +245,55 @@ export default function App() {
   }, []);
 
   /** Erase this player from the server and this device, then start fresh. */
-  const deleteMyData = useCallback(async () => {
-    await api.deleteMe(me);
+  // ---- accounts (Apple / Google / email sign-in) ------------------------------
+  // How this player signs in ('google.com', 'apple.com', 'password'), or null.
+  const [account, setAccount] = useState<string | null>(null);
+  /** A sign-in finished: tie this device to the account (switching player if they have one). */
+  const applySignIn = useCallback(async (idToken: string) => {
+    const r = await api.linkAccount(me, idToken);
+    if (r.switched) {
+      // Their account already has a player: become them (name, scores, streak, rooms).
+      setPlayerId(r.playerId);
+      writeStored(NAME_KEY, r.name ?? '');
+      writeStored('hexicon:asked-name', true);
+      writeStored('hexicon:seen-rules', true);
+      location.reload();
+      return;
+    }
+    setAccount(r.provider);
+    setDialog(null);
+    setNotice(name || r.name ? 'Signed in. Your progress is saved to your account ✓' : 'Signed in ✓ Now pick a leaderboard name');
+  }, [me, name]);
+  // Coming back from a sign-in email or a sign-in page.
+  useEffect(() => {
+    if (!signInAvailable || !returningFromSignIn()) return;
+    finishSignIn(() => prompt('To finish signing in, enter the email you used:'))
+      .then((token) => (token ? applySignIn(token) : undefined))
+      .catch(() => setNotice('Couldn’t finish signing in. Please try again'));
+    // Only once, on load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /** Sign out: this device goes back to being a fresh player; everything stays in the account. */
+  const signOut = useCallback(async () => {
+    await signOutAccount().catch(() => {});
     try {
       for (const k of Object.keys(localStorage)) if (k.startsWith('hexicon:')) localStorage.removeItem(k);
     } catch {
       /* nothing stored */
     }
     location.replace(location.pathname);
-  }, [me]);
+  }, []);
+
+  const deleteMyData = useCallback(async () => {
+    await api.deleteMe(me);
+    if (account) await deleteSignIn().catch(() => {});
+    try {
+      for (const k of Object.keys(localStorage)) if (k.startsWith('hexicon:')) localStorage.removeItem(k);
+    } catch {
+      /* nothing stored */
+    }
+    location.replace(location.pathname);
+  }, [me, account]);
 
   // ---- daily ----------------------------------------------------------------
   // New players get a "show me a word" tip until they find their first word.
@@ -330,7 +372,9 @@ export default function App() {
     if (online && name) {
       api.me(me).then((r) => {
         if (r.pin) setPin(r.pin);
-        setNeedsSetup(!!r.name && r.codeChosen === false);
+        setAccount(r.account ?? null);
+        // Players saved to an account don't need a code.
+        setNeedsSetup(!!r.name && r.codeChosen === false && !r.account);
         if (r.ownerMessage) setOwnerMessage(r.ownerMessage.text);
       }, () => {});
     }
@@ -964,6 +1008,9 @@ export default function App() {
           }}
           onClaim={claimName}
           onDelete={deleteMyData}
+          account={account}
+          onSignIn={signInAvailable ? () => setDialog('signin') : undefined}
+          onSignOut={signOut}
           initialTab={mode}
           leagues={leagues}
           initialLeague={leaderboardLeague}
@@ -1054,6 +1101,7 @@ export default function App() {
             closeDialog();
           }}
           onClaim={claimName}
+          onSignIn={signInAvailable ? () => setDialog('signin') : undefined}
           onSkip={closeDialog}
           onRules={() => {
             writeStored('hexicon:asked-name', true);
@@ -1103,6 +1151,10 @@ export default function App() {
           }}
           onLater={closeDialog}
         />
+      </Modal>
+
+      <Modal open={dialog === 'signin'} title="Save your progress" onClose={closeDialog}>
+        <SignIn onToken={applySignIn} />
       </Modal>
 
       <Modal open={dialog === 'terms'} title="Welcome to Lettertown" onClose={() => {}}>

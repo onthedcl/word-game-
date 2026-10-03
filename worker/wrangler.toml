@@ -10,6 +10,9 @@ SCORES_BASE = "https://onthedcl.github.io/word-game-/scores"
 # Sites allowed to call the API (comma-separated).
 # capacitor://localhost is the iPhone app.
 ALLOWED_ORIGINS = "https://onthedcl.github.io,capacitor://localhost"
+# Firebase project for player sign-in (Apple, Google, email link). Not a secret: it's in the
+# game's own config too. Leave empty to switch sign-in off.
+FIREBASE_PROJECT_ID = ""
 
 # All leaderboard data lives in one Durable Object. Declaring it as a
 # SQLite-backed class keeps it eligible for the Workers Free plan.

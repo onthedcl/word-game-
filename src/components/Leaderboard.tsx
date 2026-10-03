@@ -40,6 +40,11 @@ interface Props {
   onChatSeen(id: string, at: number): void;
   /** This player's current streak (days in a row), shown only to them. */
   streak: number;
+  /** How they sign in ('google.com', 'apple.com', 'password'), or null if they don't. */
+  account: string | null;
+  /** Open the sign-in screen (absent when sign-in isn't set up). */
+  onSignIn?(): void;
+  onSignOut(): void;
 }
 
 interface NameFormProps {
@@ -48,9 +53,11 @@ interface NameFormProps {
   onSave(name: string): Promise<void>;
   /** Continue as the player who already has this name (e.g. on a new device), with their code. */
   onClaim?(name: string, code: string): Promise<void>;
+  /** Sign in instead (when the name is saved to an account). */
+  onSignIn?(): void;
 }
 
-export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
+export function NameForm({ name, cta, onSave, onClaim, onSignIn }: NameFormProps) {
   const [value, setValue] = useState(name);
   const [taken, setTaken] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -75,8 +82,13 @@ export function NameForm({ name, cta, onSave, onClaim }: NameFormProps) {
   if (taken) {
     return (
       <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, code)); }}>
+        {onSignIn && (
+          <button type="button" onClick={onSignIn} className="rounded-lg border border-ink px-4 py-2 font-semibold">
+            That’s me: sign in to my account
+          </button>
+        )}
         <p className="text-sm">
-          <b>“{taken}”</b> is already on the leaderboard. If that’s you, enter the 4-digit code you chose. You can
+          <b>“{taken}”</b> is already on the leaderboard. If that’s you{onSignIn ? ' and you haven’t saved it to an account' : ''}, enter the 4-digit code you chose. You can
           also see it on your other device under <b>Leaderboard → my code</b>.
         </p>
         <div className="flex gap-2">
@@ -161,7 +173,7 @@ function ago(at: number): string {
 
 export function Leaderboard({
   dateKey, playerId, name, onName, onClaim, onDelete, initialTab,
-  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread, chatUnread, onChatSeen, streak,
+  leagues, initialLeague, onLeaguesChanged, onInvite, inviteLink, onNotice, onLeagueSeen, unread, chatUnread, onChatSeen, streak, account, onSignIn, onSignOut,
 }: Props) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -265,6 +277,7 @@ export function Leaderboard({
               setReload((r) => r + 1);
             }}
             onClaim={onClaim}
+            onSignIn={onSignIn}
           />
           <p className="mt-2 text-xs text-muted">Shown to everyone. Your daily score is posted as you play; Blitz scores post when time runs out.</p>
         </div>
@@ -278,6 +291,16 @@ export function Leaderboard({
           )}{' '}
           <button type="button" className="underline" onClick={() => setEditing(true)}>change</button>
           {' · '}
+          {account ? (
+            <span className="whitespace-nowrap">
+              ✓ Saved to {account === 'google.com' ? 'Google' : account === 'apple.com' ? 'Apple' : 'email'}{' '}
+              (<button type="button" className="underline" onClick={onSignOut}>sign out</button>)
+            </span>
+          ) : onSignIn ? (
+            <button type="button" className="font-semibold text-ink underline" onClick={onSignIn}>Save my progress</button>
+          ) : null}
+          {(account || onSignIn) && ' · '}
+          {!account && (
           <button
             type="button"
             className="underline"
@@ -289,7 +312,8 @@ export function Leaderboard({
           >
             my code
           </button>
-          {' · '}
+          )}
+          {!account && ' · '}
           <button type="button" className="underline" onClick={() => setConfirmDelete(true)}>delete my data</button>
           {showCode && (
             <div className="mt-2 rounded-xl bg-bg p-3 text-ink">

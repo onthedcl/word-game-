@@ -6,9 +6,11 @@ interface Props {
   onClaim(name: string, code: string): Promise<void>;
   onSkip(): void;
   onRules(): void;
+  /** Sign in to an existing account (absent when sign-in isn't set up). */
+  onSignIn?(): void;
 }
 
-export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
+export function Welcome({ onSave, onClaim, onSkip, onRules, onSignIn }: Props) {
   return (
     <div>
       <div className="mb-4 overflow-hidden rounded-xl">
@@ -30,7 +32,13 @@ export function Welcome({ onSave, onClaim, onSkip, onRules }: Props) {
           ? 'Played before in your browser? Type the same name to keep your progress. New here? Pick a leaderboard name.'
           : 'What should we call you on the leaderboard?'}
       </p>
-      <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} />
+      <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} onSignIn={onSignIn} />
+      {onSignIn && (
+        <p className="mt-3 text-sm">
+          Played before?{' '}
+          <button type="button" className="font-semibold underline" onClick={onSignIn}>Sign in</button>
+        </p>
+      )}
       <div className="mt-4 flex justify-between text-sm text-muted">
         <button type="button" className="underline" onClick={onRules}>How to play</button>
         <button type="button" className="underline" onClick={onSkip}>Skip for now</button>

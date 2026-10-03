@@ -120,7 +120,7 @@ export const api = {
   lostCode: (name: string, note = '') => call<{ ok: true }>('POST', '/api/lost-code', { name, note }),
   messageSeen: (playerId: string) => call<{ ok: true }>('POST', '/api/message-seen', { playerId }),
   setCode: (playerId: string, code: string) => call<{ ok: true; pin: string }>('POST', '/api/code', { playerId, code }),
-  me: (player: string) => call<{ name: string | null; pin: string | null; codeChosen?: boolean; streak?: Streak | null; ownerMessage?: { text: string; at: number } | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
+  me: (player: string) => call<{ name: string | null; pin: string | null; codeChosen?: boolean; account?: string | null; streak?: Streak | null; ownerMessage?: { text: string; at: number } | null }>('GET', `/api/me?player=${encodeURIComponent(player)}`),
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
@@ -129,6 +129,8 @@ export const api = {
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
   /** Erase this player's name, scores and history from the server. */
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
+  linkAccount: (playerId: string, idToken: string) =>
+    call<{ ok: true; playerId: string; name: string | null; switched: boolean; isNew: boolean; provider: string }>('POST', '/api/account/link', { playerId, idToken }),
   leagueCreate: (playerId: string, name: string, isPublic: boolean) =>
     call<{ id: string; name: string; public: boolean }>('POST', '/api/league/create', { playerId, name, public: isPublic }),
   deleteRoom: (playerId: string, id: string) => call<{ ok: true }>('POST', '/api/league/delete', { playerId, id }),

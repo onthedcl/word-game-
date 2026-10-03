@@ -67,15 +67,17 @@ Data collected:
 | Data type | Used for | Linked to the user? |
 |---|---|---|
 | User ID (leaderboard name, random player ID) | App Functionality | Yes |
+| Email Address (only if they sign in; held by Firebase Authentication) | App Functionality | Yes |
+| Name (only if they sign in with Apple/Google; held by Firebase Authentication) | App Functionality | Yes |
 | Gameplay Content (words found, scores, wrong tries, streak) | App Functionality (incl. fair play) | Yes |
 | Other User Content (room chat messages) | App Functionality | Yes |
 | Coarse Location (city/region from the connection; last one kept with the account) | Analytics, App Functionality (abuse/cheating) | Yes |
-Not collected: contact info, email, phone, precise location, contacts, photos, health, financial, browsing,
+Not collected: phone, physical address, precise location, contacts, photos, health, financial, browsing,
 search, purchases, diagnostics.
 
 ## Review notes (for Apple's reviewer)
-Lettertown is a free daily word game with no login: players can optionally choose a leaderboard name and a
-4-digit code (to continue on another device). On first launch, players must agree to the Terms of Use, which
+Lettertown is a free daily word game. No login is required to play; players can optionally sign in with Apple,
+Google or an email link to save their progress across devices (Sign in with Apple is offered alongside Google). On first launch, players must agree to the Terms of Use, which
 have zero tolerance for objectionable content or abusive users.
 - Safety tools: offensive words are filtered in names and chat; tap any leaderboard name or chat message to
   report it or hide (block) that player; reports reach the developer immediately and are acted on within 24

@@ -40,6 +40,10 @@
       kept with your account to help deal with cheating or abuse. We do not store your IP address or your precise
       location.</li>
     <li><b>A 4-digit code</b> for your name, so only you can continue as that name on another device.</li>
+    <li><b>Your sign-in, if you choose to sign in</b> with Apple, Google or an email link. Google's Firebase
+      Authentication service handles the sign-in and keeps your email address (and, for Apple or Google, the name on
+      that account) so you can sign in again. Our server keeps only an anonymous ID linking your sign-in to your game
+      progress. We never email you except for sign-in links you ask for, and never share your email.</li>
     <li><b>A note, if you write one</b>, when you ask for help getting back into your name. It is sent to the game's
       owner so they can tell it's you, and is not stored.</li>
   </ul>
@@ -59,13 +63,14 @@
     <li><b>GitHub</b> hosts the game. Owner notifications are relayed through GitHub Actions, which keeps each
       relay request, including the notification text (names, rough locations, scores), for up to 90 days.</li>
     <li><b>ntfy.sh</b> delivers those notifications to the owner's phone.</li>
+    <li><b>Google Firebase Authentication</b> handles sign-in, if you sign in.</li>
   </ul>
   <p>Each handles the data only to provide their service to us.</p>
 
   <h2>Keeping and deleting your data</h2>
   <p>Data is kept while the game runs. You can delete it at any time: open <b>Leaderboard</b> and tap
   <b>delete my data</b>. That immediately removes your name, scores, found words, visit history, room memberships and
-  chat messages from our server and clears the game from your device. You can also delete any of your chat messages
+  chat messages from our server, deletes your sign-in account if you have one, and clears the game from your device. You can also delete any of your chat messages
   yourself, and a room's host can delete the room and its chat. Each room keeps only its latest 150 messages. Copies inside notification logs expire within 90 days.</p>
 
   <h2>Reporting names and messages</h2>
