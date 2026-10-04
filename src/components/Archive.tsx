@@ -5,7 +5,10 @@ import { AnswerList } from './AnswerList';
 import type { Board as Standings } from '../api';
 import type { Puzzle } from '../engine/generator';
 import { DIFFICULTY_NAMES, OPEN_LETTERS_FROM, weekdayIndex } from '../engine/generator';
-import { EPOCH, puzzleNumber, shiftDateKey } from '../engine/dates';
+import { boardLocksAt, EPOCH, puzzleNumber, shiftDateKey } from '../engine/dates';
+
+/** "3:00 AM" in the player's own time zone. */
+const LOCAL_TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 
 const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' });
 /** "Sun 9/27" */
@@ -88,10 +91,20 @@ export function Archive({ today, colors, selected, onSelect, foundCount, puzzle,
               <span className="flex-1">You finished #{standings.you.position} of {standings.total}</span>
               <span className="text-sm text-muted underline">See results</span>
             </button>
-          ) : !locked ? (
-            <p className="mb-3 text-sm text-muted">The leaderboard for this board locks at midnight Pacific.</p>
           ) : null}
-          <AnswerList answers={p.answers} bonus={p.bonus} found={found} />
+          {locked ? (
+            <AnswerList answers={p.answers} bonus={p.bonus} found={found} />
+          ) : (
+            <>
+              {/* Still open somewhere (until midnight Pacific): show only your own words, so the
+                  answers can't be read here and entered before the board closes. */}
+              <p className="mb-3 rounded-xl bg-bg p-3 text-sm">
+                This board is still open until midnight Pacific. The words you missed appear at{' '}
+                <b>{LOCAL_TIME.format(boardLocksAt(selected))}</b>, once it closes for everyone.
+              </p>
+              <AnswerList answers={p.answers} bonus={p.bonus} found={found} hideMissed />
+            </>
+          )}
         </>
       )}
     </div>

@@ -5,10 +5,14 @@ interface Props {
   found: ReadonlySet<string>;
   /** Accepted uncommon words; the ones the player found are listed after the key. */
   bonus?: readonly Answer[];
+  /** Leave out the words not found (the board is still open for some players). */
+  hideMissed?: boolean;
 }
 
 /** Every answer, coloured by whether the player got it, with a key. */
-export function AnswerList({ answers, found, bonus = [] }: Props) {
+export function AnswerList({ answers: all, found, bonus = [], hideMissed = false }: Props) {
+  // While the board is still open somewhere, only your own words are listed.
+  const answers = hideMissed ? all.filter((a) => found.has(a.word)) : all;
   const got = answers.filter((a) => found.has(a.word)).length;
   const bonusFound = bonus.filter((a) => found.has(a.word));
   const dot = 'inline-block size-2.5 rounded-full';
@@ -16,7 +20,11 @@ export function AnswerList({ answers, found, bonus = [] }: Props) {
     <div>
       <p className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Key">
         <span className="flex items-center gap-1.5"><span className={`${dot} bg-good`} /> Got it ({got})</span>
-        <span className="flex items-center gap-1.5"><span className={`${dot} bg-bad`} /> Missed ({answers.length - got})</span>
+        {hideMissed ? (
+          <span className="flex items-center gap-1.5"><span className={`${dot} bg-bad`} /> Missed: shown once the board closes</span>
+        ) : (
+          <span className="flex items-center gap-1.5"><span className={`${dot} bg-bad`} /> Missed ({answers.length - got})</span>
+        )}
         {answers.some((a) => a.pangram) && (
           <span className="flex items-center gap-1.5"><b>Bold</b> = pangram</span>
         )}
