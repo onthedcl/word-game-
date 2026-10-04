@@ -78,7 +78,7 @@ export function Rules() {
         <li>On a keyboard you can just type; the board shows a matching route.</li>
       </ul>
       <p className="mt-4 text-sm text-muted">
-        <b>Daily</b>: a new board at midnight, progress saved. Boards get harder through the week, from an easy
+        <b>Daily</b>: a new board for everyone at midnight Eastern, progress saved. Boards get harder through the week, from an easy
         Monday to a tough Sunday. <b>Blitz</b>: a random board, three minutes, go.
       </p>
       <About />
