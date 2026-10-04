@@ -9,6 +9,12 @@ const HIDDEN_KEY = 'hexicon:hidden-names';
 
 const LIVE_REFRESH_MS = 5000;
 
+/** 1 → "1st", 2 → "2nd", 11 → "11th" */
+function ordinal(n: number): string {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th';
+  return `${n}${s}`;
+}
+
 type Tab = 'daily' | 'blitz';
 
 interface Props {
@@ -559,6 +565,11 @@ export function Leaderboard({
                   <span className="min-w-0 flex-1 truncate">
                     {r.name}
                     {r.you && ' (you)'}
+                    {r.finished && (
+                      <span className="ml-1.5 whitespace-nowrap text-xs font-semibold text-good" title={`${ordinal(r.finished)} to find every word`}>
+                        🔑 {ordinal(r.finished)}
+                      </span>
+                    )}
                   </span>
                   <span className="hidden text-xs text-muted sm:inline">{r.rankName} · {r.words}w{r.pangrams ? ' · 🌟' : ''}</span>
                   <span className="w-12 text-right font-bold tabular-nums">{r.score}</span>
@@ -576,6 +587,9 @@ export function Leaderboard({
               </li>
             ))}
           </ol>
+          {board.top.some((r) => r.finished) && (
+            <p className="mt-2 text-xs text-muted">🔑 found every word, numbered in the order they finished</p>
+          )}
           <p className="mt-2 text-sm text-muted">
             {board.total} {board.total === 1 ? 'player' : 'players'}
             {hidden.length > 0 && (

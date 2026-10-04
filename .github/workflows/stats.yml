@@ -1,13 +1,9 @@
 name: Stats
 
-# Read-only summary of who played: the notification pings sent through notify.yml
-# and the public leaderboards. Run it by hand from the Actions tab.
+# Read-only summary of how play is going: the public leaderboards and the onboarding
+# funnel for the last week. Run it by hand from the Actions tab.
 on:
   workflow_dispatch:
-    inputs:
-      since:
-        description: 'Include pings from this date on (YYYY-MM-DD)'
-        required: false
 
 permissions:
   actions: read
@@ -19,32 +15,19 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       API: https://word-game-leaderboard.danlagstein.workers.dev
-      SINCE: ${{ inputs.since }}
     steps:
-      - name: Pings
-        run: |
-          since=${SINCE:-$(date -u -d yesterday +%F)}
-          gh run list -R "$GITHUB_REPOSITORY" --workflow notify.yml --limit 1000 --json databaseId,createdAt \
-            --jq ".[] | select(.createdAt >= \"$since\") | \"\(.databaseId) \(.createdAt)\"" > runs.txt
-          echo "pings since $since: $(wc -l < runs.txt)"
-          while read -r id at; do
-            log=$(gh run view -R "$GITHUB_REPOSITORY" "$id" --log 2>/dev/null)
-            title=$(grep -m1 -oP 'TITLE: \K.*' <<<"$log")
-            msg=$(grep -m1 -oP 'MESSAGE: \K.*' <<<"$log")
-            echo "PING|$at|$title|$msg"
-          done < runs.txt
       - name: Leaderboards
         run: |
-          for d in $(date -u -d '2 days ago' +%F) $(date -u -d yesterday +%F) $(date -u +%F); do
+          for n in 7 6 5 4 3 2 1 0; do
+            d=$(TZ=America/New_York date -d "$n days ago" +%F)
             echo "DAILY $d"; curl -fsS "$API/api/daily?date=$d" || true; echo
           done
-          d=2026-09-26~v1; echo "DAILY $d"; curl -fsS "$API/api/daily?date=$d" || true; echo
           echo "BLITZ"; curl -fsS "$API/api/blitz" || true; echo
-      - name: Onboarding funnel (last 3 days, Eastern)
+      - name: Onboarding funnel (last week, Eastern)
         env:
           KEY: ${{ secrets.NTFY_TOPIC }}
         run: |
-          for n in 2 1 0; do
+          for n in 7 6 5 4 3 2 1 0; do
             d=$(TZ=America/New_York date -d "$n days ago" +%F)
             echo "FUNNEL $d $(curl -fsS -H 'Content-Type: application/json' -d "$(jq -n --arg key "$KEY" --arg day "$d" '{key: $key, day: $day}')" "$API/api/admin/funnel" || true)"
           done

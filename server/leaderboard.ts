@@ -44,6 +44,10 @@ export interface Entry {
   pangrams: number;
   rankName: string;
   updatedAt: number;
+  /** Every counted word found. */
+  allFound?: boolean;
+  /** When every counted word was found, for the finishing order. */
+  finishedAt?: number;
   /** The words found (with traced routes), so progress can follow the player to another device. */
   found?: Submitted[];
   /** Tries that weren't accepted (not a word, too short, already found), as counted by the game. */
@@ -155,9 +159,18 @@ export async function readBoard(kv: KV, prefix: string, playerId: string | null,
     await Promise.all(blobs.map(async ({ key }) => ({ key, entry: (await kv.get(key, { type: 'json' })) as Entry | null })))
   ).filter((r): r is { key: string; entry: Entry } => !!r.entry);
   rows.sort((a, b) => b.entry.score - a.entry.score || a.entry.updatedAt - b.entry.updatedAt);
+  // Everyone who found every word, in the order they got there (1 = first to finish).
+  const finished = (e: Entry) => e.allFound ?? e.rankName === TOP_RANK;
+  const finishers = rows.filter((r) => finished(r.entry))
+    .sort((a, b) => (a.entry.finishedAt ?? a.entry.updatedAt) - (b.entry.finishedAt ?? b.entry.updatedAt))
+    .map((r) => r.key);
   const all = rows.map((r, i) => {
     const { name, score, words, pangrams, rankName } = r.entry;
-    return { position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId };
+    const finish = finishers.indexOf(r.key) + 1;
+    return {
+      position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId,
+      ...(finish ? { finished: finish } : {}),
+    };
   });
   return { total: rows.length, top: all.slice(0, TOP_N), you: all.find((r) => r.you) ?? null };
 }
@@ -253,7 +266,7 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
 
   const key = `daily/${date}/${playerId}`;
   const prev = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
-  if (entry.allFound && !(prev as (Entry & { allFound?: boolean }) | null)?.allFound) {
+  if (entry.allFound && !prev?.allFound) {
     const all = countedWords(table);
     deps.notify?.({
       title: entry.rankName === TOP_RANK ? `${TOP_RANK}!` : 'Every word found!',
@@ -270,7 +283,10 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
     !prev || entry.score > prev.score || entry.words > prev.words || entry.name !== prev.name ||
     found.length > (prev.found?.length ?? 0) || misses > (prev.misses ?? 0)
   ) {
-    await deps.kv.setJSON(key, { ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found, misses });
+    const finishedAt = prev?.finishedAt ?? (entry.allFound && !prev?.allFound ? deps.now() : undefined);
+    await deps.kv.setJSON(key, {
+      ...(!prev || entry.score >= prev.score ? entry : { ...prev, name }), found, misses, ...(finishedAt ? { finishedAt } : {}),
+    });
   }
   await deps.kv.setJSON(`players/${playerId}`, { name });
   await notePasses(deps, playerId, name, date, prev?.score ?? 0, Math.max(entry.score, prev?.score ?? 0));
