@@ -28,15 +28,14 @@ interface Props {
   onAttempt?(ok: boolean): void;
   /** A 5+ letter word earned a compliment (the app may ask for a rating then). */
   onLongWord?(): void;
-  /** First game: offer to show an easy word to get started. */
+  /** First game: until the first word is found, the board shows how to trace an easy word. */
   starter?: boolean;
-  onStarterUsed?(): void;
 }
 
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onStarterUsed, onLongWord,
+  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, onAttempt, starter, onLongWord,
 }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
@@ -87,15 +86,34 @@ export function PuzzleView({
     return () => clearTimeout(t);
   }, [flashPath, flashMs]);
 
-  /** Light up a short, easy word so a first-time player sees how tracing works. */
-  function showStarter() {
-    const easy = [...puzzle.answers].filter((a) => !foundSet.has(a.word)).sort((a, b) => a.word.length - b.word.length || a.score - b.score)[0];
-    if (!easy) return;
-    setFlashMs(3500);
-    setFlashPath([...easy.path]);
-    setToast({ id: Date.now(), text: `Try tracing ${easy.word.toUpperCase()}`, kind: 'info' });
-    onStarterUsed?.();
-  }
+  // First game: trace a short, easy word on the board, tile by tile and over again, until the
+  // player finds any word. It pauses while they're tracing and picks up again when they stop.
+  const guideWord = useMemo(
+    () => (starter ? [...puzzle.answers].sort((a, b) => a.word.length - b.word.length || a.score - b.score)[0] ?? null : null),
+    [starter, puzzle],
+  );
+  const guiding = !!guideWord && keyboard && !disabled && !found.length;
+  const busy = shownPath.length > 0;
+  const [guidePath, setGuidePath] = useState<number[] | null>(null);
+  const guideStarted = useRef(false);
+  useEffect(() => {
+    if (!guiding || busy || !guideWord) return;
+    const route = guideWord.path;
+    let step = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      // Steps 1…n draw the word one tile at a time, the next two hold it, then it clears.
+      step = (step + 1) % (route.length + 3);
+      setGuidePath(step === 0 ? null : route.slice(0, Math.min(step, route.length)));
+      timer = setTimeout(tick, step === 0 ? 500 : step >= route.length ? 800 : 420);
+    };
+    timer = setTimeout(tick, guideStarted.current ? 4000 : 1200);
+    guideStarted.current = true;
+    return () => {
+      clearTimeout(timer);
+      setGuidePath(null);
+    };
+  }, [guiding, busy, guideWord]);
   useEffect(() => {
     if (!pulse) return;
     const t = setTimeout(() => setPulse(null), 500);
@@ -279,14 +297,13 @@ export function PuzzleView({
           )}
         </div>
 
-        {starter && !found.length && !toast && !disabled && (
-          <button
-            type="button"
-            onClick={showStarter}
-            className="absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-full bg-key px-3 py-1 text-sm font-semibold text-key-ink shadow"
+        {guiding && !busy && !toast && guideWord && (
+          <div
+            role="status"
+            className="pointer-events-none absolute top-1 left-1/2 z-10 animate-pop whitespace-nowrap rounded-full bg-key px-3 py-1 text-sm font-semibold text-key-ink shadow"
           >
-            First time? Show me a word
-          </button>
+            Drag across {guideWord.word.toUpperCase()} for your first word
+          </div>
         )}
 
         {toast && (
@@ -306,7 +323,7 @@ export function PuzzleView({
           <Board
             board={puzzle.board}
             path={shownPath}
-            flashPath={flashPath}
+            flashPath={flashPath ?? (guiding && !busy ? guidePath : null)}
             pulse={pulse}
             shakeKey={shakeKey}
             disabled={disabled}

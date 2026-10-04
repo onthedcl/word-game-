@@ -10,6 +10,8 @@ export interface BoardRow {
   pangrams: number;
   rankName: string;
   you: boolean;
+  /** Found every word: 1 = first to finish, 2 = second, ... */
+  finished?: number;
 }
 
 /** A found word, with the route it was traced along when known (the server scores that route). */

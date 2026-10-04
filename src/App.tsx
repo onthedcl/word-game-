@@ -871,7 +871,6 @@ export default function App() {
                 setTimeout(() => maybeAskForReview(streak).catch(() => {}), 1800);
               }}
               starter={!starterDone}
-              onStarterUsed={() => setStarterDone(true)}
               onFound={(w, r) => {
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);

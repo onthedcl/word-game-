@@ -122,6 +122,25 @@ describe('daily leaderboard', () => {
     expect((await getDaily(deps, DATE, P1)).you!.words).toBe(3);
   });
 
+  it('marks who found every word, in the order they finished', async () => {
+    const P3 = 'player-three-cccccccccc';
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: words.slice(0, 3) });
+    clock += 60_000;
+    await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words });
+    clock += 60_000;
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words });
+    await submitDaily(deps, { playerId: P3, name: 'Cy', date: DATE, words: words.slice(0, 2) });
+    clock += 60_000;
+    await submitDaily(deps, { playerId: P2, name: 'Bo', date: DATE, words }); // again: still finished first
+    const { top } = await getDaily(deps, DATE, null);
+    const byName = Object.fromEntries(top.map((r) => [r.name, r]));
+    expect(byName.Bo.finished).toBe(1);
+    expect(byName.Ann.finished).toBe(2);
+    expect(byName.Cy.finished).toBeUndefined();
+    // The leaderboard order itself is unchanged: equal scores go to whoever got there first.
+    expect(top.map((r) => r.name)).toEqual(['Bo', 'Ann', 'Cy']);
+  });
+
   it('on the one Eastern clock, opens and locks each board at midnight Eastern', async () => {
     const at = (iso: string) => (clock = Date.parse(iso));
     const D = '2026-10-07';
