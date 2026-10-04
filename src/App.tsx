@@ -900,7 +900,9 @@ export default function App() {
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-key/25 px-3 py-2 text-sm">
           <span className="min-w-0 flex-1">
             🌅 It's a new day!{' '}
-            {boardOpen ? 'You can finish this board until midnight Pacific.' : 'This board has closed.'}
+            {boardOpen
+              ? `You can finish this board until ${new Date(boardLocksAt(dateKey)).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+              : 'This board has closed.'}
           </span>
           <button
             type="button"

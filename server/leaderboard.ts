@@ -2,7 +2,7 @@
 // up the puzzle's answer table and scores the submitted words itself.
 import { rankFor, scorePath, TOP_RANK } from '../src/engine/scoring';
 import { CENTER, isValidRoute } from '../src/engine/hexgrid';
-import { boardLocksAt, boardOpensAt, EPOCH, isDateKey, shiftDateKey } from '../src/engine/dates';
+import { boardLocksAt, boardOpensAt, dateKeyFor, EPOCH, GAME_ZONE, isDateKey, shiftDateKey } from '../src/engine/dates';
 import { cleanName, maskText } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
@@ -138,7 +138,7 @@ function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
   return { boardId: value as string, dateKey: parsed.dateKey };
 }
 
-/** A board takes scores from when its date starts anywhere until midnight Pacific at the end of that date. */
+/** A board takes scores from when it opens until it locks (midnight Eastern at either end of its date). */
 function checkDailyDate(value: unknown, now: number): string {
   const { boardId, dateKey } = boardIdOf(value);
   if (now < boardOpensAt(dateKey) || now >= boardLocksAt(dateKey)) throw new ApiError(400, 'That puzzle is closed');
@@ -690,7 +690,7 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
     // Rebuild a player's progress on today's board after it was lost: every counted word except
     // the ones they say they hadn't found (given as lengths, e.g. "5,5,6,4"). For each, the
     // highest-scoring word of that length is left out, so the score can't come out above theirs.
-    const today = typeof body.date === 'string' ? body.date : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(deps.now());
+    const today = typeof body.date === 'string' ? body.date : dateKeyFor(new Date(deps.now()));
     const boardId = checkDailyDate(dailyBoardId(today), deps.now());
     const table = await tableFor(deps, `daily/${boardId}`);
     const missed = (typeof body.missed === 'string' ? body.missed : '').split(/[\s,]+/).filter(Boolean).map(Number);
@@ -721,7 +721,7 @@ export async function moderateName(deps: Deps, body: Record<string, unknown>) {
     // they've already found a word today, else through yesterday so finding one today extends it.
     const days = Number(body.days);
     if (!Number.isInteger(days) || days < 1 || days > 3650) throw new ApiError(400, 'Days must be a whole number from 1');
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(deps.now());
+    const today = dateKeyFor(new Date(deps.now()));
     const prev = await streakOf(deps, owner.playerId);
     const last = prev?.last === today ? today : shiftDateKey(today, -1);
     const streak: Streak = { count: days, best: Math.max(days, prev?.best ?? 0), last, v: STREAK_VERSION };
@@ -849,9 +849,9 @@ async function lookUp(deps: Deps, name: string, playerId: string): Promise<strin
   return lines.join('\n');
 }
 
-/** "4:05pm" in Pacific time (the game's day ends at midnight Pacific). */
-const pacificTime = (at: number) =>
-  new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' }).format(at).replace(' ', '').toLowerCase();
+/** "4:05pm" in Eastern time (the game's clock). */
+const gameTime = (at: number) =>
+  new Intl.DateTimeFormat('en-US', { timeZone: GAME_ZONE, hour: 'numeric', minute: '2-digit' }).format(at).replace(' ', '').toLowerCase();
 
 const median = (xs: number[]) => {
   if (!xs.length) return 0;
@@ -915,7 +915,7 @@ async function checkPlay(deps: Deps, name: string, playerId: string): Promise<st
     if (start) {
       const minutes = Math.max(1, (last - start) / 60000);
       const pace = words.length / minutes;
-      lines.push(`Time: ${opened ? `opened ${pacificTime(opened.at)}, ` : ''}${first ? `first word ${pacificTime(first)}, ` : ''}last ${pacificTime(last)} (${Math.round(minutes)} min, ${pace.toFixed(1)} words/min)`);
+      lines.push(`Time: ${opened ? `opened ${gameTime(opened.at)}, ` : ''}${first ? `first word ${gameTime(first)}, ` : ''}last ${gameTime(last)} (${Math.round(minutes)} min, ${pace.toFixed(1)} words/min)`);
       if (words.length >= 20 && pace > 6) flags.add('very fast pace');
     }
     if (times.length >= 10) {

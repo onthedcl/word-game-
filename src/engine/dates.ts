@@ -1,10 +1,17 @@
-// Daily puzzle calendar. Puzzles are keyed by the player's local date (YYYY-MM-DD).
+// Daily puzzle calendar. Puzzles are keyed by the date (YYYY-MM-DD) in the game's one time
+// zone, Eastern, so everyone everywhere is on the same board and it changes at the same moment.
 
 export const EPOCH = '2026-09-25'; // DPIYF Lettertown #1
 
+/** The game's clock: a new board at midnight Eastern for everyone, wherever their device is. */
+export const GAME_ZONE = 'America/New_York';
+
+/** The first board on the one Eastern clock. Earlier boards kept their old open/lock times. */
+export const ONE_CLOCK_FROM = '2026-10-05';
+
+/** Today's board: the date in Eastern time. */
 export function dateKeyFor(date: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: GAME_ZONE }).format(date);
 }
 
 export function shiftDateKey(dateKey: string, days: number): string {
@@ -30,12 +37,13 @@ export function shortDate(dateKey: string): string {
 
 const HOUR = 3600 * 1000;
 
-/** A daily board opens when its date begins in the earliest time zone (UTC+14). */
+/** A daily board opens at midnight Eastern at the start of its date. */
 export function boardOpensAt(dateKey: string): number {
-  return Date.parse(`${dateKey}T00:00:00Z`) - 14 * HOUR;
+  // Until the one clock began, a board opened when its date began anywhere (UTC+14); the first
+  // Eastern board keeps that too, so devices still on the old version aren’t turned away.
+  if (dateKey <= ONE_CLOCK_FROM) return Date.parse(`${dateKey}T00:00:00Z`) - 14 * HOUR;
+  return midnightIn(dateKey, GAME_ZONE);
 }
-
-const LOCK_ZONE = 'America/Los_Angeles';
 
 /** How far a time zone's wall clock is ahead of UTC at an instant (negative for the Americas). */
 function zoneOffsetMs(instant: number, timeZone: string): number {
@@ -48,12 +56,19 @@ function zoneOffsetMs(instant: number, timeZone: string): number {
   return wall - Math.floor(instant / 1000) * 1000;
 }
 
+/** The instant a date begins in a time zone (daylight saving included). */
+function midnightIn(dateKey: string, timeZone: string): number {
+  const midnight = Date.parse(`${dateKey}T00:00:00Z`); // that wall-clock time, read as UTC
+  const guess = midnight - zoneOffsetMs(midnight, timeZone);
+  return midnight - zoneOffsetMs(guess, timeZone);
+}
+
 /**
- * A daily board hard-locks at midnight Pacific time at the end of its date
- * (daylight saving included). After that its leaderboard is final.
+ * A daily board locks at midnight Eastern at the end of its date, when the next one opens.
+ * After that its leaderboard is final and everyone's missed words show in Past.
  */
 export function boardLocksAt(dateKey: string): number {
-  const midnight = Date.parse(`${shiftDateKey(dateKey, 1)}T00:00:00Z`); // that wall-clock time, read as UTC
-  const guess = midnight - zoneOffsetMs(midnight, LOCK_ZONE);
-  return midnight - zoneOffsetMs(guess, LOCK_ZONE);
+  // Before the one clock, boards locked at midnight Pacific.
+  if (dateKey < ONE_CLOCK_FROM) return midnightIn(shiftDateKey(dateKey, 1), 'America/Los_Angeles');
+  return midnightIn(shiftDateKey(dateKey, 1), GAME_ZONE);
 }

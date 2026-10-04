@@ -121,6 +121,23 @@ describe('daily leaderboard', () => {
     await rejects(submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words }), 400);
     expect((await getDaily(deps, DATE, P1)).you!.words).toBe(3);
   });
+
+  it('on the one Eastern clock, opens and locks each board at midnight Eastern', async () => {
+    const at = (iso: string) => (clock = Date.parse(iso));
+    const D = '2026-10-07';
+    const later = generateDaily(dict, seeds, D);
+    const words = later.answers.map((a) => a.word);
+    const answers = deps.answers;
+    deps.answers = async (key) => (key === `daily/${D}` ? answerTable(later) : answers(key));
+    at('2026-10-07T03:59:00Z'); // 11:59 PM Eastern on the 6th: not open yet, even in Kiribati
+    await rejects(submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words }), 400);
+    at('2026-10-07T04:00:00Z'); // midnight Eastern
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words: words.slice(0, 2) });
+    at('2026-10-08T03:59:00Z');
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words: words.slice(0, 3) });
+    at('2026-10-08T04:00:00Z'); // locked: midnight Eastern, not Pacific
+    await rejects(submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words }), 400);
+  });
 });
 
 describe('blitz leaderboard', () => {

@@ -96,10 +96,10 @@ export function Archive({ today, colors, selected, onSelect, foundCount, puzzle,
             <AnswerList answers={p.answers} bonus={p.bonus} found={found} />
           ) : (
             <>
-              {/* Still open somewhere (until midnight Pacific): show only your own words, so the
-                  answers can't be read here and entered before the board closes. */}
+              {/* Still open: show only your own words, so the answers can't be read here and
+                  entered before the board closes. */}
               <p className="mb-3 rounded-xl bg-bg p-3 text-sm">
-                This board is still open until midnight Pacific. The words you missed appear at{' '}
+                This board is still open. The words you missed appear at{' '}
                 <b>{LOCAL_TIME.format(boardLocksAt(selected))}</b>, once it closes for everyone.
               </p>
               <AnswerList answers={p.answers} bonus={p.bonus} found={found} hideMissed />
