@@ -540,7 +540,7 @@ export function Leaderboard({
                       </span>
                     )}
                   </span>
-                  <span className="hidden text-xs text-muted sm:inline">{r.rankName} · {r.words}w{r.pangrams ? ' · 🌟' : ''}</span>
+                  <span className="hidden text-xs text-muted sm:inline">{r.rankName} · {r.words}w{r.bonus ? ` +${r.bonus}★` : ''}{r.pangrams ? ' · 🌟' : ''}</span>
                   <span className="w-12 text-right font-bold tabular-nums">{r.score}</span>
                 </button>
                 {menu === r.name && !r.you && (

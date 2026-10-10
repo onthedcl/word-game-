@@ -44,6 +44,8 @@ export interface Entry {
   pangrams: number;
   rankName: string;
   updatedAt: number;
+  /** How many of `words` are bonus words (they score but don't count toward "every word"). */
+  bonus?: number;
   /** Every counted word found. */
   allFound?: boolean;
   /** When every counted word was found, for the finishing order. */
@@ -126,7 +128,7 @@ function score(table: AnswerTable, submitted: Submitted[], name: string, now: nu
     pangrams += hit[1];
   }
   const allFound = counted === countedWords(table);
-  return { name, score: total, words, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now, allFound };
+  return { name, score: total, words, bonus: words - counted, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now, allFound };
 }
 
 async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
@@ -150,7 +152,11 @@ function checkDailyDate(value: unknown, now: number): string {
 }
 
 /** A leaderboard from the entries under `prefix`, optionally only for some players (a league). */
-export async function readBoard(kv: KV, prefix: string, playerId: string | null, only?: ReadonlySet<string>) {
+export async function readBoard(
+  kv: KV, prefix: string, playerId: string | null, only?: ReadonlySet<string>,
+  /** The board's answers, read only if an older entry doesn't say how many bonus words it has. */
+  answers?: () => Promise<AnswerTable | null>,
+) {
   const blocked = await blockedPlayers(kv);
   // Blocked players still see themselves; nobody else sees them.
   const shown = (id: string) => (!only || only.has(id)) && (!blocked.has(id) || id === playerId);
@@ -159,6 +165,10 @@ export async function readBoard(kv: KV, prefix: string, playerId: string | null,
     await Promise.all(blobs.map(async ({ key }) => ({ key, entry: (await kv.get(key, { type: 'json' })) as Entry | null })))
   ).filter((r): r is { key: string; entry: Entry } => !!r.entry);
   rows.sort((a, b) => b.entry.score - a.entry.score || a.entry.updatedAt - b.entry.updatedAt);
+  // Word counts are the board's counted words; bonus words are shown apart, so "every word" adds up.
+  const table = answers && rows.some((r) => r.entry.bonus === undefined && r.entry.found) ? await answers() : null;
+  const bonusOf = (e: Entry) =>
+    e.bonus ?? (table && e.found ? e.found.filter((f) => Object.hasOwn(table.words, f.word) && table.words[f.word][2]).length : 0);
   // Everyone who found every word, in the order they got there (1 = first to finish).
   const finished = (e: Entry) => e.allFound ?? e.rankName === TOP_RANK;
   const finishers = rows.filter((r) => finished(r.entry))
@@ -167,8 +177,10 @@ export async function readBoard(kv: KV, prefix: string, playerId: string | null,
   const all = rows.map((r, i) => {
     const { name, score, words, pangrams, rankName } = r.entry;
     const finish = finishers.indexOf(r.key) + 1;
+    const bonus = Math.min(bonusOf(r.entry), words);
     return {
-      position: i + 1, name, score, words, pangrams, rankName, you: !!playerId && r.key === prefix + playerId,
+      position: i + 1, name, score, words: words - bonus, pangrams, rankName, you: !!playerId && r.key === prefix + playerId,
+      ...(bonus ? { bonus } : {}),
       ...(finish ? { finished: finish } : {}),
     };
   });
@@ -291,12 +303,12 @@ export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   await deps.kv.setJSON(`players/${playerId}`, { name });
   await notePasses(deps, playerId, name, date, prev?.score ?? 0, Math.max(entry.score, prev?.score ?? 0));
   const streak = entry.words > 0 ? await bumpStreak(deps, playerId, boardIdOf(date).dateKey) : await streakOf(deps, playerId);
-  return { ok: true, score: entry.score, streak, ...(await readBoard(deps.kv, `daily/${date}/`, playerId)) };
+  return { ok: true, score: entry.score, streak, ...(await readBoard(deps.kv, `daily/${date}/`, playerId, undefined, async () => table)) };
 }
 
 export async function getDaily(deps: Deps, date: string | null, playerId: string | null) {
   boardIdOf(date);
-  return readBoard(deps.kv, `daily/${date}/`, playerId && PLAYER_ID.test(playerId) ? playerId : null);
+  return readBoard(deps.kv, `daily/${date}/`, playerId && PLAYER_ID.test(playerId) ? playerId : null, undefined, () => deps.answers(`daily/${date}`));
 }
 
 // ---- blitz --------------------------------------------------------------------

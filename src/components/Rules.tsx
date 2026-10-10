@@ -67,8 +67,9 @@ export function Rules() {
           the spot you trace, so <b>pick the highest-scoring one</b> (look for premium tiles).
         </li>
         <li>
-          Ranks: Tourist → Newcomer → Local → Wordsmith → Town Crier → Mayor → <b>Key to the City</b> (find every
-          word).
+          Ranks: Tourist → Newcomer → Local → Wordsmith → Town Crier → Mayor, earned with points. The top rank,{' '}
+          <b>Key to the City</b>, takes finding every word in the “words of” count. Bonus ★ words don't count
+          toward it, and points alone top out at Mayor.
         </li>
       </ul>
       <h3 className="mt-4 mb-1 font-bold">Controls</h3>

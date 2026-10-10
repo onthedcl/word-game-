@@ -220,7 +220,7 @@ export async function leagueBoard(deps: Deps, rawId: unknown, rawDate: unknown, 
   if (!boardId) throw new ApiError(400, 'Bad date');
   const members = new Set(league.members);
   await announceYesterday(deps, id, league, parseBoardId(boardId)!.dateKey);
-  const board = await readBoard(deps.kv, `daily/${boardId}/`, playerId, members);
+  const board = await readBoard(deps.kv, `daily/${boardId}/`, playerId, members, () => deps.answers(`daily/${boardId}`));
   const news = ((await deps.kv.get(newsKey(id), { type: 'json' })) as NewsItem[] | null) ?? [];
   return { id, name: league.name, members: league.members.length, owner: league.owner === playerId, public: !!league.public, board, news };
 }
