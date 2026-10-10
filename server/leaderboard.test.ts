@@ -141,6 +141,21 @@ describe('daily leaderboard', () => {
     expect(top.map((r) => r.name)).toEqual(['Bo', 'Ann', 'Cy']);
   });
 
+  it('counts only the board\'s own words, with bonus words shown apart', async () => {
+    const table = answerTable(puzzle);
+    table.words.zzzz = [5, 0, 1]; // a bonus word
+    deps.answers = async (key) => (key === `daily/${DATE}` ? table : null);
+    await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [...words, 'zzzz'] });
+    // An entry saved before bonus words were tracked: worked out from its found words.
+    await deps.kv.setJSON(`daily/${DATE}/${P2}`, {
+      name: 'Bo', score: 9, words: 3, pangrams: 0, rankName: 'Tourist', updatedAt: clock,
+      found: [{ word: words[0], route: null }, { word: words[1], route: null }, { word: 'zzzz', route: null }],
+    });
+    const { top } = await getDaily(deps, DATE, null);
+    expect(top[0]).toMatchObject({ name: 'Ann', words: words.length, bonus: 1, finished: 1 });
+    expect(top[1]).toMatchObject({ name: 'Bo', words: 2, bonus: 1 });
+  });
+
   it('on the one Eastern clock, opens and locks each board at midnight Eastern', async () => {
     const at = (iso: string) => (clock = Date.parse(iso));
     const D = '2026-10-07';
@@ -478,7 +493,7 @@ describe('bonus words', () => {
     expect((await getDaily(deps, DATE, P1)).you!.rankName).not.toBe('Key to the City');
     // A bonus word adds points but doesn't complete the board...
     const r1 = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [...main.slice(0, -1), { w: bonus.word, p: bonus.path }] });
-    expect(r1.you!.words).toBe(main.length);
+    expect(r1.you).toMatchObject({ words: main.length - 1, bonus: 1 }); // shown as its own count
     expect(r1.you!.rankName).not.toBe('Key to the City');
     // ...every counted word does.
     const r2 = await submitDaily(deps, { playerId: P1, name: 'Ann', date: DATE, words: [...main, { w: bonus.word, p: bonus.path }] });

@@ -10,6 +10,8 @@ export interface BoardRow {
   pangrams: number;
   rankName: string;
   you: boolean;
+  /** Bonus words found; `words` counts only the board's own words. */
+  bonus?: number;
   /** Found every word: 1 = first to finish, 2 = second, ... */
   finished?: number;
 }
