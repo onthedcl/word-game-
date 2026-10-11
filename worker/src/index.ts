@@ -55,6 +55,8 @@ interface NotifyStatus {
 }
 /** Set by the Worker (never trusted from the client): Cloudflare's rough location for the player. */
 const PLACE_HEADER = 'X-Lettertown-Place';
+/** Set by the Worker: a one-way scramble of the player's connection, for rate limits. Never the IP itself. */
+const CLIENT_HEADER = 'X-Lettertown-Client';
 
 export class Leaderboard extends DurableObject<Env> {
   // Answer tables live only in this object's storage (uploaded by the build), cached in memory.
@@ -234,7 +236,7 @@ export class Leaderboard extends DurableObject<Env> {
         case 'GET /api/blitz/board':
           return json(await blitzBoard(deps, url.searchParams.get('game'), player));
         case 'POST /api/check':
-          return json(await checkWord(deps, body));
+          return json(await checkWord(deps, { ...body, client: req.headers.get(CLIENT_HEADER) ?? undefined }));
         case 'POST /api/catch-up':
           return json(await catchUp(deps, body));
         case 'POST /api/admin/board-secret':
@@ -327,6 +329,13 @@ export default {
     // Pass Cloudflare's approximate location (city/region/country, not the IP) to the leaderboard.
     const forwarded = new Request(req);
     forwarded.headers.delete(PLACE_HEADER);
+    forwarded.headers.delete(CLIENT_HEADER);
+    const ip = req.headers.get('CF-Connecting-IP');
+    if (ip) {
+      // Scrambled with today's date, so it can't be turned back into an address or followed across days.
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${easternDay()}|${ip}`));
+      forwarded.headers.set(CLIENT_HEADER, [...new Uint8Array(digest).slice(0, 8)].map((b) => b.toString(16).padStart(2, '0')).join(''));
+    }
     const cf = req.cf as { city?: string; regionCode?: string; region?: string; country?: string } | undefined;
     if (cf) {
       const place: Place = { city: cf.city, region: cf.regionCode ?? cf.region, country: cf.country };

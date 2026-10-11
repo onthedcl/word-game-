@@ -105,14 +105,17 @@ async function blitzGameOf(deps: Deps, rawGame: unknown, rawPlayer: unknown) {
 }
 
 // Word checks are generous for people but not for scripts trying every word in a dictionary.
+// Counted per player and per connection (a script could make up new player ids, and a
+// household shares one connection, so that limit is higher).
 const CHECKS_PER_MINUTE = 60;
+const CHECKS_PER_CONNECTION = 150;
 const recentChecks = new Map<string, number[]>();
 
-function rateLimit(playerId: string, now: number) {
-  const recent = (recentChecks.get(playerId) ?? []).filter((t) => now - t < 60_000);
-  if (recent.length >= CHECKS_PER_MINUTE) throw new ApiError(429, 'Slow down a little');
+function rateLimit(key: string, limit: number, now: number) {
+  const recent = (recentChecks.get(key) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= limit) throw new ApiError(429, 'Slow down a little');
   recent.push(now);
-  recentChecks.set(playerId, recent);
+  recentChecks.set(key, recent);
   if (recentChecks.size > 5000) recentChecks.clear();
 }
 
@@ -134,7 +137,9 @@ export async function checkWord(deps: Deps, body: Record<string, unknown>) {
     if (deps.now() < boardOpensAt(dateKey)) throw new ApiError(404, 'That board isn’t open yet');
     table = await tableFor(deps, `daily/${boardId}`);
   }
-  rateLimit(playerId, deps.now());
+  rateLimit(`p:${playerId}`, CHECKS_PER_MINUTE, deps.now());
+  // Set by the Worker (a one-way scramble of the connection, never the address itself).
+  if (typeof body.client === 'string') rateLimit(`c:${body.client}`, CHECKS_PER_CONNECTION, deps.now());
   const word = typeof body.word === 'string' ? body.word.toLowerCase() : '';
   const route = Array.isArray(body.route) && body.route.every((n) => Number.isInteger(n)) ? (body.route as number[]) : null;
   const board = table.board!;

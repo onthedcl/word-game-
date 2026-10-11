@@ -1,7 +1,7 @@
-// Builds public/dict/words.dawg (the common words boards are built from, as a
-// minimized trie), public/dict/words-all.dawg (every word accepted as an answer)
-// public/dict/words-full.dawg (every ENABLE word, playable as a bonus word)
-// and public/dict/pangrams.txt (curated pangram seeds).
+// Builds data/dict/words.dawg (the common words boards are built from, as a
+// minimized trie), data/dict/words-all.dawg (every word accepted as an answer)
+// data/dict/words-full.dawg (every ENABLE word, playable as a bonus word)
+// and data/dict/pangrams.txt (curated pangram seeds).
 //
 // Sources (downloaded at build time, not committed):
 //   - ENABLE word list (public domain) — the base of valid English words.
@@ -122,7 +122,7 @@ function buildDawg(list) {
 
 const sorted = (s) => [...s].sort();
 const dawg = buildDawg(sorted(words));
-if (!FULL_ONLY) writeFileSync(join(ROOT, 'public/dict/words.dawg'), dawg.text);
+if (!FULL_ONLY) writeFileSync(join(ROOT, 'data/dict/words.dawg'), dawg.text);
 // Bonus words: every other ENABLE word (the public-domain equivalent of a
 // Scrabble word list). They're accepted and score points, but don't count
 // toward a board's total, so finding every word stays achievable.
@@ -136,13 +136,13 @@ for (const file of ['scowl-extra.txt', 'extra-words.txt']) {
   }
 }
 const fullDawg = buildDawg(sorted(new Set(fullWords)));
-writeFileSync(join(ROOT, "public/dict/words-full.dawg"), fullDawg.text);
+writeFileSync(join(ROOT, "data/dict/words-full.dawg"), fullDawg.text);
 console.log(`every playable word: ${fullWords.length} (${fullDawg.text.length} bytes)`);
 
 const all = buildDawg(sorted(allWords));
 if (!FULL_ONLY) {
-  writeFileSync(join(ROOT, 'public/dict/words-all.dawg'), all.text);
-  writeFileSync(join(ROOT, 'public/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
+  writeFileSync(join(ROOT, 'data/dict/words-all.dawg'), all.text);
+  writeFileSync(join(ROOT, 'data/dict/pangrams.txt'), sorted(pangrams).join('\n') + '\n');
 }
 console.log(`accepted words: ${allWords.size} (${all.text.length} bytes)`);
 console.log(`words: ${words.size} (${dawg.nodes} DAWG nodes, ${dawg.text.length} bytes), pangram seeds: ${pangrams.size}`);
