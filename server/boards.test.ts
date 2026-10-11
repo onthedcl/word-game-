@@ -142,3 +142,12 @@ describe('catching up', () => {
     expect((await catchUp(deps, { playerId: P1, board: DATE, words: [a.word] })).words).toEqual([]);
   });
 });
+
+describe('connection limit', () => {
+  it('stops a script that makes up new player ids', async () => {
+    const a = daily.answers[0];
+    const ask = (i: number) => checkWord(deps, { playerId: `made-up-player-${String(i).padStart(6, '0')}`, client: 'conn-1', board: DATE, word: a.word, route: a.path });
+    for (let i = 0; i < 150; i++) await ask(i);
+    await expect(ask(999)).rejects.toMatchObject({ status: 429 });
+  });
+});

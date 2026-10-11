@@ -46,7 +46,7 @@ jobs:
         run: |
           git config user.name "Lettertown words"
           git config user.email "actions@users.noreply.github.com"
-          git add scripts/data/extra-words.txt public/dict/words-full.dawg
+          git add scripts/data/extra-words.txt data/dict/words-full.dawg
           git commit -m "Accept extra words:${ADDED}"
           git push
           # Pushes made by this workflow don't trigger other workflows, so start the deploy directly.
