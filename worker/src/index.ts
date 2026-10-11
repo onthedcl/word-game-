@@ -13,6 +13,7 @@ import {
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
 import { linkAccount } from '../../server/accounts';
+import { blitzBoard, boardSecret, catchUp, checkWord, dailyBoard, ownerAnswers, storeTables, tableKey } from '../../server/boards';
 import { verifyFirebaseToken } from '../../server/firebaseToken';
 import {
   createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues,
@@ -21,7 +22,6 @@ import {
 
 interface Env {
   BOARD: DurableObjectNamespace<Leaderboard>;
-  SCORES_BASE: string;
   ALLOWED_ORIGINS: string;
   /** Private ntfy.sh topic for "someone is playing" notifications (a Worker secret). */
   NTFY_TOPIC?: string;
@@ -41,7 +41,6 @@ interface Env {
 
 const NOTIFY_REPO = 'onthedcl/word-game-';
 
-const MISSING_RETRY_MS = 10 * 60 * 1000;
 /** Pings are collected and sent as one summary this often. */
 const DIGEST_MS = 60 * 60 * 1000;
 const DIGEST_QUEUE = 'digest-queue';
@@ -58,15 +57,14 @@ interface NotifyStatus {
 const PLACE_HEADER = 'X-Lettertown-Place';
 
 export class Leaderboard extends DurableObject<Env> {
-  private tables = new Map<string, { table: AnswerTable | null; at: number }>();
-  private pool: string[] | null = null;
-
-  private async fetchJSON<T>(path: string): Promise<T | null> {
-    const res = await fetch(`${this.env.SCORES_BASE}/${path}`);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`Could not load ${path} (${res.status})`);
-    return (await res.json()) as T;
+  // Answer tables live only in this object's storage (uploaded by the build), cached in memory.
+  private async legacyTable(key: string): Promise<AnswerTable | null> {
+    const res = await fetch(`https://onthedcl.github.io/word-game-/scores/${key}.json`).catch(() => null);
+    return res?.ok ? ((await res.json()) as AnswerTable) : null;
   }
+
+  private tables = new Map<string, AnswerTable | null>();
+  private pool: string[] | null = null;
 
   private deps(): Deps {
     const storage = this.ctx.storage;
@@ -78,14 +76,18 @@ export class Leaderboard extends DurableObject<Env> {
         list: async ({ prefix }) => ({ blobs: [...(await storage.list({ prefix })).keys()].map((key) => ({ key })) }),
       },
       answers: async (key) => {
-        const hit = this.tables.get(key);
-        // Tables never change; a missing one is retried now and then in case a new build added it.
-        if (hit && (hit.table || Date.now() - hit.at < MISSING_RETRY_MS)) return hit.table;
-        const table = await this.fetchJSON<AnswerTable>(`${key}.json`);
-        this.tables.set(key, { table, at: Date.now() });
+        if (this.tables.has(key)) return this.tables.get(key)!;
+        let table = ((await storage.get(tableKey(key))) as AnswerTable | undefined) ?? null;
+        // Switchover only: until the first private upload lands, the old public copies still answer.
+        if (!table && !(await storage.get(tableKey('blitz-pool')))) table = await this.legacyTable(key);
+        if (table) this.tables.set(key, table);
         return table;
       },
-      blitzSeeds: async () => (this.pool ??= (await this.fetchJSON<string[]>('blitz-pool.json')) ?? []),
+      blitzSeeds: async () => {
+        this.pool ??= ((await storage.get(tableKey('blitz-pool'))) as string[] | undefined) ?? null;
+        // Switchover only (see answers): the old public pool.
+        return this.pool ?? (((await this.legacyTable('blitz-pool')) as unknown as string[] | null) ?? []);
+      },
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),
       random: () => Math.random(),
@@ -227,6 +229,30 @@ export class Leaderboard extends DurableObject<Env> {
           // Owner only (the nightly Cheat check workflow): who stood out on a closed board.
           if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
           return json(await cheatReport(deps, typeof body.day === 'string' ? body.day : ''));
+        case 'GET /api/board':
+          return json(await dailyBoard(deps, url.searchParams.get('date'), player));
+        case 'GET /api/blitz/board':
+          return json(await blitzBoard(deps, url.searchParams.get('game'), player));
+        case 'POST /api/check':
+          return json(await checkWord(deps, body));
+        case 'POST /api/catch-up':
+          return json(await catchUp(deps, body));
+        case 'POST /api/admin/board-secret':
+          // The build only: the secret new boards are made with.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          return json({ secret: await boardSecret(deps) });
+        case 'POST /api/admin/tables': {
+          // The build only: upload answer tables.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          const result = await storeTables(deps, body);
+          this.tables.clear();
+          this.pool = null;
+          return json(result);
+        }
+        case 'POST /api/admin/answers':
+          // Owner only (the Answers workflow): a board's answers, for the owner's phone.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          return json({ report: await ownerAnswers(deps, typeof body.date === 'string' ? body.date : easternDay()) });
         case 'POST /api/delete':
           return json(await deletePlayer(deps, body));
         case 'POST /api/report':

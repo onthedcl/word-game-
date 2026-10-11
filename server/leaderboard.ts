@@ -10,9 +10,10 @@ import type { Identity } from './firebaseToken';
 import { accountOf, moveAccount, unlinkAccount } from './accounts';
 import { leaveAllLeagues, movePlayerInLeagues, notePasses, roomsSummary } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
+import { blitzBoard } from './boards';
 
 export const BLITZ_SECONDS = 180;
-const BLITZ_GRACE_SECONDS = 20; // network latency and slow phones
+export const BLITZ_GRACE_SECONDS = 20; // network latency and slow phones
 const TOP_N = 50;
 
 /** The subset of a Netlify Blobs store this module uses (easy to fake in tests). */
@@ -62,7 +63,7 @@ export class ApiError extends Error {
   }
 }
 
-const PLAYER_ID = /^[A-Za-z0-9-]{16,64}$/;
+export const PLAYER_ID = /^[A-Za-z0-9-]{16,64}$/;
 
 export function playerIdOf(value: unknown): string {
   if (typeof value !== 'string' || !PLAYER_ID.test(value)) throw new ApiError(400, 'Bad player id');
@@ -112,7 +113,7 @@ function wordPoints(table: AnswerTable, { word, route }: Submitted, best: number
 }
 
 /** How many words a board counts toward "every word" (bonus words don't count). */
-const countedWords = (table: AnswerTable) => Object.values(table.words).filter((w) => !w[2]).length;
+export const countedWords = (table: AnswerTable) => Object.values(table.words).filter((w) => !w[2]).length;
 
 function score(table: AnswerTable, submitted: Submitted[], name: string, now: number): Entry & { allFound: boolean } {
   let total = 0;
@@ -131,21 +132,21 @@ function score(table: AnswerTable, submitted: Submitted[], name: string, now: nu
   return { name, score: total, words, bonus: words - counted, pangrams, rankName: rankFor(total, table.maxScore, allFound).name, updatedAt: now, allFound };
 }
 
-async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
+export async function tableFor(deps: Deps, key: string): Promise<AnswerTable> {
   const table = await deps.answers(key);
   if (!table) throw new ApiError(404, 'Unknown puzzle');
   return table;
 }
 
 /** A daily board id ("2026-09-26" or "2026-09-26~v1" after a reroll). */
-function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
+export function boardIdOf(value: unknown): { boardId: string; dateKey: string } {
   const parsed = typeof value === 'string' ? parseBoardId(value) : null;
   if (!parsed || !isDateKey(parsed.dateKey) || parsed.dateKey < EPOCH) throw new ApiError(400, 'Bad date');
   return { boardId: value as string, dateKey: parsed.dateKey };
 }
 
 /** A board takes scores from when it opens until it locks (midnight Eastern at either end of its date). */
-function checkDailyDate(value: unknown, now: number): string {
+export function checkDailyDate(value: unknown, now: number): string {
   const { boardId, dateKey } = boardIdOf(value);
   if (now < boardOpensAt(dateKey) || now >= boardLocksAt(dateKey)) throw new ApiError(400, 'That puzzle is closed');
   return boardId;
@@ -313,7 +314,7 @@ export async function getDaily(deps: Deps, date: string | null, playerId: string
 
 // ---- blitz --------------------------------------------------------------------
 
-interface BlitzGame {
+export interface BlitzGame {
   playerId: string;
   seed: string;
   startedAt: number;
@@ -327,7 +328,7 @@ export async function startBlitz(deps: Deps, body: Record<string, unknown>) {
   const seed = pool[Math.floor(deps.random() * pool.length)];
   const game = deps.randomId();
   await deps.kv.setJSON(`blitz-games/${game}`, { playerId, seed, startedAt: deps.now(), finished: false } satisfies BlitzGame);
-  return { game, seed, seconds: BLITZ_SECONDS };
+  return { game, seed, seconds: BLITZ_SECONDS, board: await blitzBoard(deps, game, playerId) };
 }
 
 export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {

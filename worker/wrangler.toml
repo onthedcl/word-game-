@@ -5,8 +5,6 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
 [vars]
-# Where the build publishes the answer tables the server scores against.
-SCORES_BASE = "https://onthedcl.github.io/word-game-/scores"
 # Sites allowed to call the API (comma-separated).
 # capacitor://localhost is the iPhone app.
 ALLOWED_ORIGINS = "https://onthedcl.github.io,capacitor://localhost"

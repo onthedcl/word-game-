@@ -1,0 +1,38 @@
+name: Answers
+
+# Owner only: sends a board's answers to your phone. Nobody else can see a board's answers
+# until it closes; the server keeps them. Run it from the Actions tab.
+# The answers are never printed here (this log is public).
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Board date (YYYY-MM-DD, optional; default: today in Eastern time)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  answers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send to your phone
+        env:
+          KEY: ${{ secrets.NTFY_TOPIC }}
+          TOKEN: ${{ secrets.NTFY_TOKEN }}
+          DATE: ${{ inputs.date }}
+        run: |
+          date=${DATE:-$(TZ=America/New_York date +%F)}
+          body=$(jq -n --arg key "$KEY" --arg date "$date" '{key: $key, date: $date}')
+          res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
+            https://word-game-leaderboard.danlagstein.workers.dev/api/admin/answers)
+          status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")
+          if [ "$status" != 200 ]; then jq 'del(.report)' <<<"$json" 2>/dev/null || echo "$json"; echo "HTTP $status"; exit 1; fi
+          report=$(jq -r .report <<<"$json")
+          auth=()
+          [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
+          msg=$(jq -n --arg topic "$KEY" --arg title "Answers for $date" --arg message "$report" '{topic: $topic, title: $title, message: $message, tags: ["key"]}')
+          curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$msg" https://ntfy.sh/ > /dev/null ||
+            { echo "::warning::ntfy refused the token; sent without it. Check NTFY_TOKEN."; curl -fsS -H 'Content-Type: application/json' -d "$msg" https://ntfy.sh/ > /dev/null; }
+          echo "Sent to your phone."
