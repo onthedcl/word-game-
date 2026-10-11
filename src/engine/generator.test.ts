@@ -10,8 +10,10 @@ import { findPaths, solveBoard } from './solver';
 import { MIN_WORD_LENGTH, scorePath } from './scoring';
 
 const DAYS = 40;
+// Boards from SECRET_BOARDS_FROM on need the server's secret; any secret will do here.
+const gd = (dateKey: string, version?: number) => generateDaily(dict, seeds, dateKey, version, 'test-secret-0123456789abcdef0123456789');
 const days = Array.from({ length: DAYS }, (_, i) => shiftDateKey(EPOCH, i));
-const puzzles = days.map((d) => generateDaily(dict, seeds, d));
+const puzzles = days.map((d) => gd(d));
 
 describe('dates', () => {
   it('numbers puzzles from the epoch', () => {
@@ -37,7 +39,7 @@ describe('randomPath', () => {
 
 describe('determinism', () => {
   it('builds the same daily board every time', () => {
-    const again = generateDaily(dict, seeds, days[5]);
+    const again = gd(days[5]);
     expect(again).toEqual(puzzles[5]);
   });
 
@@ -141,20 +143,20 @@ describe('weekly difficulty', () => {
   it('runs Monday (easiest) to Sunday (hardest) from the open-letter launch', () => {
     expect(weekdayIndex('2026-09-28')).toBe(0); // Monday
     expect(weekdayIndex('2026-10-04')).toBe(6); // Sunday
-    expect(generateDaily(dict, seeds, '2026-09-26').difficulty).toBeNull();
-    expect(generateDaily(dict, seeds, '2026-09-28').difficulty).toBe(0);
+    expect(gd('2026-09-26').difficulty).toBeNull();
+    expect(gd('2026-09-28').difficulty).toBe(0);
   });
 
   it('gives Mondays clearly more words than Sundays', () => {
     const avg = (offset: number) => {
-      const counts = [0, 1, 2].map((w) => generateDaily(dict, seeds, shiftDateKey('2026-09-28', offset + 7 * w)).answers.length);
+      const counts = [0, 1, 2].map((w) => gd(shiftDateKey('2026-09-28', offset + 7 * w)).answers.length);
       return counts.reduce((a, b) => a + b, 0) / counts.length;
     };
     expect(avg(0)).toBeGreaterThan(avg(6) * 1.5);
   }, 60_000);
 
   it('can use more than seven letters, and pangrams mean 7+ different letters', () => {
-    const sunday = generateDaily(dict, seeds, '2026-10-04');
+    const sunday = gd('2026-10-04');
     expect(sunday.letters.length).toBeGreaterThan(7);
     for (const a of sunday.answers) expect(a.pangram).toBe(new Set(a.word).size >= 7);
   });
@@ -162,25 +164,25 @@ describe('weekly difficulty', () => {
 
 describe('rerolled days', () => {
   it('replace the board deterministically and leave other days alone', () => {
-    const original = generateDaily(dict, seeds, '2026-09-26', 0);
-    const rerolled = generateDaily(dict, seeds, '2026-09-26', 1);
+    const original = gd('2026-09-26', 0);
+    const rerolled = gd('2026-09-26', 1);
     expect(rerolled.board).not.toEqual(original.board);
     expect(rerolled.letters.join('')).not.toBe(original.letters.join(''));
-    expect(rerolled).toEqual(generateDaily(dict, seeds, '2026-09-26', 1));
+    expect(rerolled).toEqual(gd('2026-09-26', 1));
     expect(rerolled).toMatchObject({ dateKey: '2026-09-26', boardId: '2026-09-26~v1', number: 2 });
     expect(original.boardId).toBe('2026-09-26');
     expect(isAcceptable(rerolled)).toBe(true);
   });
 
   it('use the reroll list by default', () => {
-    expect(generateDaily(dict, seeds, '2026-09-26').boardId).toBe('2026-09-26~v1');
-    expect(generateDaily(dict, seeds, '2026-09-27').boardId).toBe('2026-09-27');
+    expect(gd('2026-09-26').boardId).toBe('2026-09-26~v1');
+    expect(gd('2026-09-27').boardId).toBe('2026-09-27');
   });
 });
 
 describe('variety', () => {
   it('almost never repeats a letter set in the first year', () => {
-    const sets = Array.from({ length: 365 }, (_, i) => generateDaily(dict, seeds, shiftDateKey(EPOCH, i)).letters.join(''));
+    const sets = Array.from({ length: 365 }, (_, i) => gd(shiftDateKey(EPOCH, i)).letters.join(''));
     // Easy days sometimes have to hunt through other letter sets, so allow a rare repeat.
     expect(new Set(sets).size).toBeGreaterThanOrEqual(360);
   }, 120_000);
@@ -189,7 +191,7 @@ describe('variety', () => {
 describe('key tile vowels', () => {
   it('puts two different vowels next to the key tile on new daily boards', () => {
     for (let i = 0; i < 21; i++) {
-      const p = generateDaily(dict, seeds, shiftDateKey(KEY_VOWELS_FROM, i));
+      const p = gd(shiftDateKey(KEY_VOWELS_FROM, i));
       const vowels = new Set(NEIGHBORS[CENTER].map((id) => p.board.letters[id]).filter((ch) => 'aeiou'.includes(ch)));
       expect(vowels.size).toBeGreaterThanOrEqual(2);
     }
@@ -197,7 +199,7 @@ describe('key tile vowels', () => {
 });
 
 describe('accepted answers', () => {
-  const board = generateDaily(dict, seeds, '2026-09-27');
+  const board = gd('2026-09-27');
   const wide = withAnswers(board, accepted);
 
   it('keeps the board and adds less common words', () => {

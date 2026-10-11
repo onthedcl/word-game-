@@ -23,7 +23,8 @@ export function FoundWords({ found, answers, scoreOf, routeOf, total, fresh, onS
   const list = (
     <ul className="max-h-[50vh] columns-2 gap-4 overflow-y-auto lg:max-h-[520px]">
       {words.map((w) => {
-        const a = answers.get(w)!;
+        // Unknown for a moment while the server confirms words found before an update.
+        const a = answers.get(w);
         return (
           <li key={w} className={`break-inside-avoid border-b border-line ${w === fresh ? 'animate-fresh' : ''}`}>
             <button
@@ -32,9 +33,9 @@ export function FoundWords({ found, answers, scoreOf, routeOf, total, fresh, onS
               title="Show your route"
               className="flex w-full justify-between gap-2 py-1 text-left capitalize"
             >
-              <span className={a.pangram ? 'font-extrabold text-accent' : ''}>
+              <span className={a?.pangram ? 'font-extrabold text-accent' : ''}>
                 {w}
-                {a.bonus && <span className="ml-1 text-xs text-muted" title="Bonus word: scores, but isn't counted in the total">★</span>}
+                {a?.bonus && <span className="ml-1 text-xs text-muted" title="Bonus word: scores, but isn't counted in the total">★</span>}
               </span>
               <span className="text-sm tabular-nums text-muted">{scoreOf(w)}</span>
             </button>

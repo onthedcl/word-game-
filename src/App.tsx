@@ -16,13 +16,13 @@ import { HintGrid } from './components/HintGrid';
 import { AnswerList } from './components/AnswerList';
 import { Archive } from './components/Archive';
 import { drawShareCard, shareCard, tileHeat } from './shareCard';
-import { requestPuzzle } from './worker/client';
+import { checkOnServer, loadDaily, puzzleFromView, rememberWord, withKnown } from './boards';
 import {
   adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
 } from './storage';
 import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, puzzleNumber, shiftDateKey } from './engine/dates';
 import { dailyBoardId, parseBoardId } from './engine/rerolls';
-import { answerIndex, progress } from './engine/game';
+import { answerIndex, progress, wordTotal } from './engine/game';
 import { hintGrid } from './engine/hints';
 import { GAME_URL, shareText } from './engine/share';
 import { isNewAnimal, streakAnimal, streakGreeting } from './engine/streak';
@@ -168,20 +168,32 @@ async function share(text: string): Promise<string> {
   }
 }
 
-function usePuzzle(dateKey: string | null) {
+/** A day's board from the server, and a way to add words to it as they're confirmed. */
+function usePuzzle(dateKey: string | null, playerId: string) {
   const [state, setState] = useState<{ key: string; puzzle?: Puzzle; error?: string } | null>(null);
   useEffect(() => {
     if (!dateKey) return;
     let live = true;
-    requestPuzzle({ type: 'daily', dateKey }).then(
-      (puzzle) => live && setState({ key: dateKey, puzzle }),
-      (err: Error) => live && setState({ key: dateKey, error: err.message }),
-    );
+    const load = (attempt: number) =>
+      loadDaily(dateKey, playerId).then(
+        (puzzle) => live && setState({ key: dateKey, puzzle }),
+        (err: Error) => {
+          if (!live) return;
+          // A dropped connection: keep trying quietly for a bit before saying so.
+          if (!(err instanceof ApiRejected) && attempt < 3) setTimeout(() => live && load(attempt + 1), 1500 * attempt);
+          else setState({ key: dateKey, error: err instanceof ApiRejected ? err.message : 'Can’t reach the game. Check your connection' });
+        },
+      );
+    load(1);
     return () => {
       live = false;
     };
-  }, [dateKey]);
-  return state?.key === dateKey ? state : null;
+  }, [dateKey, playerId]);
+  const update = useCallback(
+    (fn: (p: Puzzle) => Puzzle) => setState((s) => (s?.key === dateKey && s.puzzle ? { ...s, puzzle: fn(s.puzzle) } : s)),
+    [dateKey],
+  );
+  return [state?.key === dateKey ? state : null, update] as const;
 }
 
 export default function App() {
@@ -299,7 +311,7 @@ export default function App() {
   // ---- daily ----------------------------------------------------------------
   // New players get a "show me a word" tip until they find their first word.
   const [starterDone, setStarterDone] = useStoredState<boolean>('hexicon:starter-done', hasPlayedBefore());
-  const daily = usePuzzle(dateKey);
+  const [daily, updateDaily] = usePuzzle(dateKey, me);
   const [dailyFound, setDailyFound] = useStoredState<Progress>(dailyKey(dailyBoardId(dateKey)), { found: [] });
   const boardId = dailyBoardId(dateKey);
   // The calendar day, re-checked every half minute so midnight is noticed while playing.
@@ -353,6 +365,24 @@ export default function App() {
       live = false;
     };
   }, [online, name, boardOpen, boardId, me, setDailyFound]);
+  // Words already on this device that the server hasn't confirmed (found before boards came from
+  // the server, or while playing without a name): ask once, so they keep their points.
+  const dailyPuzzle = daily?.puzzle;
+  useEffect(() => {
+    if (!dailyPuzzle || !online) return;
+    const known = answerIndex(dailyPuzzle);
+    const missing = dailyFound.found.filter((w) => !known.has(w));
+    const flag = `hexicon:caught-up:${boardId}`;
+    if (!missing.length || readStored(flag, false)) return;
+    writeStored(flag, true);
+    api.catchUp(me, boardId, submission({ found: missing, routes: dailyFound.routes })).then(({ words }) => {
+      for (const w of words) rememberWord(boardId, w);
+      updateDaily((p) => words.reduce(withKnown, p));
+    }, () => writeStored(flag, false));
+    // Only when the board first loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyPuzzle?.boardId, online]);
+
   // A home-screen app that took its player from the address: fetch their name and PIN.
   useEffect(() => {
     if (!online || name || !adoptedPlayer()) return;
@@ -570,7 +600,7 @@ export default function App() {
 
   // ---- past boards ----------------------------------------------------------
   const [archiveDay, setArchiveDay] = useState<string | null>(null);
-  const archived = usePuzzle(dialog === 'archive' ? archiveDay : null);
+  const [archived] = usePuzzle(dialog === 'archive' ? archiveDay : null, me);
   // Words found on the chosen day: saved on this device, plus any from other devices (the server keeps them).
   const [archiveFound, setArchiveFound] = useState<Set<string>>(new Set());
   const [archiveStandings, setArchiveStandings] = useState<{ id: string; board: Board } | null>(null);
@@ -653,25 +683,18 @@ export default function App() {
   const startBlitz = useCallback(async () => {
     writeStored('hexicon:played-blitz', true);
     setBlitz({ phase: 'loading' });
-    // Ranked rounds use a board the server hands out, so it can check the result.
-    let ranked: { game: string; seed: string } | null = null;
-    if (online && name) {
-      try {
-        ranked = await api.startBlitz(me);
-      } catch {
-        setNotice('Leaderboard offline: this round won’t be ranked');
-      }
-    }
-    const seed = ranked?.seed ?? `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
+    // The server deals the board and checks every word (it keeps the answers until time's up).
     try {
-      const puzzle = await requestPuzzle({ type: 'blitz', seed });
+      const round = await api.startBlitz(me);
       setNow(Date.now());
-      setBlitz({ phase: 'playing', puzzle, found: [], routes: {}, endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedGame: ranked?.game ?? null });
+      setBlitz({
+        phase: 'playing', puzzle: puzzleFromView(round.board), found: [], routes: {}, endsAt: Date.now() + BLITZ_SECONDS * 1000, rankedGame: round.game,
+      });
     } catch {
       setBlitz({ phase: 'intro' });
-      setNotice('Could not build a board');
+      setNotice('Can’t reach the game. Check your connection');
     }
-  }, [online, name, me]);
+  }, [me]);
 
   useEffect(() => {
     if (blitz.phase !== 'playing') return;
@@ -686,6 +709,19 @@ export default function App() {
       const ranked = blitz.rankedGame && name;
       setBlitz({ ...blitz, phase: 'over', newBest: score > best, posted: ranked ? { status: 'pending' } : undefined });
       setDialog('blitz-over');
+      // Time's up: now the server shows every word on the board.
+      const game = blitz.rankedGame;
+      if (game) {
+        const reveal = (attempt: number) =>
+          api.blitzBoard(game, me).then(
+            (view) =>
+              view.answers
+                ? setBlitz((b) => (b.phase === 'over' && b.rankedGame === game ? { ...b, puzzle: { ...puzzleFromView(view), known: b.puzzle.known } } : b))
+                : attempt < 3 && setTimeout(() => reveal(attempt + 1), 1500),
+            () => {},
+          );
+        reveal(1);
+      }
       if (ranked) {
         const update = (p: Posted) =>
           setBlitz((b) => (b.phase === 'over' && b.rankedGame === blitz.rankedGame ? { ...b, posted: p } : b));
@@ -932,7 +968,10 @@ export default function App() {
                 setTimeout(() => maybeAskForReview(streak).catch(() => {}), 1800);
               }}
               starter={!starterDone}
-              onFound={(w, r) => {
+              check={(w, r) => checkOnServer({ board: boardId }, me, w, r)}
+              onFound={(w, r, info) => {
+                rememberWord(boardId, info);
+                updateDaily((p) => withKnown(p, info));
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);
                 scheduleDailyReminder().catch(() => {}); // in the iPhone app: once, after the first word
@@ -964,8 +1003,13 @@ export default function App() {
               puzzle={blitz.puzzle}
               found={blitz.found}
               routes={blitz.routes}
-              onFound={(w, r) =>
-                setBlitz((b) => (b.phase === 'playing' ? { ...b, found: [...b.found, w], routes: { ...b.routes, [w]: r } } : b))
+              check={(w, r) => checkOnServer({ game: blitz.rankedGame ?? '' }, me, w, r)}
+              onFound={(w, r, info) =>
+                setBlitz((b) =>
+                  b.phase === 'playing'
+                    ? { ...b, puzzle: withKnown(b.puzzle, info), found: [...b.found, w], routes: { ...b.routes, [w]: r } }
+                    : b,
+                )
               }
               disabled={blitz.phase === 'over'}
               keyboard={dialog === null}
@@ -1220,7 +1264,7 @@ export default function App() {
           return (
             <>
               <p className="mb-1 text-lg">
-                <b>{p.score}</b> points · {blitz.found.length} of {blitz.puzzle.answers.length} words · <b>{p.rank.name}</b>
+                <b>{p.score}</b> points · {blitz.found.length} of {wordTotal(blitz.puzzle)} words · <b>{p.rank.name}</b>
               </p>
               <p className="mb-3 text-sm text-muted">
                 {blitz.newBest ? 'New personal best!' : `Your best: ${best}`}

@@ -60,6 +60,32 @@ export interface Board {
   you: BoardRow | null;
 }
 
+/** A word the player may know about: one they found, or any word once the board is over. */
+export interface WordInfo {
+  word: string;
+  /** Its best score on the board. */
+  score: number;
+  pangram: boolean;
+  bonus?: boolean;
+}
+
+/** A board as the server deals it (see server/boards.ts). */
+export interface BoardView {
+  kind: 'daily' | 'blitz';
+  boardId: string | null;
+  dateKey: string | null;
+  number: number | null;
+  difficulty: number | null;
+  board: { letters: string[]; premiums: ('DL' | 'TL' | 'DW' | null)[] };
+  total: number;
+  maxScore: number;
+  pangrams: number;
+  hints: Record<string, Record<number, number>>;
+  starter: { word: string; path: number[] } | null;
+  found: WordInfo[];
+  answers?: WordInfo[];
+}
+
 /** The server answered with an error (as opposed to being unreachable). */
 export class ApiRejected extends Error {
   constructor(message: string, public status: number) {
@@ -98,7 +124,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
   }
 }
 
-/** Is a leaderboard server answering? The game works fully without one. */
+/** Is the game server answering? Boards come from it, so the game needs it to play. */
 export async function leaderboardOnline(): Promise<boolean> {
   if (!API_BASE) return false;
   const ctrl = new AbortController();
@@ -128,7 +154,15 @@ export const api = {
   progress: (date: string, player: string) =>
     call<{ found: Submitted[] }>('GET', `/api/progress?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
   blitz: (player: string) => call<Board>('GET', `/api/blitz?player=${encodeURIComponent(player)}`),
-  startBlitz: (playerId: string) => call<{ game: string; seed: string; seconds: number }>('POST', '/api/blitz/start', { playerId }),
+  startBlitz: (playerId: string) => call<{ game: string; seconds: number; board: BoardView }>('POST', '/api/blitz/start', { playerId }),
+  blitzBoard: (game: string, player: string) =>
+    call<BoardView>('GET', `/api/blitz/board?game=${encodeURIComponent(game)}&player=${encodeURIComponent(player)}`),
+  board: (date: string, player: string) =>
+    call<BoardView>('GET', `/api/board?date=${encodeURIComponent(date)}&player=${encodeURIComponent(player)}`),
+  catchUp: (playerId: string, board: string, words: Submitted[]) =>
+    call<{ words: WordInfo[] }>('POST', '/api/catch-up', { playerId, board, words }),
+  check: (b: { playerId: string; board?: string; game?: string; word: string; route: number[] }) =>
+    call<({ ok: true; points: number } & WordInfo) | { ok: false; reason: string }>('POST', '/api/check', b),
   finishBlitz: (b: { playerId: string; name: string; game: string; words: Submitted[] }) =>
     call<Board & { score: number; personalBest: boolean }>('POST', '/api/blitz/finish', b),
   /** Erase this player's name, scores and history from the server. */

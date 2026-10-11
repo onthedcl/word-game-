@@ -28,6 +28,17 @@ export interface Puzzle {
   maxScore: number;
   /** 0 (Monday, easiest) to 6 (Sunday, hardest). null for boards made before difficulty existed. */
   difficulty: number | null;
+  // A board dealt by the server (src/boards.ts) has no `answers` until it's over; instead:
+  /** How many words count toward "every word". */
+  total?: number;
+  /** Words to find by first letter and length (the hint grid). */
+  hintCounts?: Record<string, Record<number, number>>;
+  /** How many pangrams the board has. */
+  pangramCount?: number;
+  /** One short word to show a brand-new player how tracing works. */
+  starter?: { word: string; path: number[] } | null;
+  /** Words the player has found (as the server confirmed them). */
+  known?: Answer[];
 }
 
 // ---- weekly difficulty ------------------------------------------------------
@@ -82,6 +93,23 @@ const ENRICH_TARGET = 50;
 // Seeds grouped by letter set, in a fixed shuffled order. Day N starts at slot N,
 // so letter sets don't repeat until the whole list has been used.
 const orderCache = new WeakMap<readonly string[], string[][]>();
+const secretOrders = new Map<string, number[]>();
+
+/**
+ * Day n's position in a secret shuffle of the letter sets. The sets the boards before
+ * SECRET_BOARDS_FROM already used are left out, so they don't come round again early.
+ */
+function secretSlot(seeds: readonly string[], secret: string, n: number): number {
+  const count = letterSetOrder(seeds).length;
+  const used = puzzleNumber(SECRET_BOARDS_FROM) - 1;
+  let order = secretOrders.get(secret);
+  if (!order || order.length !== count - used) {
+    order = createRng(`hexicon:order|${secret}`).shuffle(Array.from({ length: count - used }, (_, i) => used + i));
+    secretOrders.set(secret, order);
+  }
+  return order[(((n - used) % order.length) + order.length) % order.length];
+}
+
 function letterSetOrder(seeds: readonly string[]): string[][] {
   let order = orderCache.get(seeds);
   if (!order) {
@@ -228,6 +256,10 @@ interface GenerateOptions {
   difficulty?: number;
   /** Require two different vowels next to the key tile. */
   keyVowels?: boolean;
+  /** Mixed into the randomness so the board can't be worked out without it (see SECRET_BOARDS_FROM). */
+  secret?: string;
+  /** Maps a slot to its letter set's position (daily boards with a secret: the secret order). */
+  slotMap?: (slot: number) => number;
 }
 
 /** Daily boards after this date put at least two different vowels next to the key tile. */
@@ -247,7 +279,7 @@ function extraLetters(rng: Rng, have: readonly string[], count: number, commonne
 }
 
 export function generatePuzzle(
-  dict: Dawg, seeds: readonly string[], { kind, seed, slot, dateKey = undefined, difficulty, keyVowels }: GenerateOptions,
+  dict: Dawg, seeds: readonly string[], { kind, seed, slot, dateKey = undefined, difficulty, keyVowels, secret, slotMap }: GenerateOptions,
 ): Puzzle {
   const tuning = difficulty === undefined ? null : TUNING[difficulty];
   const range = acceptableRange(difficulty ?? null);
@@ -257,8 +289,9 @@ export function generatePuzzle(
   let fallbackDistance = Infinity;
 
   for (let offset = 0; offset < MAX_OFFSETS; offset++) {
-    const rng = createRng(`${seed}#${offset}`);
-    const s = slot + Math.floor(offset / TRIES_PER_LETTER_SET) * LETTER_SET_STRIDE;
+    const rng = createRng(secret ? `${seed}|${secret}#${offset}` : `${seed}#${offset}`);
+    const n = slot + Math.floor(offset / TRIES_PER_LETTER_SET) * LETTER_SET_STRIDE;
+    const s = slotMap ? slotMap(n) : n;
     const pangram = rng.pick(order[((s % order.length) + order.length) % order.length]);
     const seedLetters = [...new Set(pangram)];
     // Open-letter boards add a few extra letters on top of the seed word's.
@@ -306,11 +339,26 @@ export function generatePuzzle(
 
 const REROLL_SLOT_STRIDE = 1777; // a rerolled day draws its letters far from every other day's
 
-export function generateDaily(dict: Dawg, seeds: readonly string[], dateKey: string, version = rerollsFor(dateKey)): Puzzle {
+/**
+ * Daily boards from this date (and every Blitz board) are made with a secret only the
+ * leaderboard server and the build know, so nobody can work out a board, or its answers,
+ * from this code. Earlier boards are unchanged.
+ */
+export const SECRET_BOARDS_FROM = '2026-10-14';
+
+export function generateDaily(
+  dict: Dawg, seeds: readonly string[], dateKey: string, version = rerollsFor(dateKey), secret?: string,
+): Puzzle {
+  const useSecret = dateKey >= SECRET_BOARDS_FROM;
+  if (useSecret && !secret) throw new Error(`The board for ${dateKey} needs the board secret`);
+  const key = useSecret ? secret : undefined;
+  // With the secret, the letter sets come in a secret order: still a different set every day,
+  // but even which letters a day will have can't be predicted.
   const slot = puzzleNumber(dateKey) - 1;
+  const slotMap = key ? (n: number) => secretSlot(seeds, key, n) : undefined;
   const difficulty = dateKey >= OPEN_LETTERS_FROM ? weekdayIndex(dateKey) : undefined;
   const keyVowels = dateKey >= KEY_VOWELS_FROM;
-  if (!version) return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot, difficulty, keyVowels });
+  if (!version) return generatePuzzle(dict, seeds, { kind: 'daily', seed: dateKey, slot, difficulty, keyVowels, secret: key, slotMap });
   return generatePuzzle(dict, seeds, {
     kind: 'daily',
     seed: dailyBoardId(dateKey, version),
@@ -318,11 +366,15 @@ export function generateDaily(dict: Dawg, seeds: readonly string[], dateKey: str
     slot: slot + version * REROLL_SLOT_STRIDE,
     difficulty,
     keyVowels,
+    secret: key,
+    slotMap,
   });
 }
 
-export function generateBlitz(dict: Dawg, seeds: readonly string[], seed: string): Puzzle {
-  return generatePuzzle(dict, seeds, { kind: 'blitz', seed: `blitz:${seed}`, slot: hashString(seed), difficulty: BLITZ_DIFFICULTY });
+export function generateBlitz(dict: Dawg, seeds: readonly string[], seed: string, secret?: string): Puzzle {
+  return generatePuzzle(dict, seeds, {
+    kind: 'blitz', seed: `blitz:${seed}`, slot: hashString(secret ? `${secret}:${seed}` : seed), difficulty: BLITZ_DIFFICULTY, secret,
+  });
 }
 
 /**

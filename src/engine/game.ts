@@ -21,22 +21,20 @@ export type SubmitResult =
 
 /** Every accepted word on the board, including bonus words. */
 export function answerIndex(puzzle: Puzzle): Map<string, Answer> {
-  return new Map([...(puzzle.bonus ?? []), ...puzzle.answers].map((a) => [a.word, a]));
+  return new Map([...(puzzle.known ?? []), ...(puzzle.bonus ?? []), ...puzzle.answers].map((a) => [a.word, a]));
 }
 
 /**
- * Check a word against the puzzle. `path` is the traced route; typed words pass
- * `null` and use the route the board highlights for them.
- * A word scores the route it was traced along, so where you trace it matters
- * (the day's maximum assumes every word on its best route).
+ * The checks that need only the board: length, a real route through the key tile, not found
+ * already. `path` is the traced route; typed words pass `null` and use the route the board
+ * highlights for them. Whether it's a word is the server's call (it holds the answers).
  */
-export function checkWord(
+export function precheck(
   puzzle: Puzzle,
-  answers: Map<string, Answer>,
   found: ReadonlySet<string>,
   word: string,
   path: readonly number[] | null,
-): SubmitResult {
+): { ok: true; word: string; route: number[] } | { ok: false; reason: Rejection } {
   word = word.toLowerCase();
   if (word.length < MIN_WORD_LENGTH) return { ok: false, reason: 'Too short' };
   if (path) {
@@ -50,9 +48,26 @@ export function checkWord(
   const route = path ? [...path] : findPaths(word, puzzle.board, { requireCenter: true, limit: 1 })[0];
   if (!route) return { ok: false, reason: 'Must use the key tile' };
   if (found.has(word)) return { ok: false, reason: 'Already found' };
-  const answer = answers.get(word);
+  return { ok: true, word, route };
+}
+
+/**
+ * Check a word against a puzzle whose answers are known (tests and finished boards).
+ * A word scores the route it was traced along, so where you trace it matters
+ * (the day's maximum assumes every word on its best route).
+ */
+export function checkWord(
+  puzzle: Puzzle,
+  answers: Map<string, Answer>,
+  found: ReadonlySet<string>,
+  word: string,
+  path: readonly number[] | null,
+): SubmitResult {
+  const pre = precheck(puzzle, found, word, path);
+  if (!pre.ok) return pre;
+  const answer = answers.get(pre.word);
   if (!answer) return { ok: false, reason: 'Not a word' };
-  return { ok: true, answer, route, score: scorePath(route, puzzle.board).score };
+  return { ok: true, answer, route: pre.route, score: scorePath(pre.route, puzzle.board).score };
 }
 
 /** A found word's score: along its traced route if known, else its best route. */
@@ -67,10 +82,13 @@ export function scoreOf(puzzle: Puzzle, answers: Map<string, Answer>, found: Ite
   return total;
 }
 
+/** How many words count toward "every word". */
+export const wordTotal = (puzzle: Puzzle) => puzzle.total ?? puzzle.answers.length;
+
 export function progress(puzzle: Puzzle, answers: Map<string, Answer>, found: readonly string[], routes?: Routes) {
   const score = scoreOf(puzzle, answers, found, routes);
   // Bonus words score, but "every word" means every counted word.
-  const complete = found.filter((w) => answers.has(w) && !answers.get(w)!.bonus).length === puzzle.answers.length;
+  const complete = found.filter((w) => answers.has(w) && !answers.get(w)!.bonus).length === wordTotal(puzzle);
   return {
     score,
     rank: rankFor(score, puzzle.maxScore, complete),

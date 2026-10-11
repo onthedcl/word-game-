@@ -5,6 +5,7 @@ import { AnswerList } from './AnswerList';
 import type { Board as Standings } from '../api';
 import type { Puzzle } from '../engine/generator';
 import { DIFFICULTY_NAMES, OPEN_LETTERS_FROM, weekdayIndex } from '../engine/generator';
+import { wordTotal } from '../engine/game';
 import { boardLocksAt, EPOCH, puzzleNumber, shiftDateKey } from '../engine/dates';
 
 /** "3:00 AM" in the player's own time zone. */
@@ -76,7 +77,7 @@ export function Archive({ today, colors, selected, onSelect, foundCount, puzzle,
           <p className="mb-2 text-sm text-muted">
             <b className="text-ink">#{p.number} · {dayLabel(selected)}</b> · Letters{' '}
             <b className="text-ink">{p.letters.join(' ').toUpperCase()}</b>, key <b className="text-ink">{p.centerLetter.toUpperCase()}</b> ·{' '}
-            {p.answers.length} words · {p.maxScore} points
+            {wordTotal(p)} words · {p.maxScore} points
           </p>
           <div className="pointer-events-none relative mx-auto mb-3 aspect-[440/400] w-[230px]" aria-hidden>
             <Board board={p.board} path={[]} flashPath={null} shakeKey={0} onPress={noop} onDrag={noop} onRelease={noop} />
@@ -102,7 +103,7 @@ export function Archive({ today, colors, selected, onSelect, foundCount, puzzle,
                 This board is still open. The words you missed appear at{' '}
                 <b>{LOCAL_TIME.format(boardLocksAt(selected))}</b>, once it closes for everyone.
               </p>
-              <AnswerList answers={p.answers} bonus={p.bonus} found={found} hideMissed />
+              <AnswerList answers={(p.known ?? []).filter((a) => !a.bonus)} bonus={(p.known ?? []).filter((a) => a.bonus)} found={found} hideMissed />
             </>
           )}
         </>

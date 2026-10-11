@@ -4,9 +4,11 @@ import { RankBar } from './RankBar';
 import { FoundWords } from './FoundWords';
 import { areAdjacent } from '../engine/hexgrid';
 import { findPaths } from '../engine/solver';
-import { answerIndex, checkWord, progress, wordScore, type Routes } from '../engine/game';
+import { answerIndex, precheck, progress, wordScore, wordTotal, type Routes } from '../engine/game';
 import { scorePath, TOP_RANK } from '../engine/scoring';
 import type { Puzzle } from '../engine/generator';
+import type { Checked } from '../boards';
+import type { WordInfo } from '../api';
 import { haptics } from '../haptics';
 import { complimentFor } from '../compliments';
 import { readStored, writeStored } from '../storage';
@@ -18,7 +20,9 @@ interface Props {
   found: readonly string[];
   /** Route each found word was traced along (it scores along that route). */
   routes: Routes;
-  onFound(word: string, route: number[]): void;
+  onFound(word: string, route: number[], info: WordInfo): void;
+  /** Ask the server whether a traced word is an answer. */
+  check(word: string, route: number[]): Promise<Checked>;
   disabled?: boolean;
   /** Keyboard input is ignored while a dialog is open. */
   keyboard: boolean;
@@ -37,7 +41,7 @@ interface Props {
 type Toast = { id: number; text: string; kind: 'error' | 'good' | 'info' };
 
 export function PuzzleView({
-  puzzle, found, routes, onFound, disabled, keyboard, statusExtra, statusNote, tip, onAttempt, starter, onLongWord,
+  puzzle, found, routes, onFound, check, disabled, keyboard, statusExtra, statusNote, tip, onAttempt, starter, onLongWord,
 }: Props) {
   const answers = useMemo(() => answerIndex(puzzle), [puzzle]);
   const foundSet = useMemo(() => new Set(found), [found]);
@@ -91,7 +95,7 @@ export function PuzzleView({
   // First game: trace a short, easy word on the board, tile by tile and over again, until the
   // player finds any word. It pauses while they're tracing and picks up again when they stop.
   const guideWord = useMemo(
-    () => (starter ? [...puzzle.answers].sort((a, b) => a.word.length - b.word.length || a.score - b.score)[0] ?? null : null),
+    () => (starter ? (puzzle.starter ?? [...puzzle.answers].sort((a, b) => a.word.length - b.word.length || a.score - b.score)[0] ?? null) : null),
     [starter, puzzle],
   );
   const guiding = !!guideWord && keyboard && !disabled && !found.length;
@@ -145,25 +149,48 @@ export function PuzzleView({
     setTyped('');
   }
 
-  function submit() {
+  // Words sent to the server and not answered yet (so a quick double-submit isn't counted twice).
+  const pending = useRef(new Set<string>());
+  // The latest props, for when a server answer arrives after more words were found.
+  const latest = useRef({ puzzle, found, routes, complete });
+  latest.current = { puzzle, found, routes, complete };
+
+  async function submit() {
     if (disabled) return;
     const traced = !typedRef.current;
     const w = traced ? pathRef.current.map((id) => puzzle.board.letters[id]).join('') : typedRef.current;
     if (!w) return;
     const attempted = traced ? pathRef.current : typedPath;
-    const result = checkWord(puzzle, answers, foundSet, w, traced ? pathRef.current : null);
+    const pre = precheck(puzzle, new Set([...foundSet, ...pending.current]), w, traced ? pathRef.current : null);
     // Every submission starts the next word fresh, right or wrong.
     clear();
+    if (!pre.ok) {
+      onAttempt?.(false);
+      return reject(pre.reason, attempted);
+    }
+    const { route } = pre;
+    pending.current.add(pre.word);
+    let result: Checked;
+    try {
+      result = await check(pre.word, route);
+    } catch {
+      return reject('No connection. Try again', attempted);
+    } finally {
+      pending.current.delete(pre.word);
+    }
     onAttempt?.(result.ok);
     if (!result.ok) return reject(result.reason, attempted);
-    const { answer, route, score: points } = result;
-    const before = rank.index;
-    onFound(answer.word, route);
+    const { info, points } = result;
+    const answer = { word: info.word, score: info.score, path: route, pangram: info.pangram, bonus: info.bonus };
+    const now = latest.current;
+    const before = progress(now.puzzle, answerIndex(now.puzzle), now.found, now.routes).rank.index;
+    onFound(answer.word, route, info);
     setFlashPath(null);
     setPulse({ id: Date.now(), ids: route, kind: 'good' });
     setFresh(answer.word);
-    const after = progress(puzzle, answers, [...found, answer.word], { ...routes, [answer.word]: route });
-    if (after.complete && !complete && puzzle.kind === 'daily') {
+    const nowIndex = new Map(answerIndex(now.puzzle)).set(answer.word, answer);
+    const after = progress(now.puzzle, nowIndex, [...now.found, answer.word], { ...now.routes, [answer.word]: route });
+    if (after.complete && !now.complete && now.puzzle.kind === 'daily') {
       setBanner({ id: Date.now(), text: 'Every word found!', sub: after.rank.name === TOP_RANK ? TOP_RANK : `+${points}` });
       haptics.pangram();
     } else if (answer.pangram) {
@@ -263,8 +290,8 @@ export function PuzzleView({
           found={found}
           answers={answers}
           scoreOf={(w) => wordScore(puzzle, answers, w, routes)}
-          routeOf={(w) => [...(routes[w] ?? answers.get(w)!.path)]}
-          total={puzzle.answers.length}
+          routeOf={(w) => [...(routes[w] ?? (answers.get(w)?.path.length ? answers.get(w)!.path : findPaths(w, puzzle.board, { requireCenter: true, limit: 1 })[0] ?? []))]}
+          total={wordTotal(puzzle)}
           fresh={fresh}
           onShow={(p) => {
             setFlashMs(900);
