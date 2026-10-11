@@ -82,6 +82,9 @@ export function Rules() {
           <b>Key to the City</b>, takes finding every word in the “words of” count. Bonus ★ words don't count
           toward it, and points alone top out at Mayor.
         </li>
+        <li>
+          <b>Play fair:</b> no solvers, word finders or AI. They spoil it for everyone, and it's more fun the honest way.
+        </li>
       </ul>
       <h3 className="mt-4 mb-1 font-bold">Controls</h3>
       <ul className="list-disc space-y-1 pl-5 text-sm">

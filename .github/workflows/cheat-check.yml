@@ -1,0 +1,45 @@
+name: Cheat check
+
+# Every night, once the day's board has closed (midnight Eastern), looks over everyone's play on
+# it and sends your phone a short list of anyone who stood out: solver-like order, impossible
+# pace, almost no wrong tries, words nobody else finds, or a sudden jump from their usual level.
+# Nothing is done to anyone; it's for you to look at (Moderate → check play for the detail).
+# Quiet when nobody stands out. The report is sent to your phone, never printed here (this log is public).
+on:
+  schedule:
+    - cron: '25 5 * * *' # 1:25 AM Eastern in summer, 12:25 AM in winter: after the board closes
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'Board date to check (YYYY-MM-DD, optional; default: the board that just closed)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check and send
+        env:
+          KEY: ${{ secrets.NTFY_TOPIC }}
+          TOKEN: ${{ secrets.NTFY_TOKEN }}
+          DAY: ${{ inputs.day }}
+        run: |
+          day=${DAY:-$(TZ=America/New_York date -d yesterday +%F)}
+          body=$(jq -n --arg key "$KEY" --arg day "$day" '{key: $key, day: $day}')
+          res=$(curl -sS -w '\n%{http_code}' -H 'Content-Type: application/json' -d "$body" \
+            https://word-game-leaderboard.danlagstein.workers.dev/api/admin/cheat-report)
+          status=$(tail -n1 <<<"$res"); json=$(sed '$d' <<<"$res")
+          if [ "$status" != 200 ]; then jq 'del(.report)' <<<"$json" 2>/dev/null || echo "$json"; echo "HTTP $status"; exit 1; fi
+          report=$(jq -r '.report // empty' <<<"$json")
+          if [ -z "$report" ]; then echo "$day: nobody stood out."; exit 0; fi
+          flagged=$(jq -r .flagged <<<"$json")
+          title="Cheat check $day: $([ "$flagged" -gt 0 ] && echo "$flagged worth a look" || echo "nothing serious")"
+          auth=()
+          [ -n "$TOKEN" ] && auth=(-H "Authorization: Bearer $TOKEN")
+          msg=$(jq -n --arg topic "$KEY" --arg title "$title" --arg message "$report" '{topic: $topic, title: $title, message: $message, tags: ["mag"]}')
+          curl -fsS "${auth[@]}" -H 'Content-Type: application/json' -d "$msg" https://ntfy.sh/ > /dev/null ||
+            { echo "::warning::ntfy refused the token; sent without it. Check NTFY_TOKEN."; curl -fsS -H 'Content-Type: application/json' -d "$msg" https://ntfy.sh/ > /dev/null; }
+          echo "$day: report sent to your phone."
