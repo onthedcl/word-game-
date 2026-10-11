@@ -4,8 +4,9 @@ import { generateBlitz, generateDaily } from '../src/engine/generator';
 import { answerTable, blitzPoolSeed } from './tables';
 import { findPaths } from '../src/engine/solver';
 import { scorePath } from '../src/engine/scoring';
-import { ApiError, claimName, deletePlayer, lostCode, setCode, ownerMessageSeen, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
+import { ApiError, cheatReport, claimName, deletePlayer, lostCode, setCode, ownerMessageSeen, describeFunnel, describePlace, funnelFor, recordEvent, moderateName, reportName, finishBlitz, getBlitz, getDaily, hello, me, progressOf, saveName, startBlitz, submitDaily, type Deps, type KV } from './leaderboard';
 import { cleanName } from './names';
+import { dailyBoardId } from '../src/engine/rerolls';
 
 function memoryKV(): KV & { data: Map<string, unknown> } {
   const data = new Map<string, unknown>();
@@ -154,6 +155,32 @@ describe('daily leaderboard', () => {
     const { top } = await getDaily(deps, DATE, null);
     expect(top[0]).toMatchObject({ name: 'Ann', words: words.length, bonus: 1, finished: 1 });
     expect(top[1]).toMatchObject({ name: 'Bo', words: 2, bonus: 1 });
+  });
+
+  it('flags solver-like play in the nightly cheat check, and stays quiet otherwise', async () => {
+    const P3 = 'player-three-cccccccccc';
+    // 09-26 was rerolled, so its live board id isn't the bare date: play on that board.
+    const B = dailyBoardId(DATE);
+    const table = answerTable(puzzle);
+    deps.answers = async (key) => (key === `daily/${B}` ? table : null);
+    const human = [...words].sort(() => 0.5 - Math.random()).slice(0, 20);
+    // A human: a few words, spread out over half an hour.
+    for (let i = 0; i < human.length; i++) {
+      clock += 90_000;
+      await submitDaily(deps, { playerId: P1, name: 'Ann', date: B, words: human.slice(0, i + 1), misses: i });
+    }
+    expect((await cheatReport(deps, DATE)).report).toBeNull();
+    // A solver: every word, alphabetically, all within a minute, never a wrong try.
+    const sorted = [...words].sort();
+    for (let i = 0; i < sorted.length; i++) {
+      clock += 1_000;
+      await submitDaily(deps, { playerId: P3, name: 'Cy', date: B, words: sorted.slice(0, i + 1), misses: 0 });
+    }
+    const r = await cheatReport(deps, DATE);
+    expect(r.flagged).toBe(1);
+    expect(r.report).toContain('⚠️ Cy:');
+    expect(r.report).toContain('alphabetical');
+    expect(r.report).not.toContain('Ann');
   });
 
   it('on the one Eastern clock, opens and locks each board at midnight Eastern', async () => {

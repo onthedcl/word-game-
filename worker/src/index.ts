@@ -6,7 +6,7 @@
 // there are no lost updates.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  ApiError, claimName, deletePlayer, lostCode, setCode, ownerMessageSeen, describeFunnel, finishBlitz, funnelFor, recordEvent, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
+  ApiError, cheatReport, claimName, deletePlayer, lostCode, setCode, ownerMessageSeen, describeFunnel, finishBlitz, funnelFor, recordEvent, getBlitz, getDaily, hello, me, moderateName, progressOf, reportName, saveName,
   startBlitz, submitDaily,
   type Deps, type Place,
 } from '../../server/leaderboard';
@@ -223,6 +223,10 @@ export class Leaderboard extends DurableObject<Env> {
         case 'POST /api/admin/funnel':
           if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
           return json(await funnelFor(deps, typeof body.day === 'string' ? body.day : easternDay()));
+        case 'POST /api/admin/cheat-report':
+          // Owner only (the nightly Cheat check workflow): who stood out on a closed board.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          return json(await cheatReport(deps, typeof body.day === 'string' ? body.day : ''));
         case 'POST /api/delete':
           return json(await deletePlayer(deps, body));
         case 'POST /api/report':

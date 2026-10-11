@@ -887,10 +887,80 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
 
+interface BoardRowFull { id: string; entry: Entry }
+
+async function boardRows(deps: Deps, board: string): Promise<BoardRowFull[]> {
+  const rows: BoardRowFull[] = [];
+  for (const { key } of (await deps.kv.list({ prefix: `daily/${board}/` })).blobs) {
+    const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
+    if (entry) rows.push({ id: key.slice(key.lastIndexOf('/') + 1), entry });
+  }
+  return rows;
+}
+
 /**
- * Owner-only: how a player's recent boards compare with everyone else's, with anything
- * unusual flagged. Signs, not proof: a strong player can trip one; a cheater usually trips several.
+ * How one player's play on one board compares with everyone else's: report lines, plus the
+ * signs of a solver or copied answers. Signs, not proof: a strong player can trip one; a
+ * cheater usually trips several.
  */
+async function playSigns(deps: Deps, board: string, rows: BoardRowFull[], table: AnswerTable, playerId: string) {
+  const lines: string[] = [];
+  const flags: string[] = [];
+  const me = rows.find((r) => r.id === playerId)?.entry;
+  if (!me) return { lines, flags };
+  const others = rows.filter((r) => r.id !== playerId && r.entry.words > 0);
+  const words = (me.found ?? []).map((f) => f.word);
+  const total = countedWords(table);
+  const rank = 1 + rows.filter((r) => r.entry.score > me.score).length;
+  lines.push(`${board.slice(5)}: #${rank} of ${rows.length} · ${me.words} words (${Math.round((100 * me.words) / total)}% of the board) · others' median ${Math.round(median(others.map((o) => o.entry.words)))}`);
+
+  // Words nobody else found, against how many such words other players usually have.
+  const seenBy = new Map<string, number>();
+  for (const r of rows) for (const f of r.entry.found ?? []) seenBy.set(f.word, (seenBy.get(f.word) ?? 0) + 1);
+  const onlyThem = words.filter((w) => seenBy.get(w) === 1);
+  const othersOnly = median(others.map((o) => (o.entry.found ?? []).filter((f) => seenBy.get(f.word) === 1).length));
+  lines.push(`Words nobody else found: ${onlyThem.length}${onlyThem.length ? ` (${onlyThem.slice(0, 6).join(', ')}${onlyThem.length > 6 ? '…' : ''})` : ''} · others' median ${othersOnly}`);
+  if (others.length >= 3 && onlyThem.length >= 6 && onlyThem.length >= 3 * Math.max(1, othersOnly)) flags.push('finds many words nobody else finds');
+
+  // Copying from a solver's list tends to come out in alphabetical or length order.
+  if (words.length >= 15) {
+    const pairs = words.length - 1;
+    const abc = words.slice(1).filter((w, i) => w >= words[i]).length / pairs;
+    const byLength = words.slice(1).filter((w, i) => w.length >= words[i].length).length / pairs;
+    lines.push(`Order found: ${Math.round(abc * 100)}% alphabetical, ${Math.round(byLength * 100)}% shortest-first (people usually land near 50% and 60%)`);
+    if (abc >= 0.85) flags.push('words entered in alphabetical order');
+    if (byLength >= 0.92) flags.push('words entered shortest to longest');
+  }
+
+  // Timing: when they opened the game that day, and when words arrived.
+  const opened = (await deps.kv.get(`seen-v2/${board.slice(0, 10)}/${playerId}`, { type: 'json' })) as { at: number } | null;
+  const times = (me.found ?? []).map((f) => f.at).filter((t): t is number => typeof t === 'number').sort((a, b) => a - b);
+  const first = times[0];
+  const last = times.length ? times[times.length - 1] : me.updatedAt;
+  const start = first ?? opened?.at;
+  if (start) {
+    const minutes = Math.max(1, (last - start) / 60000);
+    const pace = words.length / minutes;
+    lines.push(`Time: ${opened ? `opened ${gameTime(opened.at)}, ` : ''}${first ? `first word ${gameTime(first)}, ` : ''}last ${gameTime(last)} (${Math.round(minutes)} min, ${pace.toFixed(1)} words/min)`);
+    if (words.length >= 20 && pace > 6) flags.push('very fast pace');
+  }
+  if (times.length >= 10) {
+    let burst = 0;
+    for (let i = 0, j = 0; j < times.length; j++) {
+      while (times[j] - times[i] > 60000) i++;
+      burst = Math.max(burst, j - i + 1);
+    }
+    lines.push(`Most words in any one minute: ${burst}`);
+    if (burst >= 15) flags.push(`${burst} words within one minute`);
+  }
+  if (typeof me.misses === 'number' && words.length) {
+    lines.push(`Tries that didn't count: ${me.misses} (${(me.misses / words.length).toFixed(2)} per word found)`);
+    if (words.length >= 30 && me.misses / words.length < 0.1) flags.push('almost never enters a wrong word');
+  }
+  return { lines, flags };
+}
+
+/** Owner-only: how a player's recent boards compare with everyone else's, with anything unusual flagged. */
 async function checkPlay(deps: Deps, name: string, playerId: string): Promise<string> {
   const boards = (await deps.kv.list({ prefix: 'daily/' })).blobs
     .filter((b) => b.key.endsWith(`/${playerId}`))
@@ -902,63 +972,11 @@ async function checkPlay(deps: Deps, name: string, playerId: string): Promise<st
   const flags = new Set<string>();
   for (const board of boards) {
     const table = await deps.answers(`daily/${board}`);
-    const rows: { id: string; entry: Entry }[] = [];
-    for (const { key } of (await deps.kv.list({ prefix: `daily/${board}/` })).blobs) {
-      const entry = (await deps.kv.get(key, { type: 'json' })) as Entry | null;
-      if (entry) rows.push({ id: key.slice(key.lastIndexOf('/') + 1), entry });
-    }
-    const me = rows.find((r) => r.id === playerId)?.entry;
-    if (!me || !table) continue;
-    const others = rows.filter((r) => r.id !== playerId && r.entry.words > 0);
-    const words = (me.found ?? []).map((f) => f.word);
-    const total = countedWords(table);
-    const rank = 1 + rows.filter((r) => r.entry.score > me.score).length;
-    lines.push('');
-    lines.push(`${board.slice(5)}: #${rank} of ${rows.length} · ${me.words} words (${Math.round((100 * me.words) / total)}% of the board) · others' median ${Math.round(median(others.map((o) => o.entry.words)))}`);
-
-    // Words nobody else found, against how many such words other players usually have.
-    const seenBy = new Map<string, number>();
-    for (const r of rows) for (const f of r.entry.found ?? []) seenBy.set(f.word, (seenBy.get(f.word) ?? 0) + 1);
-    const onlyThem = words.filter((w) => seenBy.get(w) === 1);
-    const othersOnly = median(others.map((o) => (o.entry.found ?? []).filter((f) => seenBy.get(f.word) === 1).length));
-    lines.push(`Words nobody else found: ${onlyThem.length}${onlyThem.length ? ` (${onlyThem.slice(0, 6).join(', ')}${onlyThem.length > 6 ? '…' : ''})` : ''} · others' median ${othersOnly}`);
-    if (onlyThem.length >= 6 && onlyThem.length >= 3 * Math.max(1, othersOnly)) flags.add('finds many words nobody else finds');
-
-    // Copying from a solver's list tends to come out in alphabetical or length order.
-    if (words.length >= 15) {
-      const pairs = words.length - 1;
-      const abc = words.slice(1).filter((w, i) => w >= words[i]).length / pairs;
-      const byLength = words.slice(1).filter((w, i) => w.length >= words[i].length).length / pairs;
-      lines.push(`Order found: ${Math.round(abc * 100)}% alphabetical, ${Math.round(byLength * 100)}% shortest-first (people usually land near 50% and 60%)`);
-      if (abc >= 0.85) flags.add('words entered in alphabetical order');
-      if (byLength >= 0.92) flags.add('words entered shortest to longest');
-    }
-
-    // Timing: when they opened the game that day, and when words arrived.
-    const opened = (await deps.kv.get(`seen-v2/${board.slice(0, 10)}/${playerId}`, { type: 'json' })) as { at: number } | null;
-    const times = (me.found ?? []).map((f) => f.at).filter((t): t is number => typeof t === 'number').sort((a, b) => a - b);
-    const first = times[0];
-    const last = times.length ? times[times.length - 1] : me.updatedAt;
-    const start = first ?? opened?.at;
-    if (start) {
-      const minutes = Math.max(1, (last - start) / 60000);
-      const pace = words.length / minutes;
-      lines.push(`Time: ${opened ? `opened ${gameTime(opened.at)}, ` : ''}${first ? `first word ${gameTime(first)}, ` : ''}last ${gameTime(last)} (${Math.round(minutes)} min, ${pace.toFixed(1)} words/min)`);
-      if (words.length >= 20 && pace > 6) flags.add('very fast pace');
-    }
-    if (times.length >= 10) {
-      let burst = 0;
-      for (let i = 0, j = 0; j < times.length; j++) {
-        while (times[j] - times[i] > 60000) i++;
-        burst = Math.max(burst, j - i + 1);
-      }
-      lines.push(`Most words in any one minute: ${burst}`);
-      if (burst >= 15) flags.add(`${burst} words within one minute`);
-    }
-    if (typeof me.misses === 'number' && words.length) {
-      lines.push(`Tries that didn't count: ${me.misses} (${(me.misses / words.length).toFixed(2)} per word found)`);
-      if (words.length >= 30 && me.misses / words.length < 0.1) flags.add('almost never enters a wrong word');
-    }
+    if (!table) continue;
+    const signs = await playSigns(deps, board, await boardRows(deps, board), table, playerId);
+    if (!signs.lines.length) continue;
+    lines.push('', ...signs.lines);
+    for (const f of signs.flags) flags.add(f);
   }
   lines.push('');
   lines.push(flags.size ? `⚠️ Unusual: ${[...flags].join('; ')}.` : 'Nothing unusual found.');
@@ -966,4 +984,45 @@ async function checkPlay(deps: Deps, name: string, playerId: string): Promise<st
     lines.push('Wrong tries and per-word times are recorded from now on, so later checks show more.');
   }
   return lines.join('\n');
+}
+
+/** How much of a board a player found (0–1), counting only the board's own words. */
+const shareFound = (entry: Entry, table: AnswerTable) =>
+  (entry.found ?? []).filter((f) => Object.hasOwn(table.words, f.word) && !table.words[f.word][2]).length / Math.max(1, countedWords(table));
+
+/**
+ * Owner-only, run nightly once a board has closed: everyone whose play on it shows signs of a
+ * solver or copied answers, or who suddenly did far better than usual. Null when nobody stands out.
+ * One sign alone is often just a good day; two or more are worth a closer look.
+ */
+export async function cheatReport(deps: Deps, day: string): Promise<{ day: string; flagged: number; report: string | null }> {
+  if (!isDateKey(day)) throw new ApiError(400, 'Bad day');
+  const board = dailyBoardId(day);
+  const table = await deps.answers(`daily/${board}`);
+  if (!table) return { day, flagged: 0, report: null };
+  const rows = await boardRows(deps, board);
+  const blocked = await blockedPlayers(deps.kv);
+  const found: { name: string; flags: string[] }[] = [];
+  for (const { id, entry } of rows) {
+    if (entry.words < 15 || blocked.has(id)) continue;
+    const { flags } = await playSigns(deps, board, rows, table, id);
+    // A sudden jump: far above their own usual share of the board over the past two weeks.
+    const share = shareFound(entry, table);
+    const past: number[] = [];
+    for (let i = 1; i <= 14; i++) {
+      const d = dailyBoardId(shiftDateKey(day, -i));
+      const e = (await deps.kv.get(`daily/${d}/${id}`, { type: 'json' })) as Entry | null;
+      const t = e ? await deps.answers(`daily/${d}`) : null;
+      if (e && t && e.words > 0) past.push(shareFound(e, t));
+    }
+    if (past.length >= 3 && share >= 0.6 && share - median(past) >= 0.35) {
+      flags.push(`found ${Math.round(share * 100)}% of the board, usually about ${Math.round(median(past) * 100)}%`);
+    }
+    if (flags.length) found.push({ name: entry.name, flags });
+  }
+  if (!found.length) return { day, flagged: 0, report: null };
+  found.sort((a, b) => b.flags.length - a.flags.length);
+  const lines = found.map((f) => `${f.flags.length >= 2 ? '⚠️' : '•'} ${f.name}: ${f.flags.join('; ')}`);
+  lines.push('', '⚠️ = two or more signs, worth a look (Moderate → check play). • = one sign, often just a good day.');
+  return { day, flagged: found.filter((f) => f.flags.length >= 2).length, report: lines.join('\n') };
 }
