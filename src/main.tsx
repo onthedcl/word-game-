@@ -15,6 +15,11 @@ function fitToScreen() {
   document.documentElement.style.setProperty('--app-h', `${Math.round(Math.min(window.innerHeight, visible))}px`);
 }
 fitToScreen();
+
+// iPhone and iPad Safari in a browser tab (not the app, not a home-screen shortcut).
+const iOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || !!import.meta.env.VITE_NATIVE;
+if (iOS && !standalone) document.documentElement.classList.add('ios-tab');
 window.visualViewport?.addEventListener('resize', fitToScreen);
 window.addEventListener('resize', fitToScreen);
 
