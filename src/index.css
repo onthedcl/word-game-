@@ -46,7 +46,25 @@
 
 /* Short phone screens (small iPhones, zoomed display, big Safari bars): let the page scroll a little
    rather than squeezing the board to a postage stamp. Desktop layouts are unaffected. */
-@custom-variant short (@media (max-height: 640px) and (max-width: 1023px));
+/* Phones where one screen-tall layout doesn't fit: very short screens, and iPhone Safari tabs,
+   which draw their toolbar over the page while saying the page has the whole screen (so the
+   bottom of the board couldn't be reached). Both get a normal, scrollable page instead. */
+@custom-variant short {
+  @media (max-height: 640px) and (max-width: 1023px) {
+    @slot;
+  }
+  @media (max-width: 1023px) {
+    &:where(.ios-tab *) {
+      @slot;
+    }
+  }
+}
+/* Room to scroll the board's buttons clear of Safari's toolbar. */
+@media (max-width: 1023px) {
+  .ios-tab body {
+    padding-bottom: 7rem;
+  }
+}
 
 @theme inline {
   --color-bg: var(--bg);
@@ -109,9 +127,11 @@
 }
 
 html, body, #root { min-height: 100%; }
-/* Phones and tablets: the game fits one screen, so the page itself never scrolls or bounces. */
-@media (max-width: 1023px) {
-  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+/* Phones and tablets: the game fits one screen, so the page itself never scrolls or bounces.
+   Except where the layout is a normal page (see the short variant): very short screens and
+   iPhone Safari tabs, which must be able to scroll the board clear of Safari's toolbar. */
+@media (max-width: 1023px) and (min-height: 641px) {
+  html:not(.ios-tab), html:not(.ios-tab) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 }
 body {
   background: var(--bg);
