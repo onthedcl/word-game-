@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy policy · DPIYF Lettertown</title>
+<style>
+  :root { --bg: #f8f6fb; --ink: #1f1a2b; --muted: #6c6578; --line: #e3dcec; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14111b; --ink: #f1edf8; --muted: #a49cb3; --line: #322b3f; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 6px; }
+  p, li { color: var(--ink); }
+  .muted { color: var(--muted); }
+  a { color: inherit; }
+  ul { padding-left: 1.2em; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy policy</h1>
+  <p class="muted">DPIYF Lettertown · Last updated 3 October 2026</p>
+
+  <p>DPIYF Lettertown is a daily word game. This page explains what the game stores, why, who handles it, and how to
+  delete it. There are no ads, no tracking across other apps or websites, and nothing is sold.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><b>Your leaderboard name</b>, if you choose one. It is shown to everyone on the leaderboard.</li>
+    <li><b>A random player ID</b> created on your device, so your scores and progress stay together. It isn't linked to
+      your phone number, email or any other account.</li>
+    <li><b>Your game activity</b>: the words you find and when, how many tries didn't count, your scores, and which
+      days you played. This keeps the leaderboard fair.</li>
+    <li><b>Rooms you join and room chat messages you send.</b> Messages are shown with your leaderboard name
+      to the members of that room only. Offensive words are masked automatically.</li>
+    <li><b>Approximate location</b> (city, region and country), worked out by our server host from your connection when
+      you open the game. It lets the game's owner know roughly where people are playing from, and the most recent one is
+      kept with your account to help deal with cheating or abuse. We do not store your IP address or your precise
+      location.</li>
+    <li><b>A 4-digit code</b> for your name, so only you can continue as that name on another device.</li>
+    <li><b>Your sign-in, if you choose to sign in</b> with Apple, Google or an email link. Google's Firebase
+      Authentication service handles the sign-in and keeps your email address (and, for Apple or Google, the name on
+      that account) so you can sign in again. Our server keeps only an anonymous ID linking your sign-in to your game
+      progress. We never email you except for sign-in links you ask for, and never share your email.</li>
+    <li><b>A note, if you write one</b>, when you ask for help getting back into your name. It is sent to the game's
+      owner so they can tell it's you, and is not stored.</li>
+  </ul>
+  <p>Your device also keeps your progress and settings in its own storage so the game works offline.</p>
+
+  <h2>How it's used</h2>
+  <ul>
+    <li>To run the daily and Blitz leaderboards and check scores.</li>
+    <li>To let you continue your game on another device.</li>
+    <li>To send the game's owner short notifications about activity (for example "3 new players from New York") so they
+      can see how the game is doing and look after it.</li>
+  </ul>
+
+  <h2>Who handles it</h2>
+  <ul>
+    <li><b>Cloudflare</b> runs the leaderboard server and stores the data above.</li>
+    <li><b>GitHub</b> hosts the game. Owner notifications are relayed through GitHub Actions, which keeps each
+      relay request, including the notification text (names, rough locations, scores), for up to 90 days.</li>
+    <li><b>ntfy.sh</b> delivers those notifications to the owner's phone.</li>
+    <li><b>Google Firebase Authentication</b> handles sign-in, if you sign in.</li>
+  </ul>
+  <p>Each handles the data only to provide their service to us.</p>
+
+  <h2>Keeping and deleting your data</h2>
+  <p>Data is kept while the game runs. You can delete it at any time: open <b>Leaderboard</b> and tap
+  <b>delete my data</b>. That immediately removes your name, scores, found words, visit history, room memberships and
+  chat messages from our server, deletes your sign-in account if you have one, and clears the game from your device. You can also delete any of your chat messages
+  yourself, and a room's host can delete the room and its chat. Each room keeps only its latest 150 messages. Copies inside notification logs expire within 90 days.</p>
+
+  <h2>Reporting names and messages</h2>
+  <p>Tap any name on the leaderboard, or any chat message, to report it or hide that player. Reports are reviewed and
+  offensive names or messages are renamed or removed.</p>
+
+  <h2>Children</h2>
+  <p>The game is not directed at children under 13, and we don't knowingly collect their information. If you believe a
+  child has added a name, contact us and we'll remove it.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or requests: <a href="https://github.com/onthedcl/word-game-/issues">open an issue on GitHub</a>.</p>
+
+  <hr />
+  <p class="muted"><a href="./">← Back to the game</a> · <a href="./terms.html">Terms of Use</a></p>
+</main>
+</body>
+</html>
