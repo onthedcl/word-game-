@@ -19,7 +19,7 @@ function About() {
       </p>
       {tipUrl && (
         <p className="mt-2">
-          Lettertown is free, with no ads. If it brightens your day, <TipLink>leave a tip</TipLink>.
+          Lettertown is free, with no ads. If it brightens your day, <TipLink />.
         </p>
       )}
       <details className="mt-2">

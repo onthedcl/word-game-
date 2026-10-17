@@ -786,7 +786,7 @@ export default function App() {
             [where, streak >= 2 ? `${streakAnimal(streak).emoji} ${streak}-day streak` : null].filter(Boolean).join('  ·  ') || `${active.found.length} words`,
             `${active.found.length} words${p.pangramsFound ? ` · ${p.pangramsFound} pangram${p.pangramsFound > 1 ? 's' : ''} 🌟` : ''}`,
           ],
-          footer: 'Can you beat me?  onthedcl.github.io/word-game-',
+          footer: `Can you beat me?  ${GAME_URL.replace(/^https:\/\//, '').replace(/\/$/, '')}`,
         });
       } catch {
         card = null;
@@ -961,7 +961,7 @@ export default function App() {
               found={dailyFound.found}
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
-              tip={<TipLink>Tip</TipLink>}
+              tip={<TipLink>Coffee</TipLink>}
               onAttempt={onDailyAttempt}
               onLongWord={() => {
                 // In the iPhone app, a good moment to ask for a rating (Apple's own sheet), once they're a regular.
@@ -1092,7 +1092,7 @@ export default function App() {
                   const place = ['1st', '2nd', '3rd'][b.you!.position - 1];
                   const msg = await share(
                     `🏆 I finished ${place} of ${b.total} on ${isYesterday ? "yesterday's" : `#${puzzleNumber(day)}`} DPIYF Lettertown with ${b.you!.score} points! ` +
-                      `Can you beat me today? https://onthedcl.github.io/word-game-/`,
+                      `Can you beat me today? ${GAME_URL}`,
                   );
                   if (msg) setNotice(msg);
                 }}

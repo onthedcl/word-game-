@@ -113,7 +113,7 @@ export function Podium({ board, which, onShare, onClose }: Props) {
       </div>
       {tipUrl && (
         <p className="mt-4 text-sm text-muted">
-          Loving Lettertown? <TipLink>Tip the town</TipLink>
+          Loving Lettertown? <TipLink />
         </p>
       )}
     </div>

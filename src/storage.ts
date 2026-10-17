@@ -103,3 +103,35 @@ export function syncCarryParam(id: string, named: boolean): void {
     /* the address just won't carry the player */
   }
 }
+
+// ---- moving to dpiyf.com ---------------------------------------------------------
+// Browsers keep each address's saved data apart, so the old address hands it over: it sends
+// this device's game data in the link (after "#", which never leaves the device), and the new
+// address takes it in once. It never replaces a different player already set up here.
+const CARRY_HASH = '#carry=';
+
+export function acceptCarriedData(): void {
+  if (!location.hash.startsWith(CARRY_HASH)) return;
+  let original = '';
+  try {
+    const parsed = JSON.parse(decodeURIComponent(location.hash.slice(CARRY_HASH.length))) as {
+      data?: Record<string, unknown>;
+      hash?: unknown;
+    };
+    original = typeof parsed.hash === 'string' && /^#[\w=&-]{0,40}$/.test(parsed.hash) ? parsed.hash : '';
+    const data = Object.entries(parsed.data ?? {}).filter(
+      (e): e is [string, string] => e[0].startsWith('hexicon:') && typeof e[1] === 'string' && e[1].length < 200_000,
+    );
+    const carriedId = data.find(([k]) => k === 'hexicon:player-id')?.[1];
+    const hereId = localStorage.getItem('hexicon:player-id');
+    const hereNamed = !!readStored(NAME_KEY, '');
+    if (!hereNamed || !hereId || hereId === carriedId) {
+      // A fresh device takes everything; the same player only fills in what's missing here.
+      const fill = hereNamed && hereId === carriedId;
+      for (const [k, v] of data) if (!fill || localStorage.getItem(k) === null) localStorage.setItem(k, v);
+    }
+  } catch {
+    /* a damaged link: start fresh, as a new visitor would */
+  }
+  history.replaceState(history.state, '', location.pathname + location.search + original);
+}
