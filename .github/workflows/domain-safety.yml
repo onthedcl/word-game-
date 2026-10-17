@@ -1,0 +1,56 @@
+name: Domain safety
+
+# One-off (safe to re-run) security settings for dpiyf.com on Cloudflare:
+# - Nobody may send email as dpiyf.com (SPF + DMARC records), so scammers can't pose as the game.
+#   When you set up email on the domain (e.g. Cloudflare Email Routing), these get updated.
+# - HTTPS always, TLS 1.2 or newer.
+# - DNSSEC on: it prints the DS record to add at Namecheap (Domain → Advanced DNS → DNSSEC).
+#   DS records are public, so printing it here is fine.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  domain:
+    runs-on: ubuntu-latest
+    env:
+      CF: https://api.cloudflare.com/client/v4
+      TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Apply
+        run: |
+          api() { curl -sS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' "$@"; }
+          zone=$(api "$CF/zones?name=dpiyf.com" | jq -r '.result[0].id // empty')
+          [ -n "$zone" ] || { echo "::error::dpiyf.com isn't visible to this token"; exit 1; }
+          echo "Zone status: $(api "$CF/zones/$zone" | jq -r .result.status)"
+
+          txt() { # name content: create the TXT record unless an identical one exists
+            have=$(api "$CF/zones/$zone/dns_records?type=TXT&name=$1" | jq -r --arg c "$2" '[.result[] | select(.content == $c or .content == ("\"" + $c + "\""))] | length')
+            if [ "$have" = 0 ]; then
+              r=$(api -X POST "$CF/zones/$zone/dns_records" -d "$(jq -n --arg n "$1" --arg c "\"$2\"" '{type: "TXT", name: $n, content: $c, ttl: 1}')")
+              echo "$1 TXT: $(jq -r 'if .success then "added" else (.errors | map(.message) | join("; ")) end' <<<"$r")"
+            else
+              echo "$1 TXT: already there"
+            fi
+          }
+          txt dpiyf.com 'v=spf1 -all'
+          txt _dmarc.dpiyf.com 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s'
+
+          setting() {
+            r=$(api -X PATCH "$CF/zones/$zone/settings/$1" -d "{\"value\":\"$2\"}")
+            echo "$1 = $2: $(jq -r 'if .success then "ok" else (.errors | map(.message) | join("; ")) end' <<<"$r")"
+          }
+          setting always_use_https on
+          setting min_tls_version 1.2
+          setting automatic_https_rewrites on
+
+          r=$(api -X PATCH "$CF/zones/$zone/dnssec" -d '{"status":"active"}')
+          if jq -e .success >/dev/null <<<"$r"; then
+            echo "DNSSEC: $(jq -r .result.status <<<"$r")"
+            echo "Add this DS record at Namecheap (Domain → Advanced DNS → DNSSEC):"
+            jq -r '.result | "  Key tag: \(.key_tag)\n  Algorithm: \(.algorithm)\n  Digest type: \(.digest_type)\n  Digest: \(.digest)"' <<<"$r"
+          else
+            echo "DNSSEC: $(jq -r '.errors | map(.message) | join("; ")' <<<"$r")"
+          fi
