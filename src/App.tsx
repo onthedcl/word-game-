@@ -7,7 +7,7 @@ import { isNativeApp, maybeAskForReview, nativeShare, scheduleDailyReminder } fr
 import { Welcome } from './components/Welcome';
 import { SetupAccount } from './components/SetupAccount';
 import { SignIn } from './components/SignIn';
-import { deleteSignIn, finishSignIn, returningFromSignIn, signInAvailable, signOutAccount } from './auth';
+import { currentIdToken, deleteSignIn, finishSignIn, returningFromSignIn, signInAvailable, signOutAccount } from './auth';
 import { Podium } from './components/Podium';
 import { TipLink } from './components/TipLink';
 import { Modal } from './components/Modal';
@@ -238,10 +238,12 @@ export default function App() {
   );
   /** Continue as an existing player (by name). The page reloads as that player. */
   const claimName = useCallback(async (n: string, code: string) => {
-    const r = await api.claim(n, code);
+    // Signed in on this device: the code (once) moves the name, scores and streak into the account.
+    const token = await currentIdToken().catch(() => null);
+    const r = token ? { ...(await api.claimAccount(token, n, code)), pin: '' } : await api.claim(n, code);
     setPlayerId(r.playerId);
     writeStored(NAME_KEY, r.name);
-    writeStored(PIN_KEY, r.pin);
+    if (r.pin) writeStored(PIN_KEY, r.pin);
     writeStored('hexicon:asked-name', true);
     writeStored('hexicon:seen-rules', true); // a returning player: skip the intro
     location.reload();
@@ -252,6 +254,36 @@ export default function App() {
   // How this player signs in ('google.com', 'apple.com', 'password'), or null.
   const [account, setAccount] = useState<string | null>(null);
   /** A sign-in finished: tie this device to the account (switching player if they have one). */
+  // Signing in: required for new players once switched on (the server says), with a grace
+  // period for players from before, who get a reminder once a day.
+  const [signInNeed, setSignInNeed] = useState<{ required: boolean; signInBy: number | null } | null>(null);
+  useEffect(() => {
+    if (!online || !signInAvailable) return;
+    api.me(me).then((r) => {
+      setAccount(r.account ?? null);
+      setSignInNeed(r.account ? null : (r.signIn ?? null));
+    }, () => {});
+  }, [online, me]);
+  const mustSignIn = signInAvailable && !!signInNeed?.required && !account;
+  useEffect(() => {
+    if (mustSignIn && dialog !== 'signin') setDialog('signin');
+  }, [mustSignIn, dialog]);
+  useEffect(() => {
+    if (!signInAvailable || account || !signInNeed?.signInBy || dialog) return;
+    const key = `hexicon:signin-reminder:${dateKeyFor()}`;
+    if (readStored(key, false)) return;
+    writeStored(key, true);
+    setDialog('signin');
+  }, [signInNeed, account, dialog]);
+
+  /** The server wants a sign-in before this word counts: show the sign-in screen. */
+  const signInFirst = useCallback((err: unknown): never => {
+    if (err instanceof ApiRejected && err.status === 401) {
+      setSignInNeed({ required: true, signInBy: null });
+      throw new Error('Sign in to play');
+    }
+    throw err;
+  }, []);
   const applySignIn = useCallback(async (idToken: string) => {
     const r = await api.linkAccount(me, idToken);
     if (r.switched) {
@@ -264,8 +296,14 @@ export default function App() {
       return;
     }
     setAccount(r.provider);
-    setDialog(null);
-    setNotice(name || r.name ? 'Signed in. Your progress is saved to your account ✓' : 'Signed in ✓ Now pick a leaderboard name');
+    setSignInNeed(null);
+    if (name || r.name) {
+      setDialog(null);
+      setNotice('Signed in. Your progress is saved to your account ✓');
+    } else {
+      // Signed in: now a username (or, for a current player, their username and code once).
+      setDialog('welcome');
+    }
   }, [me, name]);
   // Coming back from a sign-in email or a sign-in page.
   useEffect(() => {
@@ -967,7 +1005,7 @@ export default function App() {
                 setTimeout(() => maybeAskForReview(streak).catch(() => {}), 1800);
               }}
               starter={!starterDone}
-              check={(w, r) => checkOnServer({ board: boardId }, me, w, r)}
+              check={(w, r) => checkOnServer({ board: boardId }, me, w, r).catch(signInFirst)}
               onFound={(w, r, info) => {
                 rememberWord(boardId, info);
                 updateDaily((p) => withKnown(p, info));
@@ -1002,7 +1040,7 @@ export default function App() {
               puzzle={blitz.puzzle}
               found={blitz.found}
               routes={blitz.routes}
-              check={(w, r) => checkOnServer({ game: blitz.rankedGame ?? '' }, me, w, r)}
+              check={(w, r) => checkOnServer({ game: blitz.rankedGame ?? '' }, me, w, r).catch(signInFirst)}
               onFound={(w, r, info) =>
                 setBlitz((b) =>
                   b.phase === 'playing'
@@ -1055,7 +1093,7 @@ export default function App() {
           onClaim={claimName}
           onDelete={deleteMyData}
           account={account}
-          onSignIn={signInAvailable ? () => setDialog('signin') : undefined}
+          onSignIn={signInAvailable && !account ? () => setDialog('signin') : undefined}
           onSignOut={signOut}
           initialTab={mode}
           leagues={leagues}
@@ -1147,7 +1185,7 @@ export default function App() {
             closeDialog();
           }}
           onClaim={claimName}
-          onSignIn={signInAvailable ? () => setDialog('signin') : undefined}
+          onSignIn={signInAvailable && !account ? () => setDialog('signin') : undefined}
           onSkip={closeDialog}
           onRules={() => {
             writeStored('hexicon:asked-name', true);
@@ -1199,8 +1237,8 @@ export default function App() {
         />
       </Modal>
 
-      <Modal open={dialog === 'signin'} title="Save your progress" onClose={closeDialog}>
-        <SignIn onToken={applySignIn} />
+      <Modal open={dialog === 'signin'} title={mustSignIn ? 'Sign in to play' : 'Save your progress'} onClose={closeDialog} locked={mustSignIn}>
+        <SignIn onToken={applySignIn} required={mustSignIn} signInBy={account ? null : (signInNeed?.signInBy ?? null)} />
       </Modal>
 
       <Modal open={dialog === 'rules'} title="How to play" onClose={closeDialog}>

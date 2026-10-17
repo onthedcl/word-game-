@@ -4,10 +4,14 @@ import { appleAvailable, preloadSignIn, sendEmailLink, signInWith, type Provider
 interface Props {
   /** A sign-in finished in place (popup): hand its token over. */
   onToken(idToken: string): Promise<void>;
+  /** Signing in is needed before playing. */
+  required?: boolean;
+  /** For players from before sign-in was required: the date they need to sign in by. */
+  signInBy?: number | null;
 }
 
 /** Continue with Apple, Google or a one-tap email link. */
-export function SignIn({ onToken }: Props) {
+export function SignIn({ onToken, required = false, signInBy = null }: Props) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,9 +43,24 @@ export function SignIn({ onToken }: Props) {
   const btn = 'flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 font-semibold disabled:opacity-50';
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm">
-        Save your name, scores and streak to an account, so you can play on any device and nobody else can use your
-        name. We never post anything or send you emails, apart from sign-in links.
+      {required ? (
+        <p className="text-sm">
+          Sign in to play. It keeps your name, scores and streak yours, on any device, and keeps the leaderboard
+          free of fake players. Played before? Sign in, then type your username and code once to keep everything.
+        </p>
+      ) : (
+        <p className="text-sm">
+          Save your name, scores and streak to an account, so you can play on any device and nobody else can use your
+          name.
+          {signInBy && (
+            <>
+              {' '}Signing in is needed to play from <b>{new Date(signInBy).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</b>.
+            </>
+          )}
+        </p>
+      )}
+      <p className="text-xs text-muted">
+        You need to be 13 or older to sign in. We never post anything or email you, apart from sign-in links.
       </p>
       {appleAvailable && (
         <button type="button" disabled={busy} onClick={() => provider('apple')} className={`${btn} border-ink bg-ink text-bg`}>

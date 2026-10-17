@@ -111,6 +111,14 @@ export async function finishSignIn(askEmail: () => string | null): Promise<strin
   return result ? result.user.getIdToken() : null;
 }
 
+/** The signed-in person's ID token on this device, or null if nobody is signed in. */
+export async function currentIdToken(): Promise<string | null> {
+  if (!signInAvailable) return null;
+  const a = await auth();
+  await a.authStateReady();
+  return a.currentUser ? a.currentUser.getIdToken() : null;
+}
+
 export async function signOutAccount(): Promise<void> {
   if (!signInAvailable) return;
   const a = await auth();

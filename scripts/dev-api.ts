@@ -26,6 +26,8 @@ const deps: lb.Deps = {
   },
   blitzSeeds: async () => JSON.parse(readFileSync(join(dir, 'blitz-pool.json'), 'utf8')) as string[],
   now: () => Date.now() + clock,
+  // REQUIRE_FROM=2026-10-01 to try required sign-in locally.
+  requireAccountsFrom: process.env.REQUIRE_FROM ? Date.parse(`${process.env.REQUIRE_FROM}T04:00:00Z`) : undefined,
   randomId: () => crypto.randomUUID(),
   random: () => Math.random(),
 };
@@ -50,6 +52,7 @@ createServer(async (req, res) => {
     'POST /api/blitz/start': () => lb.startBlitz(deps, body),
     'POST /api/blitz/finish': () => lb.finishBlitz(deps, body),
     'POST /api/name': () => lb.saveName(deps, body),
+    'POST /api/hello': () => lb.hello(deps, body),
     'GET /api/me': () => lb.me(deps, q('player')),
   };
   const route = routes[`${req.method} ${url.pathname}`];

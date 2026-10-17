@@ -13,6 +13,7 @@ import {
 } from './leaderboard';
 import type { AnswerTable } from './tables';
 import { rateLimit } from './ratelimit';
+import { requireSignIn } from './accounts';
 
 /** A word the player is allowed to know about: one they found, or any word once the board is over. */
 export interface WordInfo {
@@ -130,6 +131,7 @@ export async function checkWord(deps: Deps, body: Record<string, unknown>) {
     table = await tableFor(deps, `daily/${boardId}`);
   }
   rateLimit(`check:p:${playerId}`, CHECKS_PER_MINUTE, deps.now());
+  await requireSignIn(deps, playerId);
   // Set by the Worker (a one-way scramble of the connection, never the address itself).
   if (typeof body.client === 'string') rateLimit(`check:c:${body.client}`, CHECKS_PER_CONNECTION, deps.now());
   const word = typeof body.word === 'string' ? body.word.toLowerCase() : '';
@@ -157,6 +159,7 @@ export async function catchUp(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const { boardId, dateKey } = boardIdOf(body.board);
   if (deps.now() < boardOpensAt(dateKey)) throw new ApiError(404, 'That board isn’t open yet');
+  await requireSignIn(deps, playerId);
   const key = `caught-up/${boardId}/${playerId}`;
   if (await deps.kv.get(key, { type: 'json' })) return { words: [] as WordInfo[] };
   await deps.kv.setJSON(key, 1);
