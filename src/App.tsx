@@ -902,7 +902,7 @@ export default function App() {
               found={dailyFound.found}
               routes={dailyFound.routes ?? {}}
               statusNote={<span className="lg:hidden">{puzzleMeta}</span>}
-              tip={<TipLink>Coffee</TipLink>}
+              tip={<TipLink small>Coffee</TipLink>}
               onAttempt={onDailyAttempt}
               onLongWord={() => {
                 // In the iPhone app, a good moment to ask for a rating (Apple's own sheet), once they're a regular.

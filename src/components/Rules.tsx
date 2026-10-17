@@ -15,9 +15,10 @@ function About() {
         <a className={link} href="https://github.com/onthedcl/word-game-/issues" target="_blank" rel="noreferrer">Contact &amp; feedback</a>
       </p>
       {tipUrl && (
-        <p className="mt-2">
-          Lettertown is free, with no ads. If it brightens your day, <TipLink />.
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <p>Lettertown is free, with no ads. If it brightens your day:</p>
+          <TipLink />
+        </div>
       )}
       <details className="mt-2">
         <summary className="cursor-pointer">Credits</summary>
