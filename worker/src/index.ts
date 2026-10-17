@@ -361,7 +361,7 @@ export class Leaderboard extends DurableObject<Env> {
           return json({ ok: true, ...((await this.ctx.storage.get('notify-status')) as object) });
         case 'POST /api/hello': {
           const place = req.headers.get(PLACE_HEADER);
-          return json(await hello(deps, body, place ? (JSON.parse(place) as Place) : null));
+          return json(await hello(deps, body, place ? (JSON.parse(place) as Place) : null, isBot(req)));
         }
         default:
           return json({ error: 'Not found' }, 404);
@@ -372,6 +372,13 @@ export class Leaderboard extends DurableObject<Env> {
       return json({ error: 'Something went wrong' }, 500);
     }
   }
+}
+
+/** Search engines, link previews, scanners and scripts, by what they call themselves. */
+const BOT = /bot|crawl|spider|slurp|headless|lighthouse|pagespeed|preview|facebookexternalhit|embedly|python|curl|wget|httpclient|scanner|monitor|uptime/i;
+function isBot(req: Request): boolean {
+  const ua = req.headers.get('User-Agent') ?? '';
+  return !ua || BOT.test(ua);
 }
 
 /** Today's date in New York, where most players are. */
