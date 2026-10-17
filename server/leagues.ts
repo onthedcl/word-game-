@@ -1,5 +1,6 @@
 // Private leagues: a named group of players with its own leaderboard for each daily
 // board, joined by invite link, plus a short news feed ("Sam passed you").
+import { requireSignIn } from './accounts';
 import { ApiError, blockedPlayers, playerIdOf, readBoard, type Deps, type Entry } from './leaderboard';
 import { cleanName, maskText } from './names';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
@@ -63,6 +64,7 @@ function newId(deps: Deps): string {
 
 export async function createLeague(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
+  await requireSignIn(deps, playerId);
   const who = await playerName(deps, playerId);
   const name = cleanName(body.name, 24);
   if (!name) throw new ApiError(400, 'Please pick a different league name (2–24 letters or numbers)');
@@ -307,6 +309,7 @@ export async function getChat(deps: Deps, rawId: unknown, rawPlayer: unknown) {
 
 export async function postChat(deps: Deps, body: Record<string, unknown>) {
   const { playerId, id } = await member(deps, body.id, body.playerId);
+  await requireSignIn(deps, playerId);
   const name = await playerName(deps, playerId);
   const raw = typeof body.text === 'string' ? body.text.replace(/\s+/g, ' ').trim() : '';
   if (!raw) throw new ApiError(400, 'Say something!');

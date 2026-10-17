@@ -12,7 +12,7 @@ import {
 } from '../../server/leaderboard';
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
-import { linkAccount } from '../../server/accounts';
+import { claimIntoAccount, linkAccount } from '../../server/accounts';
 import { cachedKV } from '../../server/kvcache';
 import { exportPage, importEntries, type BackupStore } from '../../server/backup';
 import { boardLocksAt, dateKeyFor, shiftDateKey } from '../../src/engine/dates';
@@ -41,6 +41,8 @@ interface Env {
   GH_NOTIFY_TOKEN?: string;
   /** Firebase project whose sign-ins (Apple, Google, email link) are accepted. Empty until set up. */
   FIREBASE_PROJECT_ID?: string;
+  /** Date sign-in became required (e.g. 2026-11-01), or empty while it's optional. */
+  REQUIRE_ACCOUNTS_FROM?: string;
 }
 
 const NOTIFY_REPO = 'onthedcl/word-game-';
@@ -113,6 +115,7 @@ export class Leaderboard extends DurableObject<Env> {
     const storage = this.ctx.storage;
     return {
       kv: this.kv,
+      requireAccountsFrom: this.env.REQUIRE_ACCOUNTS_FROM ? Date.parse(`${this.env.REQUIRE_ACCOUNTS_FROM}T04:00:00Z`) || undefined : undefined,
       answers: async (key) => {
         if (this.tables.has(key)) return this.tables.get(key)!;
         const table = ((await storage.get(tableKey(key))) as AnswerTable | undefined) ?? null;
@@ -254,6 +257,8 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await lostCode(deps, body));
         case 'POST /api/account/link':
           return json(await linkAccount(deps, body));
+        case 'POST /api/account/claim':
+          return json(await claimIntoAccount(deps, body));
         case 'POST /api/code':
           return json(await setCode(deps, body));
         case 'POST /api/message-seen':

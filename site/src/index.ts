@@ -7,13 +7,15 @@ interface Env {
 const API = 'https://word-game-leaderboard.danlagstein.workers.dev';
 
 const SECURITY_HEADERS: Record<string, string> = {
-  // Only this site's own code runs, and it only talks to itself and the game server.
+  // Only this site's own code runs, and it only talks to itself, the game server and Google's
+  // sign-in (Firebase Authentication: its sign-in window and token checks).
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' https://apis.google.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
-    `connect-src 'self' ${API}`,
+    `connect-src 'self' ${API} https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com`,
+    'frame-src https://*.firebaseapp.com https://accounts.google.com',
     "font-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",

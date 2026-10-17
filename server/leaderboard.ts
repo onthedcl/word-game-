@@ -7,7 +7,7 @@ import { cleanName, maskText } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
 import type { Identity } from './firebaseToken';
-import { accountOf, moveAccount, unlinkAccount } from './accounts';
+import { accountOf, moveAccount, requireSignIn, signInStatus, unlinkAccount } from './accounts';
 import { leaveAllLeagues, movePlayerInLeagues, notePasses, roomsSummary } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 import { blitzBoard } from './boards';
@@ -25,6 +25,8 @@ export interface KV {
 
 export interface Deps {
   kv: KV;
+  /** When signing in became required (ms), or undefined while it's optional. */
+  requireAccountsFrom?: number;
   /** Answer table for `daily/<date>` or `blitz/<seed>`, or null if there isn't one. */
   answers(key: string): Promise<AnswerTable | null>;
   /** Seeds of the pre-built Blitz boards the server hands out. */
@@ -271,6 +273,7 @@ async function bumpStreak(deps: Deps, playerId: string, dateKey: string): Promis
 
 export async function submitDaily(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
+  await requireSignIn(deps, playerId);
   const name = await postingName(deps, playerId, body.name);
   const date = checkDailyDate(body.date, deps.now());
   const table = await tableFor(deps, `daily/${date}`);
@@ -323,6 +326,7 @@ export interface BlitzGame {
 
 export async function startBlitz(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
+  await requireSignIn(deps, playerId);
   const pool = await deps.blitzSeeds();
   if (!pool.length) throw new ApiError(503, 'No Blitz boards available');
   const seed = pool[Math.floor(deps.random() * pool.length)];
@@ -333,6 +337,7 @@ export async function startBlitz(deps: Deps, body: Record<string, unknown>) {
 
 export async function finishBlitz(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
+  await requireSignIn(deps, playerId);
   const name = await postingName(deps, playerId, body.name);
   if (typeof body.game !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(body.game)) throw new ApiError(400, 'Bad game');
   const id = body.game;
@@ -411,6 +416,7 @@ async function ownerOf(deps: Deps, name: string): Promise<NameOwner | null> {
 
 export async function saveName(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
+  await requireSignIn(deps, playerId);
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (owner && owner.playerId !== playerId) throw new ApiError(409, 'That name is taken');
@@ -528,13 +534,14 @@ async function ensureCode(deps: Deps, playerId: string, name: string): Promise<s
 export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
-  if (!player) return { name: null, pin: null, codeChosen: false, streak: await streakOf(deps, id) };
+  const signIn = await signInStatus(deps, id);
+  if (!player) return { name: null, pin: null, codeChosen: false, signIn, streak: await streakOf(deps, id) };
   const pin = await ensureCode(deps, id, player.name);
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
   // Players who haven't picked their own code yet are asked to, the next time they open the game.
   const codeChosen = !!pin && !!owner?.chosen;
   const account = await accountOf(deps, id);
-  return { name: player.name, pin, codeChosen, account, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
+  return { name: player.name, pin, codeChosen, account, signIn, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
 }
 
 // ---- messages from the owner ----------------------------------------------------
@@ -623,7 +630,9 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
   const history = ((await deps.kv.get(`player-days/${playerId}`, { type: 'json' })) as { days: number } | null) ??
     ((await deps.kv.get(`first-seen/${playerId}`, { type: 'json' })) ? { days: 1 } : { days: 0 });
   const days = history.days + 1;
-  await deps.kv.setJSON(`player-days/${playerId}`, { days, last: day });
+  // When this player first turned up (for the sign-in grace period); unknown for older records.
+  const since = (history as { since?: number }).since ?? (history.days === 0 ? deps.now() : undefined);
+  await deps.kv.setJSON(`player-days/${playerId}`, { days, last: day, ...(since !== undefined ? { since } : {}) });
 
   if (player?.name) await ensureCode(deps, playerId, player.name);
 

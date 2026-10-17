@@ -59,9 +59,10 @@
 
   <h2>Who handles it</h2>
   <ul>
-    <li><b>Cloudflare</b> runs the leaderboard server and stores the data above.</li>
-    <li><b>GitHub</b> hosts the game. Owner notifications are relayed through GitHub Actions, which keeps each
-      relay request, including the notification text (names, rough locations, scores), for up to 90 days.</li>
+    <li><b>Cloudflare</b> hosts the game at dpiyf.com, runs the game server and stores the data above.</li>
+    <li><b>GitHub</b> hosts the game's code. Owner notifications are relayed through GitHub Actions, which keeps each
+      relay request, including the notification text (names, rough locations, scores), for up to 90 days. A nightly
+      backup of the game's data is kept there for 30 days, encrypted so only the owner can open it.</li>
     <li><b>ntfy.sh</b> delivers those notifications to the owner's phone.</li>
     <li><b>Google Firebase Authentication</b> handles sign-in, if you sign in.</li>
   </ul>

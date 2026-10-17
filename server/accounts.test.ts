@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { verifyFirebaseToken, type Identity } from './firebaseToken';
-import { linkAccount } from './accounts';
-import { ApiError, claimName, deletePlayer, me, moderateName, saveName, setCode, submitDaily, type Deps, type KV } from './leaderboard';
+import { claimIntoAccount, GRACE_DAYS, linkAccount, signInStatus } from './accounts';
+import { ApiError, claimName, deletePlayer, hello, me, moderateName, saveName, setCode, submitDaily, type Deps, type KV } from './leaderboard';
 import { answerTable } from './tables';
 import { generateDaily } from '../src/engine/generator';
 import { dict, seeds } from '../src/engine/node-dict';
@@ -116,5 +116,73 @@ describe('accounts', () => {
   it('says sign-in is not set up when there is no project', async () => {
     delete deps.verifyIdToken;
     await rejects(linkAccount(deps, { playerId: P1, idToken: 'u1:google.com' }), 503);
+  });
+
+  describe('required sign-in', () => {
+    const DAY = 24 * 3600_000;
+    let clock: number;
+    beforeEach(() => {
+      clock = Date.parse(`${D}T15:00:00Z`);
+      deps.now = () => clock;
+    });
+    const start = () => {
+      deps.requireAccountsFrom = clock; // switched on now
+    };
+
+    it('lets everyone play while it is off', async () => {
+      await hello(deps, { playerId: P1 });
+      expect(await signInStatus(deps, P1)).toEqual({ required: false, signInBy: null });
+      await saveName(deps, { playerId: P1, name: 'Ann' });
+    });
+
+    it('holds nobody up before the start date, just reminds them', async () => {
+      deps.requireAccountsFrom = clock + 3 * DAY;
+      const status = await signInStatus(deps, P2);
+      expect(status).toEqual({ required: false, signInBy: deps.requireAccountsFrom + GRACE_DAYS * DAY });
+      await saveName(deps, { playerId: P2, name: 'Bo' });
+    });
+
+    it('needs new players to sign in before they play, name themselves or chat', async () => {
+      start();
+      clock += 1000;
+      await hello(deps, { playerId: P2 });
+      expect(await signInStatus(deps, P2)).toEqual({ required: true, signInBy: null });
+      await rejects(saveName(deps, { playerId: P2, name: 'Bo' }), 401);
+      await rejects(submitDaily(deps, { playerId: P2, name: 'Bo', date: D, words: [] }), 401);
+      await linkAccount(deps, { playerId: P2, idToken: 'u2:google.com' });
+      await saveName(deps, { playerId: P2, name: 'Bo' }); // signed in: fine
+    });
+
+    it('gives players from before a grace period, then asks them too', async () => {
+      await hello(deps, { playerId: P1 });
+      await saveName(deps, { playerId: P1, name: 'Ann' });
+      start();
+      clock += 1000;
+      const status = await signInStatus(deps, P1);
+      expect(status.required).toBe(false);
+      expect(status.signInBy).toBe(deps.requireAccountsFrom! + GRACE_DAYS * DAY);
+      expect(await me(deps, P1)).toMatchObject({ signIn: { required: false } });
+      await submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words: Object.keys(table.words).slice(0, 1) });
+      clock += GRACE_DAYS * DAY;
+      expect((await signInStatus(deps, P1)).required).toBe(true);
+    });
+
+    it('lets a current player sign in on a new device with their name and code, once', async () => {
+      await hello(deps, { playerId: P1 });
+      await saveName(deps, { playerId: P1, name: 'Ann' });
+      await setCode(deps, { playerId: P1, code: '4719' });
+      await submitDaily(deps, { playerId: P1, name: 'Ann', date: D, words: Object.keys(table.words).slice(0, 2) });
+      start();
+      // New phone: signs in (a fresh player with no name), then claims "Ann" with the code.
+      const fresh = await linkAccount(deps, { playerId: P2, idToken: 'u9:google.com' });
+      expect(fresh).toMatchObject({ playerId: P2, name: null });
+      await rejects(claimIntoAccount(deps, { idToken: 'u9:google.com', name: 'Ann', code: '0000' }), 403);
+      expect(await claimIntoAccount(deps, { idToken: 'u9:google.com', name: 'ann', code: '4719' })).toMatchObject({ playerId: P1, name: 'Ann' });
+      // From now on the account is the way in: signing in anywhere brings back Ann.
+      expect(await linkAccount(deps, { playerId: 'player-three-cccccccccc', idToken: 'u9:google.com' })).toMatchObject({ playerId: P1, switched: true });
+      expect(await me(deps, P1)).toMatchObject({ account: 'google.com', signIn: { required: false } });
+      // ...and the code no longer works for anyone else.
+      await rejects(claimIntoAccount(deps, { idToken: 'u5:google.com', name: 'Ann', code: '4719' }), 403);
+    });
   });
 });
