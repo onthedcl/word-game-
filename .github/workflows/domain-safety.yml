@@ -27,7 +27,9 @@ jobs:
           echo "Zone status: $(api "$CF/zones/$zone" | jq -r .result.status)"
 
           txt() { # name content: create the TXT record unless an identical one exists
-            have=$(api "$CF/zones/$zone/dns_records?type=TXT&name=$1" | jq -r --arg c "$2" '[.result[] | select(.content == $c or .content == ("\"" + $c + "\""))] | length')
+            list=$(api "$CF/zones/$zone/dns_records?type=TXT&name=$1")
+            if ! jq -e .success >/dev/null <<<"$list"; then echo "$1 TXT: refused: $(jq -r '.errors | map(.message) | join("; ")' <<<"$list")"; return; fi
+            have=$(jq -r --arg c "$2" '[.result[] | select(.content == $c or .content == ("\"" + $c + "\""))] | length' <<<"$list")
             if [ "$have" = 0 ]; then
               r=$(api -X POST "$CF/zones/$zone/dns_records" -d "$(jq -n --arg n "$1" --arg c "\"$2\"" '{type: "TXT", name: $n, content: $c, ttl: 1}')")
               echo "$1 TXT: $(jq -r 'if .success then "added" else (.errors | map(.message) | join("; ")) end' <<<"$r")"
