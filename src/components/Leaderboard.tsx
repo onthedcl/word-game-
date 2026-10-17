@@ -6,7 +6,7 @@ import { streakAnimal } from '../engine/streak';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
-const LIVE_REFRESH_MS = 5000;
+const LIVE_REFRESH_MS = 15000;
 
 /** 1 → "1st", 2 → "2nd", 11 → "11th" */
 function ordinal(n: number): string {
