@@ -60,11 +60,6 @@ const CLIENT_HEADER = 'X-Lettertown-Client';
 
 export class Leaderboard extends DurableObject<Env> {
   // Answer tables live only in this object's storage (uploaded by the build), cached in memory.
-  private async legacyTable(key: string): Promise<AnswerTable | null> {
-    const res = await fetch(`https://onthedcl.github.io/word-game-/scores/${key}.json`).catch(() => null);
-    return res?.ok ? ((await res.json()) as AnswerTable) : null;
-  }
-
   private tables = new Map<string, AnswerTable | null>();
   private pool: string[] | null = null;
 
@@ -79,16 +74,13 @@ export class Leaderboard extends DurableObject<Env> {
       },
       answers: async (key) => {
         if (this.tables.has(key)) return this.tables.get(key)!;
-        let table = ((await storage.get(tableKey(key))) as AnswerTable | undefined) ?? null;
-        // Switchover only: until the first private upload lands, the old public copies still answer.
-        if (!table && !(await storage.get(tableKey('blitz-pool')))) table = await this.legacyTable(key);
+        const table = ((await storage.get(tableKey(key))) as AnswerTable | undefined) ?? null;
         if (table) this.tables.set(key, table);
         return table;
       },
       blitzSeeds: async () => {
         this.pool ??= ((await storage.get(tableKey('blitz-pool'))) as string[] | undefined) ?? null;
-        // Switchover only (see answers): the old public pool.
-        return this.pool ?? (((await this.legacyTable('blitz-pool')) as unknown as string[] | null) ?? []);
+        return this.pool ?? [];
       },
       now: () => Date.now(),
       randomId: () => crypto.randomUUID(),

@@ -1,0 +1,13 @@
+# The game's website at dpiyf.com: the built game (dist-site/), served by Cloudflare with
+# HTTPS only, www sent to the main address, and security headers (src/index.ts).
+# The deploy workflow adds the dpiyf.com routes once the domain is on Cloudflare.
+name = "lettertown-site"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+workers_dev = true
+
+[assets]
+directory = "../dist-site"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "404-page"

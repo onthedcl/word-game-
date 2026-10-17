@@ -2,9 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
-import { adoptCarriedPlayer } from './storage';
+import { acceptCarriedData, adoptCarriedPlayer } from './storage';
+import { moveIfReady } from './moved';
 
+acceptCarriedData();
 adoptCarriedPlayer();
+moveIfReady();
 
 // Fit the game to the part of the screen that's actually visible. Some browsers (newer iPhone
 // Safari) count the space under their own toolbar as part of the page, which hid the bottom of

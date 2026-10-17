@@ -4,3 +4,5 @@ dist/
 *.tsbuildinfo
 .netlify/
 private/
+dist-site/
+site/wrangler.domain.toml

@@ -4,7 +4,8 @@ import { streakAnimal } from './streak';
 import { shortDate } from './dates';
 import { DIFFICULTY_NAMES, type Puzzle } from './generator';
 
-export const GAME_URL = 'https://onthedcl.github.io/word-game-/';
+/** Where the game lives (the build sets VITE_GAME_URL for the dpiyf.com copy). */
+export const GAME_URL = (import.meta.env?.VITE_GAME_URL as string | undefined) || 'https://onthedcl.github.io/word-game-/';
 
 /** ⬢⬢⬢⬢⬡⬡⬡: one hex per rank, filled up to the rank reached. */
 export function hexRow(rankIndex: number): string {
