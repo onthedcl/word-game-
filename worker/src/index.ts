@@ -13,6 +13,10 @@ import {
 import type { AnswerTable } from '../../server/tables';
 import { buildDigest, type Notification } from '../../server/digest';
 import { linkAccount } from '../../server/accounts';
+import { cachedKV } from '../../server/kvcache';
+import { exportPage, importEntries, type BackupStore } from '../../server/backup';
+import { boardLocksAt, dateKeyFor, shiftDateKey } from '../../src/engine/dates';
+import { PER_CONNECTION, rateLimit } from '../../server/ratelimit';
 import { blitzBoard, boardSecret, catchUp, checkWord, dailyBoard, ownerAnswers, storeTables, tableKey } from '../../server/boards';
 import { verifyFirebaseToken } from '../../server/firebaseToken';
 import {
@@ -42,8 +46,30 @@ interface Env {
 const NOTIFY_REPO = 'onthedcl/word-game-';
 
 /** Pings are collected and sent as one summary this often. */
-const DIGEST_MS = 60 * 60 * 1000;
 const DIGEST_QUEUE = 'digest-queue';
+/** Pings held for the summary, at most (beyond that they're only counted). */
+const DIGEST_CAP = 600;
+const HOUR = 3600 * 1000;
+/** Cloudflare's free plan, per day (roughly): requests, and rows written. */
+const FREE_REQUESTS = 100_000;
+const FREE_WRITES = 100_000;
+
+/** The next 8 PM Eastern, when the owner's daily summary goes out. */
+function nextSummaryAt(now: number): number {
+  const today = dateKeyFor(new Date(now));
+  const tonight = boardLocksAt(today) - 4 * HOUR; // midnight Eastern, less four hours
+  return tonight > now ? tonight : boardLocksAt(shiftDateKey(today, 1)) - 4 * HOUR;
+}
+
+type Queue = { items: Notification[]; extra: number };
+const asQueue = (raw: unknown): Queue =>
+  Array.isArray(raw) ? { items: raw as Notification[], extra: 0 } : ((raw as Queue | undefined) ?? { items: [], extra: 0 });
+
+interface Usage {
+  day: string;
+  requests: number;
+  writes: number;
+}
 
 interface NotifyStatus {
   sent: number;
@@ -63,15 +89,30 @@ export class Leaderboard extends DurableObject<Env> {
   private tables = new Map<string, AnswerTable | null>();
   private pool: string[] | null = null;
 
+  // Storage behind a memory cache, kept for as long as this object stays in memory.
+  private kvCache: ReturnType<typeof cachedKV> | null = null;
+  private get kv() {
+    const storage = this.ctx.storage;
+    return (this.kvCache ??= cachedKV({
+      get: (key) => storage.get(key),
+      put: (key, value) => storage.put(key, value),
+      delete: (key) => storage.delete(key),
+      keys: async (prefix) => [...(await storage.list({ prefix })).keys()],
+    }));
+  }
+
+  private get backupStore(): BackupStore {
+    const storage = this.ctx.storage;
+    return {
+      list: (opts) => storage.list(opts),
+      put: (entries) => storage.put(entries),
+    };
+  }
+
   private deps(): Deps {
     const storage = this.ctx.storage;
     return {
-      kv: {
-        get: async (key) => (await storage.get(key)) ?? null,
-        // Writing null deletes the key, so deleted data really is gone (and isn't listed or counted).
-        setJSON: (key, value) => (value === null ? storage.delete(key) : storage.put(key, value)),
-        list: async ({ prefix }) => ({ blobs: [...(await storage.list({ prefix })).keys()].map((key) => ({ key })) }),
-      },
+      kv: this.kv,
       answers: async (key) => {
         if (this.tables.has(key)) return this.tables.get(key)!;
         const table = ((await storage.get(tableKey(key))) as AnswerTable | undefined) ?? null;
@@ -94,22 +135,49 @@ export class Leaderboard extends DurableObject<Env> {
     };
   }
 
-  /** Hold a ping for the next digest (sent by alarm(), about an hour after the first one). */
+  /** Hold a ping for the daily summary (sent by alarm() at 8 PM Eastern). */
   private async queueNotification(n: Notification) {
-    const queue = ((await this.ctx.storage.get(DIGEST_QUEUE)) as Notification[] | undefined) ?? [];
-    queue.push(n);
+    const queue = asQueue(await this.ctx.storage.get(DIGEST_QUEUE));
+    if (queue.items.length < DIGEST_CAP) queue.items.push(n);
+    else queue.extra += 1;
     await this.ctx.storage.put(DIGEST_QUEUE, queue);
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + DIGEST_MS);
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(nextSummaryAt(Date.now()));
+  }
+
+  // How busy the server is today, against the free plan (kept in memory, saved now and then).
+  private usage: Usage = { day: '', requests: 0, writes: 0 };
+  private writesSeen = 0;
+  private async countRequest() {
+    const day = easternDay();
+    if (this.usage.day !== day) {
+      this.usage = ((await this.ctx.storage.get(`usage/${day}`)) as Usage | undefined) ?? { day, requests: 0, writes: 0 };
+    }
+    this.usage.requests += 1;
+    const writes = this.kv.stats.writes;
+    this.usage.writes += writes - this.writesSeen;
+    this.writesSeen = writes;
+    if (this.usage.requests % 200 === 0) await this.ctx.storage.put(`usage/${day}`, this.usage);
   }
 
   async alarm() {
-    const queue = ((await this.ctx.storage.get(DIGEST_QUEUE)) as Notification[] | undefined) ?? [];
+    const queue = asQueue(await this.ctx.storage.get(DIGEST_QUEUE));
     await this.ctx.storage.delete(DIGEST_QUEUE);
-    const digest = buildDigest(queue);
+    const digest = buildDigest(queue.items);
     if (!digest) return;
+    if (queue.extra) digest.message += `\n…and ${queue.extra} more pings`;
     // Add how today's visitors are getting on (owner-only numbers).
     const funnel = await funnelFor(this.deps(), easternDay()).catch(() => null);
     if (funnel?.opened) digest.message += `\n${describeFunnel(funnel)}`;
+    // And how close the server is to the free plan's daily limits.
+    if (this.usage.day !== easternDay()) {
+      this.usage = ((await this.ctx.storage.get(`usage/${easternDay()}`)) as Usage | undefined) ?? this.usage;
+    }
+    if (this.usage.day === easternDay() && this.usage.requests) {
+      const pct = (n: number, of: number) => Math.round((100 * n) / of);
+      const busiest = Math.max(pct(this.usage.requests, FREE_REQUESTS), pct(this.usage.writes, FREE_WRITES));
+      digest.message += `\n🖥️ Server today: ${this.usage.requests.toLocaleString('en-US')} requests (${pct(this.usage.requests, FREE_REQUESTS)}% of the free daily limit), ${this.usage.writes.toLocaleString('en-US')} saves (${pct(this.usage.writes, FREE_WRITES)}%)`;
+      if (busiest >= 50) digest.message += `\n⚠️ Time to switch Cloudflare Workers to the $5/month plan, before a busy day hits the free limit.`;
+    }
     await this.sendNotification(digest);
   }
 
@@ -155,10 +223,16 @@ export class Leaderboard extends DurableObject<Env> {
   }
 
   async fetch(req: Request): Promise<Response> {
+    await this.countRequest().catch(() => {});
     const url = new URL(req.url);
     const route = `${req.method} ${url.pathname.replace(/\/+$/, '')}`;
     const deps = this.deps();
     try {
+      // Flood limit per connection for everything except the owner's and the build's own calls.
+      const client = req.headers.get(CLIENT_HEADER);
+      if (client && !url.pathname.startsWith('/api/admin/')) {
+        rateLimit(`all:${req.method}:${client}`, req.method === 'POST' ? PER_CONNECTION.POST : PER_CONNECTION.GET, Date.now());
+      }
       const body = req.method === 'POST' ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
       const player = url.searchParams.get('player');
       switch (route) {
@@ -241,6 +315,21 @@ export class Leaderboard extends DurableObject<Env> {
           const result = await storeTables(deps, body);
           this.tables.clear();
           this.pool = null;
+          return json(result);
+        }
+        case 'POST /api/admin/export': {
+          // Owner only (the nightly Backup workflow): everything, page by page.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          const after = typeof body.after === 'string' ? body.after : null;
+          return json(await exportPage(this.backupStore, after, typeof body.limit === 'number' ? body.limit : undefined));
+        }
+        case 'POST /api/admin/import': {
+          // Owner only, to put a backup back. Needs an explicit confirmation.
+          if (!this.env.NTFY_TOPIC || body.key !== this.env.NTFY_TOPIC) return json({ error: 'Not allowed' }, 403);
+          if (body.confirm !== 'restore' || !body.entries || typeof body.entries !== 'object') return json({ error: 'Bad restore' }, 400);
+          const result = await importEntries(this.backupStore, body.entries as Record<string, unknown>);
+          this.kvCache = null; // forget anything remembered from before the restore
+          this.tables.clear();
           return json(result);
         }
         case 'POST /api/admin/answers':

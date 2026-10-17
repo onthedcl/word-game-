@@ -1,0 +1,44 @@
+name: Backup
+
+# Every night: a full copy of the game's data (players, names, codes, scores, streaks, rooms,
+# chat), encrypted with your private NTFY_TOPIC secret, kept here for 30 days as a download
+# (Actions → Backup → a run → Artifacts). Encrypted, so the public can't read it even though
+# the repository is public. Restoring is done with scripts/restore-backup.ts (see that file).
+on:
+  schedule:
+    - cron: '40 7 * * *' # 3:40 AM Eastern in summer, 2:40 AM in winter
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      API: https://word-game-leaderboard.danlagstein.workers.dev
+      KEY: ${{ secrets.NTFY_TOPIC }}
+    steps:
+      - name: Export, then encrypt
+        run: |
+          set -e
+          after=null; pages=0; : > backup.ndjson
+          while :; do
+            body=$(jq -n --arg key "$KEY" --argjson after "$after" '{key: $key, after: $after, limit: 1000}')
+            page=$(curl -fsS --retry 3 -H 'Content-Type: application/json' -d "$body" "$API/api/admin/export")
+            jq -c '.entries' <<<"$page" >> backup.ndjson
+            pages=$((pages + 1))
+            after=$(jq -c '.next' <<<"$page")
+            [ "$after" = null ] && break
+          done
+          keys=$(jq -s 'map(keys | length) | add' backup.ndjson)
+          gzip -9 backup.ndjson
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:KEY -in backup.ndjson.gz -out lettertown-backup.ndjson.gz.enc
+          rm backup.ndjson.gz
+          echo "Backed up $keys records in $pages pages ($(du -h lettertown-backup.ndjson.gz.enc | cut -f1) encrypted)."
+          [ "$keys" -gt 0 ]
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lettertown-backup-${{ github.run_id }}
+          path: lettertown-backup.ndjson.gz.enc
+          retention-days: 30

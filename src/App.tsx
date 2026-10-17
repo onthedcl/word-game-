@@ -339,7 +339,8 @@ export default function App() {
       document.visibilityState === 'visible' &&
       api.daily(boardId, me).then((b) => live && noteStanding(b), () => {});
     poll();
-    const t = setInterval(poll, 15000);
+    // Every 45s (a save also brings the latest standing back with it).
+    const t = setInterval(poll, 45000);
     return () => {
       live = false;
       clearInterval(t);
@@ -576,13 +577,17 @@ export default function App() {
     haptics.pangram();
   }, [streak, dailyFound.found.length]);
 
-  // Post daily progress to the leaderboard (a moment after each new word).
+  // Post daily progress to the leaderboard a few seconds after the latest word, so a quick run
+  // of words goes as one save; straight away if the player leaves the page.
   const posted = useRef('');
   useEffect(() => {
     const found = dailyFound.found;
     const key = `${name}|${found.length}`;
     if (!online || !name || !boardOpen || !found.length || posted.current === key) return;
-    const t = setTimeout(() => {
+    let sent = false;
+    const send = () =>
+      !sent &&
+      (sent = true) &&
       api.submitDaily({ playerId: me, name, date: boardId, words: submission(dailyFound), misses: readStored(missesKey(boardId), 0) }).then(
         (b) => {
           posted.current = key;
@@ -594,8 +599,17 @@ export default function App() {
           if (e instanceof ApiRejected && e.status === 409) setDialog((d) => d ?? 'name-taken');
         },
       );
-    }, 1500);
-    return () => clearTimeout(t);
+    const t = setTimeout(send, 4000);
+    const leaving = () => {
+      if (document.visibilityState !== 'hidden') return;
+      clearTimeout(t);
+      send();
+    };
+    document.addEventListener('visibilitychange', leaving);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('visibilitychange', leaving);
+    };
   }, [dailyFound, online, name, boardOpen, me, boardId, noteStanding]);
 
   // ---- past boards ----------------------------------------------------------

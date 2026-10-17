@@ -1,5 +1,5 @@
-// Groups the owner's "someone played" pings into one summary, sent about once an
-// hour instead of a ping per player.
+// Groups the owner's "someone played" pings into one summary, sent once a day (8 PM Eastern)
+// instead of a ping per player. Long lists of names are shortened, so it stays readable at scale.
 export type DigestEvent =
   | { kind: 'new'; who?: string; place?: string; today: number }
   | { kind: 'back'; who?: string; days: number; place?: string; today: number }
@@ -22,6 +22,11 @@ export interface Notification {
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "a, b, c and 12 more" */
+export function capped(items: string[], max = 12): string {
+  return items.length <= max ? items.join(', ') : `${items.slice(0, max).join(', ')} and ${items.length - max} more`;
+}
 
 /** "NYC ×3, Denver, CO" — most common places first. */
 function places(list: (string | undefined)[]): string {
@@ -51,28 +56,28 @@ export function buildDigest(batch: Notification[]): Notification | null {
   if (fresh.length) {
     const named = fresh.flatMap((e) => (e.who ? [e.who] : []));
     const where = places(fresh.map((e) => e.place));
-    lines.push(`🎉 ${plural(fresh.length, 'new player')}${where ? ` from ${where}` : ''}${named.length ? ` (${named.join(', ')})` : ''}`);
+    lines.push(`🎉 ${plural(fresh.length, 'new player')}${where ? ` from ${where}` : ''}${named.length ? ` (${capped(named)})` : ''}`);
   }
   const back = of('back');
   if (back.length) {
     const named = back.flatMap((e) => (e.who ? [`${e.who} (day ${e.days})`] : []));
     const unnamed = back.length - named.length;
-    lines.push(`👋 ${plural(back.length, 'returning player')}: ${[...named, ...(unnamed ? [`${unnamed} without a name`] : [])].join(', ')}`);
+    lines.push(`👋 ${plural(back.length, 'returning player')}: ${capped([...named, ...(unnamed ? [`${unnamed} without a name`] : [])], 13)}`);
   }
   const joined = of('joined');
-  if (joined.length) lines.push(`🏷️ New names: ${joined.map((e) => e.who).join(', ')}`);
+  if (joined.length) lines.push(`🏷️ New names: ${capped(joined.map((e) => e.who))}`);
   const blitz = of('blitz');
   if (blitz.length) {
     const top = new Map<string, number>();
     for (const e of blitz) top.set(e.who, Math.max(top.get(e.who) ?? 0, e.score));
-    lines.push(`⚡ ${plural(blitz.length, 'Blitz game')}: ${[...top].map(([w, s]) => `${w} ${s}`).join(', ')}`);
+    lines.push(`⚡ ${plural(blitz.length, 'Blitz game')}: ${capped([...top].sort((a, b) => b[1] - a[1]).map(([w, s]) => `${w} ${s}`), 8)}`);
   }
   for (const e of of('league')) lines.push(`🏘️ New room: ${e.league} (by ${e.who})`);
   const joins = of('league-join');
-  if (joins.length) lines.push(`🤝 Room joins: ${joins.map((e) => `${e.who} → ${e.league}`).join(', ')}`);
+  if (joins.length) lines.push(`🤝 Room joins: ${capped(joins.map((e) => `${e.who} → ${e.league}`), 8)}`);
   for (const e of of('renamed')) lines.push(`✏️ ${e.from} is now ${e.who}`);
   const moved = of('device');
-  if (moved.length) lines.push(`📱 Picked up on another device: ${[...new Set(moved.map((e) => e.who))].join(', ')}`);
+  if (moved.length) lines.push(`📱 Picked up on another device: ${capped([...new Set(moved.map((e) => e.who))])}`);
   for (const n of batch) if (!n.event) lines.push(`${n.title}: ${n.message}`);
 
   const today = Math.max(0, ...[...fresh, ...back].map((e) => e.today));

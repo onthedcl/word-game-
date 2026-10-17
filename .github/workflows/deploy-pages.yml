@@ -39,7 +39,7 @@ jobs:
           # The game moved to dpiyf.com: this copy sends players there (with their data) once it's live.
           VITE_MOVED_TO: https://dpiyf.com
       - name: Build the dpiyf.com copy
-        run: npm run build -- --outDir dist-site
+        run: npm run build -- --outDir dist-site && cp site/_headers dist-site/_headers
         env:
           BASE_PATH: /
           VITE_API_BASE: https://word-game-leaderboard.danlagstein.workers.dev

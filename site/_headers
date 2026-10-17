@@ -1,0 +1,7 @@
+# Headers for the built game files, which Cloudflare serves straight from storage (they skip the
+# Worker so they don't count against its daily request limit). Pages and everything else get
+# the full set of security headers from src/index.ts.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+  Cross-Origin-Resource-Policy: same-origin
