@@ -56,3 +56,10 @@ jobs:
           else
             echo "DNSSEC: $(jq -r '.errors | map(.message) | join("; ")' <<<"$r")"
           fi
+      - name: Check dpiyf.com is serving the game
+        run: |
+          for u in https://dpiyf.com/moved.json https://dpiyf.com/ http://dpiyf.com/ https://www.dpiyf.com/x?y=1; do
+            echo "== $u"; curl -sS -o /dev/null -D - --max-time 20 "$u" | grep -iE '^(HTTP|location|strict-transport|content-security|x-frame)' || echo "(no answer yet)"
+          done
+          echo "== moved.json: $(curl -sS --max-time 20 https://dpiyf.com/moved.json)"
+          echo "== link preview points at: $(curl -sS --max-time 20 https://dpiyf.com/ | grep -o 'og:url" content="[^"]*"')"
