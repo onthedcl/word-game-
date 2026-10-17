@@ -112,9 +112,10 @@ export function Podium({ board, which, onShare, onClose }: Props) {
         </button>
       </div>
       {tipUrl && (
-        <p className="mt-4 text-sm text-muted">
-          Loving Lettertown? <TipLink />
-        </p>
+        <div className="mt-4 flex flex-col items-center gap-2 text-sm text-muted">
+          <p>Loving Lettertown?</p>
+          <TipLink />
+        </div>
       )}
     </div>
   );
