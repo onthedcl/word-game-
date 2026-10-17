@@ -256,7 +256,17 @@ describe('notifications', () => {
     const quiet = { ...deps, notify: undefined };
     await hello(quiet, { playerId: P1, mode: 'daily' });
     await hello(deps, { playerId: P1, mode: 'daily' });
-    expect(sent).toEqual(['New player!: A new player opened the daily puzzle for the first time · 1 player today']);
+    // A new visitor without a name is announced once they find a word, not for just opening the page.
+    expect(sent).toEqual([]);
+    await recordEvent(deps, { playerId: P1, kind: 'first-word', date: DATE });
+    await recordEvent(deps, { playerId: P1, kind: 'first-word', date: DATE });
+    expect(sent).toEqual(['New player!: A new player found their first word in the daily puzzle · 1 player today']);
+  });
+
+  it('ignore search engines and scanners that run the page', async () => {
+    await hello(deps, { playerId: P1, mode: 'daily' }, null, true);
+    expect(sent).toEqual([]);
+    expect(await deps.kv.get(`seen-v2/${DATE}/${P1}`, { type: 'json' })).toBeNull();
   });
 
   it('announce each player once a day when they open the game', async () => {
@@ -267,7 +277,6 @@ describe('notifications', () => {
     clock += 24 * 3600_000;
     await hello(deps, { playerId: P1, mode: 'daily' });
     expect(sent).toEqual([
-      'New player!: A new player opened the daily puzzle for the first time · 1 player today',
       'Joined the leaderboard: Bo picked their leaderboard name',
       'New player!: Bo opened Blitz from 🇺🇸 Brooklyn, NY for the first time · 2 players today',
       'Someone is playing: A returning player (no name) is back for day 2 · opened the daily puzzle · 1 player today',
@@ -309,7 +318,8 @@ describe('daily pings follow the player', () => {
     await hello(deps, { playerId: P1, date: '2026-09-26' });
     await hello(deps, { playerId: P1, date: '2026-09-27' });
     await hello(deps, { playerId: P1, date: '2030-01-01' });
-    expect(sent).toHaveLength(2);
+    // The first visit (a new visitor with no name) waits for a first word; the second day pings.
+    expect(sent).toHaveLength(1);
   });
 });
 

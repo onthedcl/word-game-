@@ -594,8 +594,10 @@ export function describePlace(place: Place | null | undefined): string | null {
 }
 
 /** Called when someone opens the game. Notifies the owner once per player per day. */
-export async function hello(deps: Deps, body: Record<string, unknown>, place?: Place | null) {
+export async function hello(deps: Deps, body: Record<string, unknown>, place?: Place | null, bot = false) {
   const playerId = playerIdOf(body.playerId);
+  // Search engines and scanners that run the page aren't players: don't count or announce them.
+  if (bot) return { ok: true };
   // Without a notification channel there's nothing to do, and marking the player
   // as seen would swallow today's ping once notifications are switched on.
   if (!deps.notify) return { ok: true };
@@ -639,6 +641,12 @@ export async function hello(deps: Deps, body: Record<string, unknown>, place?: P
       tags: ['no_entry'],
       urgent: true,
     });
+  }
+  // A brand-new visitor without a name is announced once they find a word (see recordEvent),
+  // so crawlers and people who just glance at the page don't show up as new players.
+  if (days === 1 && !name) {
+    await deps.kv.setJSON(`pending-new/${playerId}`, { mode, where, day });
+    return { ok: true };
   }
   const message =
     days === 1
@@ -795,6 +803,18 @@ export async function recordEvent(deps: Deps, body: Record<string, unknown>) {
   const day = typeof body.date === 'string' && isDateKey(body.date) ? body.date : null;
   if (!day) throw new ApiError(400, 'Bad date');
   await deps.kv.setJSON(`funnel/${day}/first-word/${playerId}`, 1);
+  // Their first word ever: now they count as a new player.
+  const pending = (await deps.kv.get(`pending-new/${playerId}`, { type: 'json' })) as { mode: string; where: string | null; day: string } | null;
+  if (pending) {
+    await deps.kv.setJSON(`pending-new/${playerId}`, null);
+    const today = (await deps.kv.list({ prefix: `seen-v2/${pending.day}/` })).blobs.length;
+    deps.notify?.({
+      title: 'New player!',
+      message: `A new player found their first word in ${pending.mode}${pending.where ? ` from ${pending.where}` : ''} · ${today} ${today === 1 ? 'player' : 'players'} today`,
+      tags: ['tada'],
+      event: { kind: 'new', place: pending.where ?? undefined, today },
+    });
+  }
   return { ok: true };
 }
 
