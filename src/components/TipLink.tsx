@@ -8,7 +8,7 @@ export function TipLink({ children = 'Buy me a coffee', className = '' }: { chil
       href={tipUrl}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Buy me a coffee: support Lettertown"
+      aria-label="Buy me a coffee: support Lettertown on Ko-fi"
       className={`whitespace-nowrap font-semibold text-[#7046b5] underline decoration-[#7046b5]/40 underline-offset-2 dark:text-[#b9a3ee] ${className}`}
     >
       <span aria-hidden>☕ </span>
