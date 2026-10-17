@@ -6,3 +6,4 @@ dist/
 private/
 dist-site/
 site/wrangler.domain.toml
+.wrangler/
