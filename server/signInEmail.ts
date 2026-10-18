@@ -22,8 +22,9 @@ const dayOf = (now: number) => new Date(now - 4 * 3600_000).toISOString().slice(
  * Email a sign-in link. Limited per connection and per address, so the server can't be used to
  * flood someone's inbox. Throws 503 when the game should send Firebase's email instead.
  */
-export async function sendSignInEmail(deps: Deps, mailer: Mailer | undefined, body: Record<string, unknown>) {
+export async function sendSignInEmail(deps: Deps, mailer: Mailer | string | undefined, body: Record<string, unknown>) {
   if (!mailer) throw new ApiError(503, 'Not set up');
+  if (typeof mailer === 'string') throw new ApiError(503, mailer);
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const continueUrl = typeof body.continueUrl === 'string' ? body.continueUrl : '';
   if (!EMAIL.test(email)) throw new ApiError(400, 'That email doesn’t look right');
