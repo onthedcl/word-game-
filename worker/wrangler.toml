@@ -9,8 +9,8 @@ compatibility_date = "2024-11-01"
 # capacitor://localhost is the iPhone app.
 ALLOWED_ORIGINS = "https://dpiyf.com,https://onthedcl.github.io,https://lettertown-site.danlagstein.workers.dev,capacitor://localhost"
 # Firebase project for player sign-in (Apple, Google, email link). Not a secret: it's in the
-# game's own config too. Leave empty to switch sign-in off.
-FIREBASE_PROJECT_ID = ""
+# game's own config too. The game only shows sign-in when its build has the Firebase config.
+FIREBASE_PROJECT_ID = "dpiyf-89f82"
 # Date sign-in becomes required for new players (YYYY-MM-DD; everyone else gets 30 days to sign
 # in). Leave empty while signing in is optional.
 REQUIRE_ACCOUNTS_FROM = ""

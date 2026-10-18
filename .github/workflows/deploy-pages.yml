@@ -109,8 +109,8 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
         run: |
           npm install --no-audit --no-fund
-          # Sign-in project (a public setting, from Settings → Secrets and variables → Actions → Variables).
-          npx wrangler deploy --var "FIREBASE_PROJECT_ID:${FIREBASE_PROJECT_ID}"
+          # Sign-in project: wrangler.toml's, unless a repository variable says otherwise.
+          if [ -n "$FIREBASE_PROJECT_ID" ]; then npx wrangler deploy --var "FIREBASE_PROJECT_ID:${FIREBASE_PROJECT_ID}"; else npx wrangler deploy; fi
       - name: Set the notification channel
         if: env.CLOUDFLARE_API_TOKEN != '' && env.NTFY_TOPIC != ''
         working-directory: worker
