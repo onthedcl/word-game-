@@ -87,6 +87,9 @@ jobs:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
       GH_NOTIFY_TOKEN: ${{ secrets.GH_NOTIFY_TOKEN }}
+      # Sign-in emails in the game's own design (both optional; without them Firebase sends its own).
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
     steps:
       - name: Skip without a Cloudflare token
         if: env.CLOUDFLARE_API_TOKEN == ''
@@ -125,6 +128,12 @@ jobs:
         if: env.CLOUDFLARE_API_TOKEN != '' && env.GH_NOTIFY_TOKEN != ''
         working-directory: worker
         run: printf '%s' "$GH_NOTIFY_TOKEN" | npx wrangler secret put GH_NOTIFY_TOKEN
+      - name: Set the sign-in email keys
+        if: env.CLOUDFLARE_API_TOKEN != '' && env.FIREBASE_SERVICE_ACCOUNT != '' && env.RESEND_API_KEY != ''
+        working-directory: worker
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" | npx wrangler secret put FIREBASE_SERVICE_ACCOUNT
+          printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
       - name: Build and upload the answer tables (kept only on the leaderboard server)
         if: env.CLOUDFLARE_API_TOKEN != '' && env.NTFY_TOPIC != ''
         env:

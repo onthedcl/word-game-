@@ -174,6 +174,8 @@ export const api = {
   /** Erase this player's name, scores and history from the server. */
   deleteMe: (playerId: string) => call<{ ok: true }>('POST', '/api/delete', { playerId }),
   /** Signed in on a new device: take over an existing name with its code (once). */
+  /** Email a sign-in link in the game's own design (503: send Firebase's instead). */
+  signInEmail: (email: string, continueUrl: string) => call<{ ok: true }>('POST', '/api/signin-email', { email, continueUrl }),
   claimAccount: (idToken: string, name: string, code: string) =>
     call<{ ok: true; playerId: string; name: string }>('POST', '/api/account/claim', { idToken, name, code }),
   linkAccount: (playerId: string, idToken: string) =>

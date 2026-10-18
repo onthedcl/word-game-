@@ -1,8 +1,9 @@
 name: Domain safety
 
 # One-off (safe to re-run) security settings for dpiyf.com on Cloudflare:
-# - Nobody may send email as dpiyf.com (SPF + DMARC records), so scammers can't pose as the game.
-#   When you set up email on the domain (e.g. Cloudflare Email Routing), these get updated.
+# - Only the game's sign-in emails (sent by Firebase, signed for dpiyf.com) may come from
+#   dpiyf.com (SPF + DMARC records), so scammers can't pose as the game. Firebase's own DKIM
+#   records are added by hand from Firebase → Authentication → Templates → Customize domain.
 # - HTTPS always, TLS 1.2 or newer.
 # - DNSSEC on: it prints the DS record to add at Namecheap (Domain → Advanced DNS → DNSSEC).
 #   DS records are public, so printing it here is fine.
@@ -37,8 +38,8 @@ jobs:
               echo "$1 TXT: already there"
             fi
           }
-          txt dpiyf.com 'v=spf1 -all'
-          txt _dmarc.dpiyf.com 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s'
+          txt dpiyf.com 'v=spf1 include:_spf.firebasemail.com ~all'
+          txt _dmarc.dpiyf.com 'v=DMARC1; p=quarantine; adkim=s; aspf=r'
 
           setting() {
             r=$(api -X PATCH "$CF/zones/$zone/settings/$1" -d "{\"value\":\"$2\"}")
