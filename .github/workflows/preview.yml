@@ -42,10 +42,10 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site
-          rm -rf site/preview
-          cp -r dist site/preview
-          cd site
+          git clone -q --depth 1 --branch gh-pages "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages-out
+          rm -rf pages-out/preview
+          cp -r dist pages-out/preview
+          cd pages-out
           git add -A preview
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -qm "Preview ${GITHUB_SHA::7}" || { echo "No changes"; exit 0; }
