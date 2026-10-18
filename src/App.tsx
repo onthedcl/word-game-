@@ -205,13 +205,19 @@ export default function App() {
   useEffect(() => {
     if (online === null || firstDialogShown.current) return;
     firstDialogShown.current = true;
-    if (online && !readStored(NAME_KEY, '') && !readStored('hexicon:asked-name', false)) setDialog('welcome');
+    if (online && !readStored(NAME_KEY, '')) setDialog('welcome');
     else if (!readStored('hexicon:seen-rules', false)) setDialog('rules');
   }, [online]);
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
   const [name, setName] = useStoredState<string>(NAME_KEY, '');
+  // A leaderboard name is needed to play (made up, or randomized): the name screen comes back
+  // until there is one.
+  const needsName = !!online && !name;
+  useEffect(() => {
+    if (needsName && dialog === null) setDialog('welcome');
+  }, [needsName, dialog]);
   // Let the leaderboard server know someone's playing (it notifies the owner once per player per day).
   const greeted = useRef(false);
   useEffect(() => {
@@ -264,7 +270,9 @@ export default function App() {
       setSignInNeed(r.account ? null : (r.signIn ?? null));
     }, () => {});
   }, [online, me]);
-  const mustSignIn = signInAvailable && !!signInNeed?.required && !account;
+  // The preview build asks for a sign-in before the live game does, for trying it out.
+  const previewRequires = import.meta.env.VITE_SIGN_IN_REQUIRED === '1' && online === true;
+  const mustSignIn = signInAvailable && (previewRequires || !!signInNeed?.required) && !account;
   useEffect(() => {
     if (mustSignIn && dialog !== 'signin') setDialog('signin');
   }, [mustSignIn, dialog]);
@@ -1178,7 +1186,7 @@ export default function App() {
         />
       </Modal>
 
-      <Modal open={dialog === 'welcome'} title="Welcome to DPIYF Lettertown" onClose={closeDialog}>
+      <Modal open={dialog === 'welcome'} title="Welcome to DPIYF Lettertown" onClose={closeDialog} locked={needsName}>
         <Welcome
           onSave={async (n) => {
             await saveName(n);
@@ -1186,7 +1194,6 @@ export default function App() {
           }}
           onClaim={claimName}
           onSignIn={signInAvailable && !account ? () => setDialog('signin') : undefined}
-          onSkip={closeDialog}
           onRules={() => {
             writeStored('hexicon:asked-name', true);
             setDialog('rules');
