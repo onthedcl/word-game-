@@ -34,8 +34,14 @@ export async function sendSignInEmail(deps: Deps, mailer: Mailer | undefined, bo
   const countKey = `sign-in-emails/${dayOf(now)}`;
   const sent = ((await deps.kv.get(countKey, { type: 'json' })) as number | null) ?? 0;
   if (sent >= DAILY_EMAILS) throw new ApiError(503, 'Daily allowance used');
-  const link = await mailer.signInLink(email, continueUrl);
-  await mailer.send({ to: email, ...signInEmail(link) });
+  try {
+    const link = await mailer.signInLink(email, continueUrl);
+    await mailer.send({ to: email, ...signInEmail(link) });
+  } catch (err) {
+    // Only ever a service name and status code, e.g. "Sending email (403)". The game then sends
+    // Firebase's email instead.
+    throw new ApiError(502, err instanceof Error ? err.message : 'Email service');
+  }
   await deps.kv.setJSON(countKey, sent + 1);
   return { ok: true };
 }
