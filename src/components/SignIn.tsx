@@ -45,8 +45,9 @@ export function SignIn({ onToken, required = false, signInBy = null }: Props) {
     <div className="flex flex-col gap-3">
       {required ? (
         <p className="text-sm">
-          Sign in to play. It keeps your name, scores and streak yours, on any device, and keeps the leaderboard
-          free of fake players. Played before? Sign in, then type your username and code once to keep everything.
+          Visitors can only window-shop in Lettertown. Sign in to become a resident: you keep that word, your
+          streak and your spot on the leaderboard, on any device. Played before? Sign in, then type your username and
+          code once to keep everything.
         </p>
       ) : (
         <p className="text-sm">

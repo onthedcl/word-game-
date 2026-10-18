@@ -82,6 +82,14 @@ describe('checking words', () => {
     expect(await ask(a.word, a.path)).toMatchObject({ ok: true, word: a.word, score: a.score });
   });
 
+  it('gives a new player who has to sign in one word on the house, then asks them to sign in', async () => {
+    deps.requireAccountsFrom = ET_MIDNIGHT - 86_400_000;
+    const [a, b] = daily.answers;
+    expect(await ask('zzzz', [0, 1, 2, 3])).toMatchObject({ ok: false }); // misses don't use it up
+    expect(await ask(a.word, a.path)).toMatchObject({ ok: true, word: a.word });
+    await expect(ask(b.word, b.path)).rejects.toMatchObject({ status: 401 });
+  });
+
   it('turns down non-words and fake routes without giving anything away', async () => {
     const a = daily.answers[0];
     expect(await ask(a.word, [...a.path].reverse())).toMatchObject({ ok: false });
