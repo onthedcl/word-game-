@@ -83,7 +83,7 @@ export function returningFromSignIn(): boolean {
  * Finish a sign-in that left the page (email link or redirect). Returns an ID token, or null if
  * there was nothing to finish. `askEmail` is used when the link was opened on another device.
  */
-export async function finishSignIn(askEmail: () => string | null): Promise<string | null> {
+export async function finishSignIn(askEmail: () => Promise<string | null>): Promise<string | null> {
   if (!signInAvailable) return null;
   const a = await auth();
   const m = await import('firebase/auth');
@@ -94,7 +94,7 @@ export async function finishSignIn(askEmail: () => string | null): Promise<strin
     } catch {
       /* ask */
     }
-    email ??= askEmail();
+    email ??= await askEmail();
     if (!email) return null;
     const result = await m.signInWithEmailLink(a, email, location.href);
     try {
