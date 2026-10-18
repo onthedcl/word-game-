@@ -19,6 +19,8 @@ import { boardLocksAt, dateKeyFor, shiftDateKey } from '../../src/engine/dates';
 import { PER_CONNECTION, rateLimit } from '../../server/ratelimit';
 import { blitzBoard, boardSecret, catchUp, checkWord, dailyBoard, ownerAnswers, storeTables, tableKey } from '../../server/boards';
 import { verifyFirebaseToken } from '../../server/firebaseToken';
+import { sendSignInEmail } from '../../server/signInEmail';
+import { makeMailer } from './mailer';
 import {
   createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues,
   reportChat, setLeaguePublic,
@@ -43,6 +45,12 @@ interface Env {
   FIREBASE_PROJECT_ID?: string;
   /** Date sign-in became required (e.g. 2026-11-01), or empty while it's optional. */
   REQUIRE_ACCOUNTS_FROM?: string;
+  /**
+   * Firebase service account key, as JSON (a Worker secret), and a Resend API key (another):
+   * with both, sign-in emails go out in Lettertown's own design instead of Firebase's.
+   */
+  FIREBASE_SERVICE_ACCOUNT?: string;
+  RESEND_API_KEY?: string;
 }
 
 const NOTIFY_REPO = 'onthedcl/word-game-';
@@ -306,6 +314,11 @@ export class Leaderboard extends DurableObject<Env> {
           return json(await dailyBoard(deps, url.searchParams.get('date'), player));
         case 'GET /api/blitz/board':
           return json(await blitzBoard(deps, url.searchParams.get('game'), player));
+        case 'POST /api/signin-email':
+          return json(await sendSignInEmail(deps, makeMailer(this.env.FIREBASE_SERVICE_ACCOUNT, this.env.RESEND_API_KEY), {
+            ...body,
+            client: req.headers.get(CLIENT_HEADER) ?? undefined,
+          }));
         case 'POST /api/check':
           return json(await checkWord(deps, { ...body, client: req.headers.get(CLIENT_HEADER) ?? undefined }));
         case 'POST /api/catch-up':

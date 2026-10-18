@@ -1,6 +1,7 @@
 // Signing in (Firebase Authentication): Apple, Google or a one-tap email link. The Firebase code
 // is only downloaded when someone actually signs in, so the game itself stays light.
 import type { Auth } from 'firebase/auth';
+import { api, ApiRejected } from './api';
 import { isNativeApp } from './native';
 
 const config = {
@@ -59,13 +60,23 @@ export async function signInWith(provider: Provider): Promise<string | null> {
   return result.user.getIdToken();
 }
 
-/** Email a one-tap sign-in link that comes back to this page. */
+/**
+ * Email a one-tap sign-in link that comes back to this page: the game's own email when the
+ * server can send it, otherwise Firebase's plain one.
+ */
 export async function sendEmailLink(email: string): Promise<void> {
-  const a = await auth();
-  const { sendSignInLinkToEmail } = await import('firebase/auth');
   const url = new URL(location.href);
   url.hash = '';
-  await sendSignInLinkToEmail(a, email, { url: url.toString(), handleCodeInApp: true });
+  url.search = '';
+  try {
+    await api.signInEmail(email, url.toString());
+  } catch (err) {
+    // A typo or too many tries: say so. Anything else: Firebase sends its own email instead.
+    if (err instanceof ApiRejected && (err.status === 400 || err.status === 429)) throw err;
+    const a = await auth();
+    const { sendSignInLinkToEmail } = await import('firebase/auth');
+    await sendSignInLinkToEmail(a, email, { url: url.toString(), handleCodeInApp: true });
+  }
   try {
     localStorage.setItem(EMAIL_KEY, email);
   } catch {
