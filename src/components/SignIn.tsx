@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { appleAvailable, preloadSignIn, sendEmailLink, signInWith, type Provider } from '../auth';
+import { appleAvailable, inAppBrowser, preloadSignIn, sendEmailLink, signInWith, type Provider } from '../auth';
 
 interface Props {
   /** A sign-in finished in place (popup): hand its token over. */
@@ -17,6 +17,7 @@ export function SignIn({ onToken, required = false, signInBy = null }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(preloadSignIn, []);
+  const [inApp] = useState(() => inAppBrowser());
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -68,15 +69,22 @@ export function SignIn({ onToken, required = false, signInBy = null }: Props) {
            Continue with Apple
         </button>
       )}
-      <button type="button" disabled={busy} onClick={() => provider('google')} className={`${btn} border-line bg-surface`}>
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z" />
-          <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3a7.2 7.2 0 0 1-10.8-3.8h-4v3.1A12 12 0 0 0 12 24z" />
-          <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1z" />
-          <path fill="#EA4335" d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1A7.2 7.2 0 0 1 12 4.8z" />
-        </svg>
-        Continue with Google
-      </button>
+      {inApp ? (
+        <p className="rounded-lg bg-bg p-3 text-sm">
+          Google sign-in doesn’t work inside this app’s browser. Use your email below, or open this page in Safari or
+          Chrome (tap <b>•••</b> or the share icon, then <b>Open in browser</b>) to sign in with Google.
+        </p>
+      ) : (
+        <button type="button" disabled={busy} onClick={() => provider('google')} className={`${btn} border-line bg-surface`}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z" />
+            <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3a7.2 7.2 0 0 1-10.8-3.8h-4v3.1A12 12 0 0 0 12 24z" />
+            <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1z" />
+            <path fill="#EA4335" d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1A7.2 7.2 0 0 1 12 4.8z" />
+          </svg>
+          Continue with Google
+        </button>
+      )}
       <div className="flex items-center gap-2 text-xs text-muted">
         <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
       </div>

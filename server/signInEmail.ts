@@ -3,6 +3,7 @@
 // day's sending allowance is used up, the game falls back to Firebase's plain email.
 import { ApiError, type Deps } from './leaderboard';
 import { rateLimit } from './ratelimit';
+import { countSignIn } from './signInStats';
 
 export interface Mailer {
   /** Firebase's one-time sign-in link for this address, coming back to `continueUrl`. */
@@ -39,11 +40,13 @@ export async function sendSignInEmail(deps: Deps, mailer: Mailer | string | unde
     const link = await mailer.signInLink(email, continueUrl);
     await mailer.send({ to: email, ...signInEmail(link) });
   } catch (err) {
+    await countSignIn(deps, 'failed');
     // Only ever a service name and status code, e.g. "Sending email (403)". The game then sends
     // Firebase's email instead.
     throw new ApiError(502, err instanceof Error ? err.message : 'Email service');
   }
   await deps.kv.setJSON(countKey, sent + 1);
+  await countSignIn(deps, 'sent');
   return { ok: true };
 }
 

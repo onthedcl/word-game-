@@ -13,6 +13,13 @@ const config = {
 
 /** Sign-in is offered once a Firebase project is configured (the iPhone app gets native sign-in later). */
 export const signInAvailable = !!config.apiKey && !isNativeApp;
+/**
+ * The built-in browsers of Instagram, Facebook, TikTok and other apps, where Google refuses to
+ * sign anyone in ("disallowed_useragent"). Sign-in offers the email link there instead.
+ */
+export const inAppBrowser = (ua: string = typeof navigator === 'undefined' ? '' : navigator.userAgent) =>
+  /FBAN|FBAV|FB_IAB|Instagram|TikTok|musical_ly|Bytedance|Snapchat|LinkedInApp|Pinterest|Line\/|MicroMessenger|; wv\)/i.test(ua);
+
 /** Sign in with Apple needs the Apple Developer account; it's switched on separately. */
 export const appleAvailable = signInAvailable && import.meta.env.VITE_SIGN_IN_APPLE === '1';
 
