@@ -3,6 +3,7 @@
 // day's sending allowance is used up, the game falls back to Firebase's plain email.
 import { ApiError, type Deps } from './leaderboard';
 import { rateLimit } from './ratelimit';
+import { countSignIn } from './signInStats';
 
 export interface Mailer {
   /** Firebase's one-time sign-in link for this address, coming back to `continueUrl`. */
@@ -22,8 +23,9 @@ const dayOf = (now: number) => new Date(now - 4 * 3600_000).toISOString().slice(
  * Email a sign-in link. Limited per connection and per address, so the server can't be used to
  * flood someone's inbox. Throws 503 when the game should send Firebase's email instead.
  */
-export async function sendSignInEmail(deps: Deps, mailer: Mailer | undefined, body: Record<string, unknown>) {
+export async function sendSignInEmail(deps: Deps, mailer: Mailer | string | undefined, body: Record<string, unknown>) {
   if (!mailer) throw new ApiError(503, 'Not set up');
+  if (typeof mailer === 'string') throw new ApiError(503, mailer);
   const email = typeof body.email === 'string' ? body.email.trim() : '';
   const continueUrl = typeof body.continueUrl === 'string' ? body.continueUrl : '';
   if (!EMAIL.test(email)) throw new ApiError(400, 'That email doesn’t look right');
@@ -34,9 +36,17 @@ export async function sendSignInEmail(deps: Deps, mailer: Mailer | undefined, bo
   const countKey = `sign-in-emails/${dayOf(now)}`;
   const sent = ((await deps.kv.get(countKey, { type: 'json' })) as number | null) ?? 0;
   if (sent >= DAILY_EMAILS) throw new ApiError(503, 'Daily allowance used');
-  const link = await mailer.signInLink(email, continueUrl);
-  await mailer.send({ to: email, ...signInEmail(link) });
+  try {
+    const link = await mailer.signInLink(email, continueUrl);
+    await mailer.send({ to: email, ...signInEmail(link) });
+  } catch (err) {
+    await countSignIn(deps, 'failed');
+    // Only ever a service name and status code, e.g. "Sending email (403)". The game then sends
+    // Firebase's email instead.
+    throw new ApiError(502, err instanceof Error ? err.message : 'Email service');
+  }
   await deps.kv.setJSON(countKey, sent + 1);
+  await countSignIn(deps, 'sent');
   return { ok: true };
 }
 

@@ -40,15 +40,32 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
   return access_token;
 }
 
-/** Undefined (the game uses Firebase's own email) unless both secrets are set. */
-export function makeMailer(serviceAccountJson: string | undefined, resendKey: string | undefined): Mailer | undefined {
-  if (!serviceAccountJson || !resendKey) return undefined;
-  let sa: ServiceAccount;
+/** The service account from its secret, forgiving curly quotes and stray text around the braces. */
+function readServiceAccount(raw: string): ServiceAccount | string {
+  const text = raw.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+  let sa: Partial<ServiceAccount>;
   try {
-    sa = JSON.parse(serviceAccountJson) as ServiceAccount;
+    sa = JSON.parse(json) as Partial<ServiceAccount>;
   } catch {
-    return undefined;
+    return 'The Firebase key isn’t complete JSON (paste the whole .json file, from { to })';
   }
+  if (!sa.client_email || !sa.private_key || !sa.project_id) return 'The Firebase key is missing client_email, private_key or project_id';
+  return sa as ServiceAccount;
+}
+
+/**
+ * The mailer, or why there isn't one (the game then uses Firebase's own email): undefined when
+ * the secrets aren't set, a reason when one can't be read.
+ */
+export function makeMailer(serviceAccountJson: string | undefined, resendKey: string | undefined): Mailer | string | undefined {
+  if (!serviceAccountJson && !resendKey) return undefined;
+  if (!resendKey) return 'The Resend key is missing';
+  if (!serviceAccountJson) return 'The Firebase key is missing';
+  if (!resendKey.trim().startsWith('re_')) return 'The Resend key doesn’t look right (it starts with re_)';
+  const sa = readServiceAccount(serviceAccountJson);
+  if (typeof sa === 'string') return sa;
+  const key = resendKey.trim();
   return {
     async signInLink(email, continueUrl) {
       const res = await fetch(`https://identitytoolkit.googleapis.com/v1/projects/${sa.project_id}/accounts:sendOobCode`, {
@@ -62,7 +79,7 @@ export function makeMailer(serviceAccountJson: string | undefined, resendKey: st
     async send({ to, subject, html, text }) {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from: 'DPIYF Lettertown <hello@dpiyf.com>', reply_to: 'dpiyfsupport@gmail.com', to, subject, html, text }),
       });
       if (!res.ok) throw new Error(`Sending email (${res.status})`);

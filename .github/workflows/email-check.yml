@@ -1,0 +1,26 @@
+name: Sign-in email check
+
+# Asks the leaderboard server to send a designed sign-in email to Resend's test inbox
+# (delivered@resend.dev: accepted, never delivered to a person) and prints how it went.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      API: https://word-game-leaderboard.danlagstein.workers.dev
+    steps:
+      - name: Server reachable from the game's pages
+        run: |
+          for origin in https://dpiyf.com https://onthedcl.github.io; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H "Origin: $origin" "$API/api/blitz?player=ping")
+            echo "$origin → $code"
+          done
+      - name: Send a test sign-in email
+        run: |
+          curl -s -w '\nHTTP %{http_code}\n' -H 'Origin: https://dpiyf.com' -H 'Content-Type: application/json' \
+            -d '{"email":"delivered@resend.dev","continueUrl":"https://dpiyf.com/"}' "$API/api/signin-email"

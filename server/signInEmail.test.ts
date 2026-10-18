@@ -65,3 +65,13 @@ describe('sign-in emails', () => {
     expect(html).toContain('href="https://x.example/?a=1&amp;b=&quot;2&quot;"');
   });
 });
+
+describe('sign-in stats', () => {
+  it('sum up the day in one line', async () => {
+    const { describeSignIns } = await import('./signInStats');
+    expect(describeSignIns({})).toBeNull();
+    expect(describeSignIns({ google: 2, email: 1, returning: 1, sent: 3, failed: 1 })).toBe(
+      '🔑 Sign-ins today: 3 new accounts (2 Google, 1 email) · 1 signed back in · 3 sign-in emails sent, ⚠️ 1 failed (Firebase\'s plain email went instead)',
+    );
+  });
+});

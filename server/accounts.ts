@@ -2,6 +2,7 @@
 // player to a person, so their name, scores, streak and rooms follow them to any device and
 // can't be taken over. Playing without signing in still works exactly as before.
 import { ApiError, claimName, playerIdOf, type Deps } from './leaderboard';
+import { countSignIn } from './signInStats';
 
 /** account/<uid> → the player that person plays as. We keep no email: Firebase holds that. */
 interface Account {
@@ -26,6 +27,7 @@ export async function linkAccount(deps: Deps, body: Record<string, unknown>) {
 
   const existing = (await deps.kv.get(accountKey(who.uid), { type: 'json' })) as Account | null;
   if (existing) {
+    await countSignIn(deps, 'returning');
     const player = (await deps.kv.get(`players/${existing.playerId}`, { type: 'json' })) as { name: string } | null;
     return { ok: true, playerId: existing.playerId, name: player?.name ?? null, switched: existing.playerId !== playerId, isNew: false, provider: existing.provider };
   }
@@ -34,6 +36,7 @@ export async function linkAccount(deps: Deps, body: Record<string, unknown>) {
   const target = taken && taken !== who.uid ? deps.randomId() : playerId;
   await deps.kv.setJSON(accountKey(who.uid), { playerId: target, provider: who.provider, linkedAt: deps.now() } satisfies Account);
   await deps.kv.setJSON(playerAccountKey(target), who.uid);
+  await countSignIn(deps, who.provider === 'google.com' ? 'google' : who.provider === 'password' || who.provider === 'emailLink' ? 'email' : 'other');
   const player = (await deps.kv.get(`players/${target}`, { type: 'json' })) as { name: string } | null;
   return { ok: true, playerId: target, name: player?.name ?? null, switched: target !== playerId, isNew: true, provider: who.provider };
 }

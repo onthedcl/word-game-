@@ -20,6 +20,7 @@ import { PER_CONNECTION, rateLimit } from '../../server/ratelimit';
 import { blitzBoard, boardSecret, catchUp, checkWord, dailyBoard, ownerAnswers, storeTables, tableKey } from '../../server/boards';
 import { verifyFirebaseToken } from '../../server/firebaseToken';
 import { sendSignInEmail } from '../../server/signInEmail';
+import { describeSignIns, signInStatsFor } from '../../server/signInStats';
 import { makeMailer } from './mailer';
 import {
   createLeague, deleteChat, deleteLeague, getChat, joinLeague, leagueBoard, leagueInfo, leaveLeague, myLeagues, postChat, publicLeagues,
@@ -179,6 +180,8 @@ export class Leaderboard extends DurableObject<Env> {
     // Add how today's visitors are getting on (owner-only numbers).
     const funnel = await funnelFor(this.deps(), easternDay()).catch(() => null);
     if (funnel?.opened) digest.message += `\n${describeFunnel(funnel)}`;
+    const signIns = describeSignIns(await signInStatsFor(this.deps(), easternDay()).catch(() => ({})));
+    if (signIns) digest.message += `\n${signIns}`;
     // And how close the server is to the free plan's daily limits.
     if (this.usage.day !== easternDay()) {
       this.usage = ((await this.ctx.storage.get(`usage/${easternDay()}`)) as Usage | undefined) ?? this.usage;
