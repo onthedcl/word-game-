@@ -206,7 +206,7 @@ export default function App() {
     if (online === null || firstDialogShown.current) return;
     firstDialogShown.current = true;
     // No name yet: the name screen comes up on its own (below).
-    if (online && readStored(NAME_KEY, '') && !readStored('hexicon:seen-rules', false)) setDialog('rules');
+    if (!(online && !readStored(NAME_KEY, '')) && !readStored('hexicon:seen-rules', false)) setDialog('rules');
   }, [online]);
   const [notice, setNotice] = useState('');
   const [dateKey] = useState(initialDateKey);
