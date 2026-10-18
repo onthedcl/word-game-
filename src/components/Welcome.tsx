@@ -4,13 +4,12 @@ import { isHomeScreenApp } from '../storage';
 interface Props {
   onSave(name: string): Promise<void>;
   onClaim(name: string, code: string): Promise<void>;
-  onSkip(): void;
   onRules(): void;
   /** Sign in to an existing account (absent when sign-in isn't set up). */
   onSignIn?(): void;
 }
 
-export function Welcome({ onSave, onClaim, onSkip, onRules, onSignIn }: Props) {
+export function Welcome({ onSave, onClaim, onRules, onSignIn }: Props) {
   return (
     <div>
       <div className="mb-4 overflow-hidden rounded-xl">
@@ -30,18 +29,17 @@ export function Welcome({ onSave, onClaim, onSkip, onRules, onSignIn }: Props) {
       <p className="mb-4 text-sm text-muted">
         {isHomeScreenApp()
           ? 'Played before in your browser? Type the same name to keep your progress. New here? Pick a leaderboard name.'
-          : 'What should we call you on the leaderboard?'}
+          : 'What should we call you on the leaderboard? Make one up, or tap Randomize.'}
       </p>
-      <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} onSignIn={onSignIn} />
+      <NameForm name="" cta="Play" onSave={onSave} onClaim={onClaim} onSignIn={onSignIn} randomize />
       {onSignIn && (
         <p className="mt-3 text-sm">
           Played before?{' '}
           <button type="button" className="font-semibold underline" onClick={onSignIn}>Sign in</button>
         </p>
       )}
-      <div className="mt-4 flex justify-between text-sm text-muted">
+      <div className="mt-4 text-sm text-muted">
         <button type="button" className="underline" onClick={onRules}>How to play</button>
-        <button type="button" className="underline" onClick={onSkip}>Skip for now</button>
       </div>
     </div>
   );

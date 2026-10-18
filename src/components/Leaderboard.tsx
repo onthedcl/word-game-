@@ -4,6 +4,7 @@ import { PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
 import { streakAnimal } from '../engine/streak';
 import { appRules } from '../native';
+import { randomName } from '../randomName';
 
 const HIDDEN_KEY = 'hexicon:hidden-names';
 
@@ -61,9 +62,11 @@ interface NameFormProps {
   onClaim?(name: string, code: string): Promise<void>;
   /** Sign in instead (when the name is saved to an account). */
   onSignIn?(): void;
+  /** Offer a made-up name. */
+  randomize?: boolean;
 }
 
-export function NameForm({ name, cta, onSave, onClaim, onSignIn }: NameFormProps) {
+export function NameForm({ name, cta, onSave, onClaim, onSignIn, randomize = false }: NameFormProps) {
   const [value, setValue] = useState(name);
   const [taken, setTaken] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -163,6 +166,15 @@ export function NameForm({ name, cta, onSave, onClaim, onSignIn }: NameFormProps
           {busy ? '…' : cta}
         </button>
       </div>
+      {randomize && (
+        <button
+          type="button"
+          onClick={() => { setValue(randomName()); setError(''); }}
+          className="self-start rounded-lg border border-line px-3 py-1.5 text-sm font-semibold"
+        >
+          🎲 Randomize
+        </button>
+      )}
       {error && <p className="text-sm text-bad">{error}</p>}
     </form>
   );

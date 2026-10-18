@@ -36,6 +36,8 @@ jobs:
           VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'dpiyf-89f82' }}
           VITE_FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID || '1:761233895871:web:e4c514507a31cb7c87f10a' }}
           VITE_SIGN_IN_APPLE: ${{ vars.SIGN_IN_APPLE }}
+          # The preview asks for a sign-in before playing, to try out the flow.
+          VITE_SIGN_IN_REQUIRED: '1'
           # Tip jar link (Ko-fi, Buy Me a Coffee or a Stripe payment link).
           VITE_TIP_URL: ${{ vars.TIP_URL }}
       - name: Put dist/ into gh-pages/preview (leaving everything else as is)
