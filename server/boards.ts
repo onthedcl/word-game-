@@ -13,7 +13,7 @@ import {
 } from './leaderboard';
 import type { AnswerTable } from './tables';
 import { rateLimit } from './ratelimit';
-import { requireSignIn } from './accounts';
+import { requireSignIn, signInStatus } from './accounts';
 
 /** A word the player is allowed to know about: one they found, or any word once the board is over. */
 export interface WordInfo {
@@ -106,6 +106,9 @@ async function blitzGameOf(deps: Deps, rawGame: unknown, rawPlayer: unknown) {
   return { game, playerId };
 }
 
+/** Set once a player who has to sign in has had their one word on the house. */
+const trialKey = (playerId: string) => `tried-a-word/${playerId}`;
+
 // Word checks are generous for people but not for scripts trying every word in a dictionary.
 // Counted per player and per connection (a script could make up new player ids; a classroom
 // shares one connection, so that limit is much higher).
@@ -131,7 +134,9 @@ export async function checkWord(deps: Deps, body: Record<string, unknown>) {
     table = await tableFor(deps, `daily/${boardId}`);
   }
   rateLimit(`check:p:${playerId}`, CHECKS_PER_MINUTE, deps.now());
-  await requireSignIn(deps, playerId);
+  // A player who has to sign in gets one word on the house first, to see what the game is.
+  const trial = (await signInStatus(deps, playerId)).required;
+  if (trial && (await deps.kv.get(trialKey(playerId), { type: 'json' }))) throw new ApiError(401, 'Sign in to play');
   // Set by the Worker (a one-way scramble of the connection, never the address itself).
   if (typeof body.client === 'string') rateLimit(`check:c:${body.client}`, CHECKS_PER_CONNECTION, deps.now());
   const word = typeof body.word === 'string' ? body.word.toLowerCase() : '';
@@ -147,6 +152,7 @@ export async function checkWord(deps: Deps, body: Record<string, unknown>) {
   if (!route.includes(CENTER)) return { ok: false, reason: 'Must use the key tile' };
   const hit = Object.hasOwn(table.words, word) ? table.words[word] : undefined;
   if (!hit) return { ok: false, reason: 'Not a word' };
+  if (trial) await deps.kv.setJSON(trialKey(playerId), 1);
   return { ok: true, ...info(word, hit), points: scorePath(route, board).score };
 }
 

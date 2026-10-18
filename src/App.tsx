@@ -208,8 +208,8 @@ export default function App() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const firstDialogShown = useRef(false);
   const openFirstDialog = useCallback(() => {
-    if (online && !readStored(NAME_KEY, '')) setDialog('welcome');
-    else if (!readStored('hexicon:seen-rules', false)) setDialog('rules');
+    // No name yet: the name screen comes up on its own (below).
+    if (!(online && !readStored(NAME_KEY, '')) && !readStored('hexicon:seen-rules', false)) setDialog('rules');
   }, [online]);
   useEffect(() => {
     if (online === null || firstDialogShown.current) return;
@@ -222,12 +222,6 @@ export default function App() {
   const [dateKey] = useState(initialDateKey);
   const [me] = useState(playerId);
   const [name, setName] = useStoredState<string>(NAME_KEY, '');
-  // A leaderboard name is needed to play (made up, or randomized): the name screen comes back
-  // until there is one.
-  const needsName = !!online && !name;
-  useEffect(() => {
-    if (needsName && dialog === null) setDialog('welcome');
-  }, [needsName, dialog]);
   // Let the leaderboard server know someone's playing (it notifies the owner once per player per day).
   const greeted = useRef(false);
   useEffect(() => {
@@ -273,19 +267,35 @@ export default function App() {
   // Signing in: required for new players once switched on (the server says), with a grace
   // period for players from before, who get a reminder once a day.
   const [signInNeed, setSignInNeed] = useState<{ required: boolean; signInBy: number | null } | null>(null);
+  // Whether this player's account is known yet (so a signed-in player never sees "Sign in to play").
+  const [accountKnown, setAccountKnown] = useState(!signInAvailable);
   useEffect(() => {
     if (!online || !signInAvailable) return;
     api.me(me).then((r) => {
       setAccount(r.account ?? null);
       setSignInNeed(r.account ? null : (r.signIn ?? null));
+      setAccountKnown(true);
     }, () => {});
   }, [online, me]);
   // The preview build asks for a sign-in before the live game does, for trying it out.
   const previewRequires = import.meta.env.VITE_SIGN_IN_REQUIRED === '1' && online === true;
-  const mustSignIn = signInAvailable && (previewRequires || !!signInNeed?.required) && !account;
+  const signInRequired = signInAvailable && (previewRequires || !!signInNeed?.required) && !account;
+  // New players get one word on the house before signing in, so they see what the game is.
+  const [triedAWord, setTriedAWord] = useStoredState<boolean>('hexicon:tried-a-word', hasPlayedBefore());
+  const mustSignIn = signInRequired && accountKnown && triedAWord;
   useEffect(() => {
     if (mustSignIn && dialog !== 'signin' && dialog !== 'terms') setDialog('signin');
   }, [mustSignIn, dialog]);
+  // Signed in (or it turned out they already were): the sign-in screen has done its job.
+  useEffect(() => {
+    if (account && dialog === 'signin') setDialog(null);
+  }, [account, dialog]);
+  // A leaderboard name is needed to play (made up, or randomized): the name screen comes back
+  // until there is one. When signing in is needed, it comes after that.
+  const needsName = !!online && !name && accountKnown && !signInRequired;
+  useEffect(() => {
+    if (needsName && dialog === null) setDialog('welcome');
+  }, [needsName, dialog]);
   useEffect(() => {
     if (!signInAvailable || account || !signInNeed?.signInBy || dialog) return;
     const key = `hexicon:signin-reminder:${dateKeyFor()}`;
@@ -298,6 +308,7 @@ export default function App() {
   const signInFirst = useCallback((err: unknown): never => {
     if (err instanceof ApiRejected && err.status === 401) {
       setSignInNeed({ required: true, signInBy: null });
+      setTriedAWord(true);
       throw new Error('Sign in to play');
     }
     throw err;
@@ -1034,6 +1045,7 @@ export default function App() {
                 updateDaily((p) => withKnown(p, info));
                 setDailyFound((s) => ({ found: [...s.found, w], routes: { ...s.routes, [w]: r } }));
                 setStarterDone(true);
+                setTriedAWord(true);
                 scheduleDailyReminder().catch(() => {}); // in the iPhone app: once, after the first word
                 if (online && !dailyFound.found.length && boardOpen) api.event(me, 'first-word', dateKey).catch(() => {});
               }}
@@ -1259,7 +1271,7 @@ export default function App() {
         />
       </Modal>
 
-      <Modal open={dialog === 'signin'} title={mustSignIn ? 'Sign in to play' : 'Save your progress'} onClose={closeDialog} locked={mustSignIn}>
+      <Modal open={dialog === 'signin'} title={mustSignIn ? 'Nice find! Now move in' : 'Save your progress'} onClose={closeDialog} locked={mustSignIn}>
         <SignIn onToken={applySignIn} required={mustSignIn} signInBy={account ? null : (signInNeed?.signInBy ?? null)} />
       </Modal>
 
