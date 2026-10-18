@@ -36,7 +36,7 @@ const STUCK_MS = 2 * 60 * 1000; // two minutes of trying without a new word…
 const STUCK_WRONG_STREAK = 5; // …or this many wrong words in a row
 const DIFFICULTY_COLORS = ['bg-emerald-600', 'bg-emerald-600', 'bg-amber-500', 'bg-amber-500', 'bg-orange-600', 'bg-red-600', 'bg-red-700'];
 type Mode = 'daily' | 'blitz';
-type Dialog = null | 'signin' | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
+type Dialog = null | 'signin' | 'finish-email' | 'welcome' | 'rules' | 'setup' | 'owner-message' | 'hints' | 'archive' | 'blitz-over' | 'leaderboard' | 'name-taken' | 'podium' | 'join-league';
 /** Saved progress on a board: words found, and the route each was traced along. */
 interface Progress {
   found: string[];
@@ -274,7 +274,7 @@ export default function App() {
   const [triedAWord, setTriedAWord] = useStoredState<boolean>('hexicon:tried-a-word', hasPlayedBefore());
   const mustSignIn = signInRequired && accountKnown && triedAWord;
   useEffect(() => {
-    if (mustSignIn && dialog !== 'signin') setDialog('signin');
+    if (mustSignIn && dialog !== 'signin' && dialog !== 'finish-email') setDialog('signin');
   }, [mustSignIn, dialog]);
   // Signed in (or it turned out they already were): the sign-in screen has done its job.
   useEffect(() => {
@@ -324,10 +324,23 @@ export default function App() {
       setDialog('welcome');
     }
   }, [me, name]);
-  // Coming back from a sign-in email or a sign-in page.
+  // Coming back from a sign-in email or a sign-in page. A link opened somewhere other than where
+  // it was asked for (another browser or device) needs the email typed once more.
+  const [emailAsk, setEmailAsk] = useState<((email: string | null) => void) | null>(null);
+  const [linkEmail, setLinkEmail] = useState('');
   useEffect(() => {
     if (!signInAvailable || !returningFromSignIn()) return;
-    finishSignIn(() => prompt('To finish signing in, enter the email you used:'))
+    finishSignIn(
+      () =>
+        new Promise<string | null>((resolve) => {
+          setEmailAsk(() => (email: string | null) => {
+            setEmailAsk(null);
+            setDialog(null);
+            resolve(email);
+          });
+          setDialog('finish-email');
+        }),
+    )
       .then((token) => (token ? applySignIn(token) : undefined))
       .catch(() => setNotice('Couldn’t finish signing in. Please try again'));
     // Only once, on load.
@@ -1254,6 +1267,30 @@ export default function App() {
           }}
           onLater={closeDialog}
         />
+      </Modal>
+
+      <Modal open={dialog === 'finish-email'} title="Almost in" onClose={() => emailAsk?.(null)}>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            emailAsk?.(linkEmail.trim());
+          }}
+        >
+          <p className="text-sm">The sign-in link opened in a different window. Type the email you used, just to be sure it’s you.</p>
+          <input
+            type="email"
+            value={linkEmail}
+            onChange={(e) => setLinkEmail(e.target.value)}
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-label="Your email"
+            className="rounded-lg border border-line bg-bg px-3 py-2 text-base"
+          />
+          <button type="submit" disabled={!linkEmail.includes('@')} className="rounded-lg bg-ink px-4 py-2.5 font-semibold text-bg disabled:opacity-50">
+            Finish signing in
+          </button>
+        </form>
       </Modal>
 
       <Modal open={dialog === 'signin'} title={mustSignIn ? 'Nice find! Now move in' : 'Save your progress'} onClose={closeDialog} locked={mustSignIn}>
