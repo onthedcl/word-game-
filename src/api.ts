@@ -153,6 +153,8 @@ export const api = {
   me: (player: string) =>
     call<{
       name: string | null; pin: string | null; codeChosen?: boolean; account?: string | null;
+      /** Accounts have replaced the old 4-digit codes for good. */
+      codesRetired?: boolean;
       /** Whether this player must sign in to play, or until when they can play without it. */
       signIn?: { required: boolean; signInBy: number | null };
       streak?: Streak | null; ownerMessage?: { text: string; at: number } | null;

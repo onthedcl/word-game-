@@ -49,6 +49,8 @@ export function playerId(): string {
 
 export const NAME_KEY = 'hexicon:player-name';
 export const PIN_KEY = 'hexicon:player-pin';
+/** Set once the server says the 4-digit codes have retired (accounts do their job now). */
+export const CODES_RETIRED_KEY = 'hexicon:codes-retired';
 
 /** Switch this device to another player (after signing in with name + PIN). */
 export function setPlayerId(id: string): void {

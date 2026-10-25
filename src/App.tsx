@@ -18,7 +18,7 @@ import { Archive } from './components/Archive';
 import { drawShareCard, shareCard, tileHeat } from './shareCard';
 import { checkOnServer, loadDaily, puzzleFromView, rememberWord, withKnown } from './boards';
 import {
-  adoptedPlayer, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
+  adoptedPlayer, CODES_RETIRED_KEY, dailyKey, NAME_KEY, PIN_KEY, playerId, readStored, setPlayerId, syncCarryParam, useStoredState, writeStored,
 } from './storage';
 import { boardLocksAt, dateKeyFor, EPOCH, isDateKey, puzzleNumber, shiftDateKey } from './engine/dates';
 import { dailyBoardId, parseBoardId } from './engine/rerolls';
@@ -464,9 +464,12 @@ export default function App() {
     if (online && name) {
       api.me(me).then((r) => {
         if (r.pin) setPin(r.pin);
+        else if (r.codesRetired) setPin('');
+        if (r.codesRetired) writeStored(CODES_RETIRED_KEY, true);
         setAccount(r.account ?? null);
-        // Players saved to an account don't need a code.
-        setNeedsSetup(!!r.name && r.codeChosen === false && !r.account);
+        // Players saved to an account don't need a code, and once signing in is offered nobody is
+        // asked to pick one: signing in keeps their progress safe instead.
+        setNeedsSetup(!!r.name && r.codeChosen === false && !r.account && !signInAvailable);
         if (r.ownerMessage) setOwnerMessage(r.ownerMessage.text);
       }, () => {});
     }
