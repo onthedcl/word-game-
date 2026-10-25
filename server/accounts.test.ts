@@ -129,6 +129,20 @@ describe('accounts', () => {
       deps.requireAccountsFrom = clock; // switched on now
     };
 
+    it('retires the 4-digit codes once the grace period is over', async () => {
+      await hello(deps, { playerId: P1 });
+      await saveName(deps, { playerId: P1, name: 'Ann' });
+      const { pin } = await setCode(deps, { playerId: P1, code: '7391' });
+      start();
+      // During the grace period codes still work, so nobody is stranded mid-switch.
+      expect(await me(deps, P1)).toMatchObject({ codesRetired: false });
+      await expect(claimName(deps, { name: 'Ann', code: pin })).resolves.toMatchObject({ ok: true });
+      clock += (GRACE_DAYS + 1) * DAY;
+      expect(await me(deps, P1)).toMatchObject({ name: 'Ann', pin: null, codesRetired: true });
+      await rejects(claimName(deps, { name: 'Ann', code: pin }), 410);
+      await rejects(setCode(deps, { playerId: P1, code: '4826' }), 410);
+    });
+
     it('lets everyone play while it is off', async () => {
       await hello(deps, { playerId: P1 });
       expect(await signInStatus(deps, P1)).toEqual({ required: false, signInBy: null });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
-import { PIN_KEY, readStored, writeStored } from '../storage';
+import { CODES_RETIRED_KEY, PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
 import { streakAnimal } from '../engine/streak';
 import { appRules } from '../native';
@@ -89,6 +89,7 @@ export function NameForm({ name, cta, onSave, onClaim, onSignIn, randomize = fal
   }
 
   if (taken) {
+    const retired = readStored(CODES_RETIRED_KEY, false);
     return (
       <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); run(() => onClaim!(taken, code)); }}>
         {onSignIn && (
@@ -96,10 +97,19 @@ export function NameForm({ name, cta, onSave, onClaim, onSignIn, randomize = fal
             That’s me: sign in to my account
           </button>
         )}
-        <p className="text-sm">
-          <b>“{taken}”</b> is already on the leaderboard. If that’s you{onSignIn ? ' and you haven’t saved it to an account' : ''}, enter the 4-digit code you chose. You can
-          also see it on your other device under <b>Leaderboard → my code</b>.
-        </p>
+        {retired ? (
+          <p className="text-sm">
+            <b>“{taken}”</b> is already on the leaderboard. If that’s you, sign in with the Google account or email you
+            saved it to. Never signed in? Open Lettertown on the phone you usually play on and sign in there first; then
+            sign in here and everything follows you.
+          </p>
+        ) : (
+          <p className="text-sm">
+            <b>“{taken}”</b> is already on the leaderboard. If that’s you{onSignIn ? ' and you haven’t saved it to an account' : ''}, enter the 4-digit code you chose. You can
+            also see it on your other device under <b>Leaderboard → my code</b>.
+          </p>
+        )}
+        {!retired && (
         <div className="flex gap-2">
           <input
             value={code}
@@ -114,13 +124,20 @@ export function NameForm({ name, cta, onSave, onClaim, onSignIn, randomize = fal
             {busy ? '…' : `Continue as ${taken}`}
           </button>
         </div>
+        )}
         {error && <p className="text-sm text-bad">{error}</p>}
         {lost === 'sent' ? (
           <p className="text-sm text-muted">Thanks, we’ve let the game’s owner know. They’ll help you get back in.</p>
         ) : lost === 'asking' ? (
           <div className="flex flex-col gap-2 rounded-lg border border-line p-2">
+            {onSignIn && !retired && (
+              <p className="text-sm">
+                Quickest fix: on the phone you usually play on, sign in (or find your code under <b>Leaderboard → my
+                code</b>). Once you’ve signed in there, sign in here with the same account and your progress follows you.
+              </p>
+            )}
             <label className="text-sm" htmlFor="lost-note">
-              We’ll let the game’s owner know. Anything that helps them know it’s you? (optional)
+              Or we’ll let the game’s owner know. Anything that helps them know it’s you? (optional)
             </label>
             <input
               id="lost-note"
@@ -139,7 +156,7 @@ export function NameForm({ name, cta, onSave, onClaim, onSignIn, randomize = fal
           </div>
         ) : (
           <button type="button" className="self-start text-sm text-muted underline" onClick={() => setLost('asking')}>
-            Can’t find your code?
+            {retired ? 'Need help getting back in?' : 'Can’t find your code?'}
           </button>
         )}
         <button type="button" className="self-start text-sm text-muted underline" onClick={() => { setTaken(null); setError(''); setCode(''); setLost('no'); setNote(''); }}>
@@ -263,6 +280,7 @@ export function Leaderboard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showCode, setShowCode] = useState(false);
   const [code, setCode] = useState(() => readStored(PIN_KEY, ''));
+  const codesRetired = readStored(CODES_RETIRED_KEY, false);
   const [newCode, setNewCode] = useState('');
   const [codeError, setCodeError] = useState('');
   const chatSeen = useCallback((at: number) => {
@@ -318,7 +336,7 @@ export function Leaderboard({
             <button type="button" className="font-semibold text-ink underline" onClick={onSignIn}>Save my progress</button>
           ) : null}
           {(account || onSignIn) && ' · '}
-          {!account && (
+          {!account && !codesRetired && (
           <button
             type="button"
             className="underline"
@@ -331,7 +349,7 @@ export function Leaderboard({
             my code
           </button>
           )}
-          {!account && ' · '}
+          {!account && !codesRetired && ' · '}
           <button type="button" className="underline" onClick={() => setConfirmDelete(true)}>delete my data</button>
           {showCode && (
             <div className="mt-2 rounded-xl bg-bg p-3 text-ink">

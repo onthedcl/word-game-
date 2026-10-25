@@ -7,7 +7,7 @@ import { cleanName, maskText } from './names';
 import type { AnswerTable } from './tables';
 import type { Notification } from './digest';
 import type { Identity } from './firebaseToken';
-import { accountOf, moveAccount, requireSignIn, signInStatus, unlinkAccount } from './accounts';
+import { accountOf, codesRetired, moveAccount, requireSignIn, signInStatus, unlinkAccount } from './accounts';
 import { leaveAllLeagues, movePlayerInLeagues, notePasses, roomsSummary } from './leagues';
 import { dailyBoardId, parseBoardId } from '../src/engine/rerolls';
 import { blitzBoard } from './boards';
@@ -449,6 +449,9 @@ export async function claimName(deps: Deps, body: Record<string, unknown>) {
   const name = nameOf(body.name);
   const owner = await ownerOf(deps, name);
   if (!owner) throw new ApiError(404, 'No player has that name yet');
+  if (codesRetired(deps)) {
+    throw new ApiError(410, `Codes have retired. If you’re ${name}, sign in with the Google account or email you saved your progress to.`);
+  }
   const triesKey = `claim-tries/${name.toLowerCase()}`;
   const tries = (await deps.kv.get(triesKey, { type: 'json' })) as { count: number; since: number } | null;
   const fresh = tries && deps.now() - tries.since < CLAIM_PAUSE_MS ? tries : null;
@@ -486,6 +489,7 @@ function guessable(code: string): boolean {
 export async function setCode(deps: Deps, body: Record<string, unknown>) {
   const playerId = playerIdOf(body.playerId);
   const code = typeof body.code === 'string' ? body.code.trim() : '';
+  if (codesRetired(deps)) throw new ApiError(410, 'Codes have retired: your account keeps your progress safe now');
   if (!/^\d{4}$/.test(code)) throw new ApiError(400, 'Your code needs to be 4 digits');
   if (guessable(code)) throw new ApiError(400, 'That one’s too easy to guess. Try another');
   const player = (await deps.kv.get(`players/${playerId}`, { type: 'json' })) as { name: string } | null;
@@ -535,13 +539,17 @@ export async function me(deps: Deps, playerId: string | null) {
   const id = playerIdOf(playerId);
   const player = (await deps.kv.get(`players/${id}`, { type: 'json' })) as { name: string } | null;
   const signIn = await signInStatus(deps, id);
-  if (!player) return { name: null, pin: null, codeChosen: false, signIn, streak: await streakOf(deps, id) };
+  const retired = codesRetired(deps);
+  if (!player) return { name: null, pin: null, codeChosen: false, codesRetired: retired, signIn, streak: await streakOf(deps, id) };
+  if (retired) {
+    return { name: player.name, pin: null, codeChosen: true, codesRetired: true, account: await accountOf(deps, id), signIn, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
+  }
   const pin = await ensureCode(deps, id, player.name);
   const owner = (await deps.kv.get(nameKey(player.name), { type: 'json' })) as NameOwner | null;
   // Players who haven't picked their own code yet are asked to, the next time they open the game.
   const codeChosen = !!pin && !!owner?.chosen;
   const account = await accountOf(deps, id);
-  return { name: player.name, pin, codeChosen, account, signIn, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
+  return { name: player.name, pin, codeChosen, codesRetired: false, account, signIn, streak: await streakOf(deps, id), ownerMessage: await ownerMessageFor(deps, id) };
 }
 
 // ---- messages from the owner ----------------------------------------------------

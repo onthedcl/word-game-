@@ -95,6 +95,15 @@ export async function claimIntoAccount(deps: Deps, body: Record<string, unknown>
 export const GRACE_DAYS = 30;
 const DAY = 24 * 3600 * 1000;
 
+/**
+ * Once everyone has had their grace period to sign in, accounts are how players prove who they
+ * are, and the old 4-digit codes retire: they're no longer shown, changed or accepted.
+ */
+export function codesRetired(deps: Deps): boolean {
+  const from = deps.requireAccountsFrom;
+  return !!from && deps.now() >= from + GRACE_DAYS * DAY;
+}
+
 export interface SignInStatus {
   /** Sign-in is needed before this player can play. */
   required: boolean;
