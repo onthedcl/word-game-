@@ -1,0 +1,79 @@
+name: Uptime
+
+# Every 15 minutes: is dpiyf.com up, is the leaderboard server answering, and does today's board
+# load? A ping goes to the owner's phone when something breaks (after three tries a minute
+# apart, so a passing blip doesn't wake anyone), and again when it's back. GitHub can run
+# scheduled checks a few minutes late on busy days.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      SITE: https://dpiyf.com
+      API: https://word-game-leaderboard.danlagstein.workers.dev
+    steps:
+      - name: Last result
+        uses: actions/cache/restore@v4
+        with:
+          path: uptime-state
+          key: uptime-state-${{ github.run_id }}
+          restore-keys: uptime-state-
+
+      - name: Check the game
+        id: check
+        run: |
+          check() {
+            today=$(TZ=America/New_York date +%F)
+            curl -fsS --max-time 15 "$SITE/" | grep -q 'Lettertown' || { echo "dpiyf.com isn't loading"; return 1; }
+            curl -fsS --max-time 15 -H "Origin: $SITE" "$API/api/blitz?player=uptime" > /dev/null || { echo "the leaderboard server isn't answering"; return 1; }
+            curl -fsS --max-time 15 -H "Origin: $SITE" "$API/api/board?date=$today&player=uptime" |
+              jq -e '.board.letters | length == 19' > /dev/null || { echo "today's board ($today) won't load"; return 1; }
+          }
+          problem=""
+          for try in 1 2 3; do
+            if problem=$(check); then problem=""; break; fi
+            [ "$try" -lt 3 ] && sleep 60
+          done
+          echo "problem=$problem" >> "$GITHUB_OUTPUT"
+          before=$(cat uptime-state 2>/dev/null || echo up)
+          if [ -n "$problem" ]; then now=down; else now=up; fi
+          echo "$now" > uptime-state
+          echo "Before: $before · now: $now ${problem:+($problem)}"
+          echo "changed=$([ "$before" != "$now" ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+          echo "now=$now" >> "$GITHUB_OUTPUT"
+
+      - name: Remember this result
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: uptime-state
+          key: uptime-state-${{ github.run_id }}
+
+      - name: Tell the owner
+        if: steps.check.outputs.changed == 'yes'
+        env:
+          TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NOW: ${{ steps.check.outputs.now }}
+          PROBLEM: ${{ steps.check.outputs.problem }}
+        run: |
+          if [ "$NOW" = down ]; then
+            title="🚨 Lettertown is down"
+            message="Since about $(TZ=America/New_York date '+%-I:%M %p ET'): $PROBLEM. If an update just went out, Cloudflare → Workers → Deployments → Rollback undoes it."
+          else
+            title="✅ Lettertown is back up"
+            message="Everything answers again as of $(TZ=America/New_York date '+%-I:%M %p ET')."
+          fi
+          body=$(jq -n --arg topic "$TOPIC" --arg title "$title" --arg message "$message" \
+            '{topic: $topic, title: $title, message: $message, priority: 5, click: "https://dpiyf.com/"}')
+          curl -fsS -H 'Content-Type: application/json' -d "$body" https://ntfy.sh/ > /dev/null
