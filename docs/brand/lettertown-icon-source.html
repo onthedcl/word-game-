@@ -1,0 +1,76 @@
+<html><body style="margin:0">
+<svg id="s" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2a7e"/><stop offset=".45" stop-color="#7a4fb0"/><stop offset=".62" stop-color="#e98aa0"/><stop offset=".72" stop-color="#ffc98a"/></linearGradient>
+<linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6c4fae"/><stop offset="1" stop-color="#4a3586"/></linearGradient>
+<linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset=".5" stop-color="#f0bb45"/><stop offset="1" stop-color="#d4961f"/></linearGradient>
+<linearGradient id="cream" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff8ec"/><stop offset="1" stop-color="#e8d6b6"/></linearGradient>
+<pattern id="win" width="48" height="58" patternUnits="userSpaceOnUse"><rect x="15" y="16" width="18" height="24" rx="4" fill="#ffd56b"/></pattern>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#1a0f33" flood-opacity=".45"/></filter>
+</defs><g id="root"></g></svg>
+<script>
+const NS='http://www.w3.org/2000/svg', root=document.getElementById('root'), defs=document.querySelector('defs');
+const el=(t,a,p=root)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;};
+const FONT='Inter Display';
+el('rect',{width:1024,height:1024,fill:'url(#sky)'});
+let seed=5; const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+for(let i=0;i<16;i++) el('circle',{cx:30+rnd()*960,cy:24+rnd()*150,r:2+rnd()*2.5,fill:'#fff',opacity:.3+rnd()*.5});
+el('circle',{cx:900,cy:96,r:42,fill:'#fff4d6'});
+let uid=0;
+function word(spec,G,x0,x1,layer){
+  const meas=el('g',{opacity:0});
+  const widths=spec.map(([c,s,f,k])=>{ if(k==='wheel') return s; const t=el('text',{'font-family':FONT,'font-weight':900,'font-size':s},meas); t.textContent=c; return t.getBBox().width; });
+  meas.remove();
+  const gap=8, fixed=spec.reduce((a,sp,i)=>a+(sp[3]==='wheel'?widths[i]:0),0), letters=widths.reduce((a,b,i)=>a+(spec[i][3]==='wheel'?0:b),0);
+  const sx=Math.min(1,(x1-x0-fixed-gap*(spec.length-1))/letters);
+  const used=letters*sx+fixed+gap*(spec.length-1); let x=x0+(x1-x0-used)/2;
+  const bld=el('g',{filter:'url(#sh)'},layer), det=el('g',{},layer);
+  spec.forEach(([c,s,f,k],i)=>{
+    if(k==='wheel'){
+      const w=widths[i], cx=x+w/2, r=w/2-8, cy=G-r-40;
+      el('polygon',{points:`${cx},${cy} ${cx-r*0.55},${G} ${cx-r*0.4},${G} ${cx},${cy+20} ${cx+r*0.4},${G} ${cx+r*0.55},${G}`,fill:'#5b4499'},det);
+      el('circle',{cx,cy,r,fill:'none',stroke:'#fff3e0','stroke-width':18},det);
+      const cols=['#ffd56b','#ff8fa3','#8fd3ff','#9be3a6'];
+      for(let j=0;j<8;j++){const a=Math.PI/4*j+Math.PI/8;el('line',{x1:cx,y1:cy,x2:cx+r*Math.cos(a),y2:cy+r*Math.sin(a),stroke:'#fff3e0','stroke-width':5,opacity:.8},det);
+        el('rect',{x:cx+r*Math.cos(a)-17,y:cy+r*Math.sin(a)+4,width:34,height:28,rx:9,fill:cols[j%4]},det);}
+      el('circle',{cx,cy,r:15,fill:'#fff3e0'},det);
+      x+=w+gap; return;
+    }
+    const id='c'+(uid++), tr=`translate(${x} 0) scale(${sx} 1) translate(${-x} 0)`;
+    const gB=el('g',{transform:tr},bld), gD=el('g',{transform:tr},det);
+    const cp=el('clipPath',{id},defs); const ct=el('text',{x,y:G,'font-family':FONT,'font-weight':900,'font-size':s},cp); ct.textContent=c;
+    const t=el('text',{x,y:G,'font-family':FONT,'font-weight':900,'font-size':s,fill:f},gB); t.textContent=c;
+    const bb=t.getBBox(), big=k==='big';
+    el('rect',{x:bb.x,y:bb.y+20,width:bb.width,height:bb.height-(big?120:80),fill:'url(#win)','clip-path':`url(#${id})`},gD);
+    const dw=big?40:28, dh=big?62:42, dx=bb.x+ (c==='T'? (bb.width-dw)/2 : big? 26 : Math.min(16,bb.width/2-dw/2));
+    el('path',{d:`M${dx},${G} v${-dh+dw/2} a${dw/2},${dw/2} 0 0 1 ${dw},0 v${dh-dw/2} Z`,fill:'#6b4a8f'},gD);
+    const top=G-s*0.727, w=widths[i]*sx;
+    if(c==='L'){ const sw=s*0.25; el('polygon',{points:`${x-8},${top+2} ${x+sw/2+4},${top-80} ${x+sw+16},${top+2}`,fill:'#d9452f'},gD); }
+    if(c==='T'){ const cx=x+(bb.x-x+bb.width/2)*sx, cy=top+s*0.105;
+      el('circle',{cx,cy,r:30,fill:'#fff',stroke:'#2a1d4f','stroke-width':6},det);
+      el('line',{x1:cx,y1:cy,x2:cx,y2:cy-18,stroke:'#2a1d4f','stroke-width':5},det); el('line',{x1:cx,y1:cy,x2:cx+13,y2:cy+5,stroke:'#2a1d4f','stroke-width':5},det);
+      el('line',{x1:cx,y1:top,x2:cx,y2:top-50,stroke:'#2a1d4f','stroke-width':6},det); el('polygon',{points:`${cx},${top-50} ${cx+40},${top-39} ${cx},${top-28}`,fill:'#ff5d73'},det);}
+    x+=w+gap;
+  });
+}
+// upper street on the hill: "Letter"
+const G1=470, G2=800;
+const back=el('g',{}), hill=el('g',{}), front=el('g',{});
+word([['L',400,'url(#gold)','big'],['e',250,'url(#cream)'],['t',300,'url(#cream)'],['t',270,'url(#cream)'],['e',240,'url(#cream)'],['r',250,'url(#cream)']],G1,60,964,back);
+el('path',{d:`M0,${G1} H1024 V1024 H0 Z`,fill:'url(#hill)'},hill);
+el('rect',{x:0,y:G1,width:1024,height:18,fill:'#e2cfae'},hill);
+// little trees + people on the hill street
+[[150,'#3a8fd8'],[520,'#ff5d73'],[860,'#2fb37a']].forEach(([px,c])=>{el('rect',{x:px-10,y:G1-24,width:20,height:36,rx:10,fill:c},hill);el('circle',{cx:px,cy:G1-32,r:10,fill:'#f2c6a0'},hill);});
+// main street: "Town" (T, Ferris-wheel o, w, n)
+word([['T',380,'url(#gold)','big'],['o',230,null,'wheel'],['w',300,'url(#cream)'],['n',300,'url(#cream)']],G2,60,964,front);
+el('rect',{x:0,y:G2,width:1024,height:24,fill:'#e2cfae'},front);
+el('rect',{x:0,y:G2+24,width:1024,height:200,fill:'#3d2f68'},front);
+for(let row=0;row<3;row++)for(let i=-1;i<24;i++){const r=32,h=r*Math.sqrt(3),cx=i*r*1.5,cy=G2+60+row*h*.72+(i%2?h*.36:0);
+  let p='';for(let k=0;k<6;k++){const a=Math.PI/3*k;p+=`${cx+r*.85*Math.cos(a)},${cy+r*.85*Math.sin(a)*.7} `;} el('polygon',{points:p,fill:'#4a3a7c'},front);}
+const tx=560,ty=G2+50; el('rect',{x:tx,y:ty,width:380,height:104,rx:26,fill:'url(#gold)'},front); el('rect',{x:tx,y:ty+76,width:380,height:16,fill:'#d9452f'},front);
+for(let i=0;i<5;i++){el('rect',{x:tx+22+i*70,y:ty+16,width:54,height:44,rx:9,fill:'#2a1d4f'},front);el('rect',{x:tx+26+i*70,y:ty+20,width:46,height:36,rx:7,fill:'#ffe3a0'},front);}
+el('circle',{cx:tx+76,cy:ty+108,r:16,fill:'#2a1d4f'},front);el('circle',{cx:tx+304,cy:ty+108,r:16,fill:'#2a1d4f'},front);
+[[90,'#f08a3e'],[480,'#9b6bd8']].forEach(([px,c])=>{el('rect',{x:px-12,y:G2-30,width:24,height:44,rx:12,fill:c},front);el('circle',{cx:px,cy:G2-40,r:12,fill:'#f2c6a0'},front);});
+root.appendChild(back); root.appendChild(hill); root.appendChild(front);
+window.done=true;
+</script></body></html>
