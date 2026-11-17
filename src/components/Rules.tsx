@@ -13,9 +13,9 @@ function About() {
       <p>
         <a className={link} href={`${base}privacy.html`} target="_blank" rel="noreferrer">Privacy policy</a>
         {' · '}
-        <a className={link} href={`${base}terms.html`} target="_blank" rel="noreferrer">Terms of Use</a>
+        <a className={link} href={`${base}terms.html`} target="_blank" rel="noreferrer">Terms of use</a>
         {' · '}
-        <a className={link} href="https://github.com/onthedcl/word-game-/issues" target="_blank" rel="noreferrer">Contact &amp; feedback</a>
+        Contact &amp; feedback: <span className="select-all">dpiyfsupport@gmail.com</span>
       </p>
       {tipUrl && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
