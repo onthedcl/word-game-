@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
 import { CODES_RETIRED_KEY, PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
+import { ROOM_CHAT } from '../features';
 import { streakAnimal } from '../engine/streak';
 import { randomName } from '../randomName';
 
@@ -216,7 +217,7 @@ export function Leaderboard({
   // Inside a room: its leaderboard or its chat.
   const [roomTab, setRoomTab] = useState<'board' | 'chat'>('board');
   const [confirmRoomDelete, setConfirmRoomDelete] = useState(false);
-  const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat';
+  const inChat = ROOM_CHAT && scope !== 'everyone' && scope !== 'new' && roomTab === 'chat';
   const [league, setLeague] = useState<LeagueView | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -520,6 +521,7 @@ export function Leaderboard({
                 )}
               </div>
             )}
+            {ROOM_CHAT && (
             <div className="mt-3 flex rounded-full border border-line p-0.5" role="tablist" aria-label="Room">
               {(['board', 'chat'] as const).map((t) => (
                 <button
@@ -537,6 +539,7 @@ export function Leaderboard({
                 </button>
               ))}
             </div>
+            )}
           </div>
         )
       ) : (

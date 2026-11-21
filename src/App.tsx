@@ -9,6 +9,7 @@ import { SetupAccount } from './components/SetupAccount';
 import { SignIn } from './components/SignIn';
 import { currentIdToken, deleteSignIn, finishSignIn, returningFromSignIn, signInAvailable, signOutAccount } from './auth';
 import { Podium } from './components/Podium';
+import { ROOM_CHAT } from './features';
 import { TipLink } from './components/TipLink';
 import { Modal } from './components/Modal';
 import { Rules } from './components/Rules';
@@ -541,7 +542,7 @@ export default function App() {
   }, [loadLeagues]);
   const [chatSeen, setChatSeen] = useStoredState<Record<string, number>>('hexicon:room-chat-seen', {});
   const chatUnread = useMemo(
-    () => new Set(leagues.filter((l) => (l.latestChat ?? 0) > (chatSeen[l.id] ?? 0)).map((l) => l.id)),
+    () => new Set(ROOM_CHAT ? leagues.filter((l) => (l.latestChat ?? 0) > (chatSeen[l.id] ?? 0)).map((l) => l.id) : []),
     [leagues, chatSeen],
   );
   const unreadLeagues = useMemo(

@@ -36,6 +36,8 @@ export interface Deps {
   random(): number;
   /** Send the owner a notification (fire and forget). */
   notify?(n: Notification): void;
+  /** Room chat is open (it's switched off for now: see src/features.ts). */
+  roomChat?: boolean;
   /** Check a sign-in token (Firebase Authentication); absent until sign-in is set up. */
   verifyIdToken?(token: string): Promise<Identity | null>;
 }

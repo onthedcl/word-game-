@@ -308,6 +308,8 @@ export async function getChat(deps: Deps, rawId: unknown, rawPlayer: unknown) {
 }
 
 export async function postChat(deps: Deps, body: Record<string, unknown>) {
+  // Off unless switched on (see src/features.ts); rooms and their leaderboards stay either way.
+  if (!deps.roomChat) throw new ApiError(410, 'Room chat is off');
   const { playerId, id } = await member(deps, body.id, body.playerId);
   await requireSignIn(deps, playerId);
   const name = await playerName(deps, playerId);
