@@ -1,0 +1,38 @@
+name: Chat usage
+
+# Owner-only, read-only: how much the room chat is used. Prints counts only (rooms, messages,
+# people), never names or what anyone wrote. Run it by hand from the Actions tab.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    env:
+      API: https://word-game-leaderboard.danlagstein.workers.dev
+      KEY: ${{ secrets.NTFY_TOPIC }}
+    steps:
+      - name: Count chat messages
+        run: |
+          set -e
+          echo '{}' > all.json; after=null
+          while :; do
+            body=$(jq -n --arg key "$KEY" --argjson after "$after" '{key: $key, after: $after, limit: 1000}')
+            page=$(curl -fsS -H 'Content-Type: application/json' -d "$body" "$API/api/admin/export")
+            jq -s '.[0] * (.[1].entries | with_entries(select(.key | test("^(league-chat|leagues)/"))))' all.json <(echo "$page") > tmp.json && mv tmp.json all.json
+            after=$(echo "$page" | jq '.next')
+            [ "$after" = null ] && break
+          done
+          now=$(date +%s000)
+          jq -r --argjson now "$now" '
+            def msgs(days): [to_entries[] | select(.key|startswith("league-chat/")) | .value[] | select(.at > ($now - days*86400000))];
+            def pub: [to_entries[] | select(.key|startswith("leagues/")) | select(.value.public == true) | .key | ltrimstr("leagues/")];
+            "Rooms: \([to_entries[]|select(.key|startswith("leagues/"))]|length) (\(pub|length) public)",
+            "Rooms with any chat: \([to_entries[]|select(.key|startswith("league-chat/"))|select(.value|length>0)]|length)",
+            "Messages, last 7 days: \(msgs(7)|length) from \(msgs(7)|map(.from)|unique|length) people",
+            "Messages, last 30 days: \(msgs(30)|length) from \(msgs(30)|map(.from)|unique|length) people",
+            "Messages in public rooms, last 30 days: \([to_entries[] | select(.key|startswith("league-chat/")) | select((.key|ltrimstr("league-chat/")) as $id | pub | index($id)) | .value[] | select(.at > ($now - 30*86400000))]|length)",
+            "All messages kept: \([to_entries[]|select(.key|startswith("league-chat/"))|.value[]]|length)"' all.json
+          rm -f all.json
