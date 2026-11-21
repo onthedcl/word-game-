@@ -129,6 +129,13 @@ describe('deleting a room', () => {
 });
 
 describe('room chat', () => {
+  it('is switched off unless the server turns it on', async () => {
+    const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
+    await expect(postChat(deps, { playerId: A, id, text: 'hi' })).rejects.toMatchObject({ status: 410 });
+  });
+
+  describe('when switched on', () => {
+  beforeEach(() => { deps.roomChat = true; });
   it('is for members, masks offensive words, limits speed, and shows no player ids', async () => {
     const { id } = await createLeague(deps, { playerId: A, name: 'Family' });
     await joinLeague(deps, { playerId: B, id });
@@ -175,8 +182,10 @@ describe('room chat', () => {
   });
 });
 
+  });
 describe('giving an account back', () => {
   it('moves rooms, hosting and chat to the new player id', async () => {
+    deps.roomChat = true;
     const { id } = await createLeague(deps, { playerId: A, name: 'The Office' });
     await joinLeague(deps, { playerId: B, id });
     await postChat(deps, { playerId: A, id, text: 'hi' });

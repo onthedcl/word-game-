@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, NameTaken, type Board, type LeagueSummary, type LeagueView } from '../api';
 import { CODES_RETIRED_KEY, PIN_KEY, readStored, writeStored } from '../storage';
 import { RoomChat } from './RoomChat';
+import { ROOM_CHAT } from '../features';
 import { streakAnimal } from '../engine/streak';
 import { appRules } from '../native';
 import { randomName } from '../randomName';
@@ -219,7 +220,7 @@ export function Leaderboard({
   const [confirmRoomDelete, setConfirmRoomDelete] = useState(false);
   const [league, setLeague] = useState<LeagueView | null>(null);
   // The iPhone app keeps chat to private, invite-only rooms: Apple doesn't allow chat between strangers.
-  const chatOff = appRules && !!league?.public;
+  const chatOff = !ROOM_CHAT || (appRules && !!league?.public);
   const inChat = scope !== 'everyone' && scope !== 'new' && roomTab === 'chat' && !chatOff;
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState('');
@@ -524,7 +525,7 @@ export function Leaderboard({
               </div>
             )}
             {chatOff ? (
-              <p className="mt-3 text-xs text-muted">Chat is available in private rooms.</p>
+              ROOM_CHAT && <p className="mt-3 text-xs text-muted">Chat is available in private rooms.</p>
             ) : (
             <div className="mt-3 flex rounded-full border border-line p-0.5" role="tablist" aria-label="Room">
               {(['board', 'chat'] as const).map((t) => (
